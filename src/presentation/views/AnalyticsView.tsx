@@ -21,7 +21,6 @@ import {
   gradeDistribution,
   isAtRisk,
   DEFAULT_PERFORMANCE_THRESHOLD,
-  GRADE_BUCKETS,
   type UnitAverage,
 } from '@domain/services/analyticsService';
 import { messages } from '@domain/shared/messages';
