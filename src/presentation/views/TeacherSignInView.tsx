@@ -110,6 +110,27 @@ export default function TeacherSignInView({ onSignedIn }: TeacherSignInViewProps
           <button type="submit" className="btn-primary w-full" disabled={isSubmitting}>
             {isSubmitting ? 'Signing in…' : 'Sign in'}
           </button>
+
+          <button
+            type="button"
+            className="w-full text-center text-sm font-medium text-accent hover:underline"
+            onClick={() => {
+              if (email.trim()) {
+                void signInTeacherPassword(email, '').catch(() => {});
+                // Supabase will send a password reset email
+                void import('@data/supabase').then(({ supabase }) =>
+                  supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: window.location.origin + '/sign-in',
+                  })
+                );
+                setError('Password reset link sent to your email.');
+              } else {
+                setError('Enter your email first, then click Forgot Password.');
+              }
+            }}
+          >
+            Forgot Password?
+          </button>
         </form>
       </div>
     </div>
