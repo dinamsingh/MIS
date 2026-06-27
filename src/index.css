@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-text font-sans antialiased;
+    /* Prevent horizontal overflow across all breakpoints (Req 20.8) */
+    overflow-x: hidden;
+  }
+
+  /* Avoid layout breakage from oversized media */
+  img,
+  svg,
+  video {
+    max-width: 100%;
+  }
+}
+
+@layer components {
+  /* Reusable surface card with soft shadow + 16px radius (Req 20.6) */
+  .card {
+    @apply bg-surface border border-border rounded-card shadow-soft;
+  }
+
+  /* Primary accent button with 11px radius (Req 20.3, 20.6) */
+  .btn {
+    @apply inline-flex items-center justify-center rounded-button px-4 py-2
+      text-sm font-medium transition-colors;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent text-surface hover:bg-accent-hover;
+  }
+
+  .btn-secondary {
+    @apply btn bg-accent-tint text-accent hover:bg-accent/10;
+  }
+}
