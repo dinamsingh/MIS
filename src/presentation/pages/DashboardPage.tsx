@@ -1,9 +1,11 @@
 /**
  * Connected page wrapper for DashboardView.
  * Wires a DashboardDataProvider that aggregates data from multiple access layers.
+ * Uses useDataCache to cache summary data across route navigations.
  */
 
 import DashboardView, { type DashboardDataProvider, type DashboardSummary, type AttendanceTrendPoint } from '@presentation/views/DashboardView';
+import { useDataCache } from '@presentation/hooks';
 import { createTimetableAccess } from '@data/access/timetableAccess';
 import { createLeaderboardAccess } from '@data/access/leaderboardAccess';
 import { supabase } from '@data/supabase';
@@ -13,8 +15,7 @@ import type { LeaderboardWeights, StudentMetrics } from '@domain/services/leader
 const timetableAccess = createTimetableAccess(supabase);
 const leaderboardAccess = createLeaderboardAccess(supabase);
 
-const dataProvider: DashboardDataProvider = {
-  async loadSummary(): Promise<DashboardSummary> {
+async function fetchDashboardSummary(): Promise<DashboardSummary> {
     const [studentsRes, attendanceRes, marksRes, topicsRes] = await Promise.all([
       supabase.from('student_roster').select('id', { count: 'exact', head: true }),
       supabase.from('attendance').select('present'),
@@ -50,6 +51,12 @@ const dataProvider: DashboardDataProvider = {
       : 0;
 
     return { totalStudents, avgAttendancePercent, avgInternalMarks, syllabusProgressPercent };
+}
+
+const dataProvider: DashboardDataProvider = {
+  // loadSummary is wired through useDataCache in the component below
+  async loadSummary(): Promise<DashboardSummary> {
+    return fetchDashboardSummary();
   },
 
   async loadTimetableEntries(): Promise<TimetableEntry[]> {
@@ -123,5 +130,21 @@ const dataProvider: DashboardDataProvider = {
 };
 
 export default function DashboardPage() {
-  return <DashboardView dataProvider={dataProvider} />;
+  // Cache the expensive summary fetch — shows cached data instantly on return visits
+  const { data: cachedSummary } = useDataCache<DashboardSummary>({
+    key: 'dashboard-summary',
+    fetcher: fetchDashboardSummary,
+    ttlMs: 60_000,
+  });
+
+  // Wrap dataProvider to return cached summary when available
+  const cachedDataProvider: DashboardDataProvider = {
+    ...dataProvider,
+    async loadSummary() {
+      if (cachedSummary) return cachedSummary;
+      return dataProvider.loadSummary();
+    },
+  };
+
+  return <DashboardView dataProvider={cachedDataProvider} />;
 }
