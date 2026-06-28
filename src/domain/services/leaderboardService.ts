@@ -35,6 +35,8 @@ export interface StudentMetrics {
   readonly internalMarks: number;
   readonly quizScore: number;
   readonly attendancePercent: number;
+  readonly enrollmentNumber?: string;
+  readonly sectionName?: string;
 }
 
 /**

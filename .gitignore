@@ -24,4 +24,7 @@ dist-ssr
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+# SQL dummy data / local seed scripts
+*.sql
+SEED_300_STUDENTS.sql
+

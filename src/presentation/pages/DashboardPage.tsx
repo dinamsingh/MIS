@@ -1,13 +1,3 @@
-/**
- * Connected page wrapper for DashboardView.
- *
- * Performance: instead of ~45 separate client queries (notably an N+1 loop over
- * students), this fetches ALL dashboard data in ONE round trip via the
- * `get_dashboard_data` Postgres RPC. The single result is cached with
- * useDataCache and sliced out to the DashboardView's data-provider methods, so
- * the view stays unchanged while every "load*" call resolves from one payload.
- */
-
 import { useMemo } from 'react';
 import DashboardView, {
   type DashboardDataProvider,
@@ -16,6 +6,7 @@ import DashboardView, {
 } from '@presentation/views/DashboardView';
 import { useDataCache } from '@presentation/hooks';
 import { supabase } from '@data/supabase';
+import { useSelectedSemester, useSelectedSection, mapSemesterToDb } from '@presentation/hooks';
 import type { TimetableEntry, DayOfWeek } from '@domain/services/timetableService';
 import type { LeaderboardWeights, StudentMetrics } from '@domain/services/leaderboardService';
 
@@ -52,20 +43,21 @@ function daysAgoIso(n: number): string {
 }
 
 /**
- * Fetch the entire dashboard in one RPC round trip. The RPC enforces the
- * teacher-only guard server-side and returns a zeroed payload otherwise.
+ * Fetch the entire dashboard in one RPC round trip.
  */
-async function fetchDashboardData(): Promise<DashboardData> {
+async function fetchDashboardData(semester: string, section: string): Promise<DashboardData> {
+  const dbSemester = mapSemesterToDb(semester);
   const { data, error } = await supabase.rpc('get_dashboard_data', {
     p_from_date: daysAgoIso(30),
     p_to_date: new Date().toISOString().slice(0, 10),
+    p_semester: dbSemester,
+    p_section: section,
   });
 
   if (error || !data) {
     return EMPTY_DATA;
   }
 
-  // The RPC returns a JSON object already shaped in camelCase.
   const payload = data as Partial<DashboardData>;
   return {
     summary: payload.summary ?? EMPTY_DATA.summary,
@@ -80,17 +72,18 @@ async function fetchDashboardData(): Promise<DashboardData> {
 }
 
 export default function DashboardPage() {
-  // One cached fetch for the whole dashboard (60s stale-while-revalidate).
+  const semester = useSelectedSemester();
+  const section = useSelectedSection();
+
+  // Cache key includes semester & section so data stays distinct
   const { data } = useDataCache<DashboardData>({
-    key: 'dashboard-data',
-    fetcher: fetchDashboardData,
+    key: `dashboard-data-${semester}-${section}`,
+    fetcher: () => fetchDashboardData(semester, section),
     ttlMs: 60_000,
   });
 
   const resolved = data ?? EMPTY_DATA;
 
-  // Build a data-provider whose methods just slice the single payload —
-  // no extra network calls. Memoized so DashboardView sees a stable reference.
   const dataProvider = useMemo<DashboardDataProvider>(
     () => ({
       async loadSummary() {
@@ -112,5 +105,5 @@ export default function DashboardPage() {
     [resolved],
   );
 
-  return <DashboardView dataProvider={dataProvider} />;
+  return <DashboardView key={`${semester}-${section}`} dataProvider={dataProvider} />;
 }

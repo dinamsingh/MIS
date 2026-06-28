@@ -1,11 +1,7 @@
-/**
- * Connected page wrapper for LeaderboardView.
- * Wires Supabase-backed leaderboardAccess as the LeaderboardPersistence.
- */
-
 import LeaderboardView, { type LeaderboardPersistence } from '@presentation/views/LeaderboardView';
 import { createLeaderboardAccess } from '@data/access/leaderboardAccess';
 import { supabase } from '@data/supabase';
+import { useSelectedSemester, useSelectedSection, mapSemesterToDb } from '@presentation/hooks';
 import type { StudentMetrics } from '@domain/services/leaderboardService';
 
 const leaderboardAccess = createLeaderboardAccess(supabase);
@@ -15,10 +11,24 @@ const persistence: LeaderboardPersistence = {
   saveConfig: (config) => leaderboardAccess.saveConfig(config),
 
   async loadStudentMetrics(): Promise<StudentMetrics[]> {
-    // Load students and aggregate their metrics from the database
+    const sem = localStorage.getItem('mis_selected_semester') || 'Semester 5';
+    const section = localStorage.getItem('mis_selected_section') || 'A';
+    const dbSemester = mapSemesterToDb(sem);
+    const semNum = dbSemester[0];
+    const targetSectionName = `CS-${semNum}${section}`;
+
+    // Get sections for this semester
+    const { data: sections } = await supabase.from('sections').select('id, name');
+    const semSectionIds = (sections || [])
+      .filter((sec) => sec.name === targetSectionName)
+      .map((sec) => sec.id);
+
+    // Load students in these sections
     const { data: students } = await supabase
-      .from('student_roster')
-      .select('id, name');
+      .from('students')
+      .select('id, name')
+      .in('section_id', semSectionIds);
+
     if (!students || students.length === 0) return [];
 
     const metrics: StudentMetrics[] = [];
@@ -63,5 +73,8 @@ const persistence: LeaderboardPersistence = {
 };
 
 export default function LeaderboardPage() {
-  return <LeaderboardView persistence={persistence} />;
+  const semester = useSelectedSemester();
+  const section = useSelectedSection();
+
+  return <LeaderboardView key={`${semester}-${section}`} persistence={persistence} />;
 }

@@ -248,6 +248,11 @@ export default function DashboardView({
   });
   const [isLoading, setIsLoading] = useState(true);
 
+  // Modal & search state
+  const [showStudentsModal, setShowStudentsModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedSectionFilter, setSelectedSectionFilter] = useState('All');
+
   // Load summary + timetable + metrics on mount
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -302,6 +307,19 @@ export default function DashboardView({
     return atRisk;
   }, [studentMetrics, weights, performanceThreshold]);
 
+  // Filter students for the directory modal
+  const filteredStudents = useMemo(() => {
+    return studentMetrics.filter((st) => {
+      const matchSearch =
+        st.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (st.enrollmentNumber || '').toLowerCase().includes(searchQuery.toLowerCase());
+      const matchSection =
+        selectedSectionFilter === 'All' ||
+        st.sectionName === selectedSectionFilter;
+      return matchSearch && matchSection;
+    });
+  }, [studentMetrics, searchQuery, selectedSectionFilter]);
+
   // Determine class period status based on current time
   const getClassStatus = useCallback((entry: TimetableEntry, index: number): 'done' | 'next' | 'upcoming' => {
     const now = new Date();
@@ -352,13 +370,19 @@ export default function DashboardView({
 
       {/* ─── Stat Cards Row (5 cards) ─── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatCard
-          icon="👥"
-          label="Total Students"
-          value={String(s.totalStudents)}
-          trend={s.totalStudents > 0 ? `${Math.min(s.totalStudents, 3)} new` : undefined}
-          trendUp={s.totalStudents > 0 ? true : undefined}
-        />
+        <button
+          onClick={() => setShowStudentsModal(true)}
+          className="text-left w-full focus:outline-none hover:scale-[1.02] focus:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+          title="Click to view all student details"
+        >
+          <StatCard
+            icon="👥"
+            label="Total Students"
+            value={String(s.totalStudents)}
+            trend={s.totalStudents > 0 ? 'view list' : undefined}
+            trendUp={s.totalStudents > 0 ? true : undefined}
+          />
+        </button>
         <StatCard
           icon="✓"
           label="Attendance"
@@ -398,43 +422,41 @@ export default function DashboardView({
       </div>
 
       {/* ─── Bottom row: Needs Attention + Today's Classes ─── */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Needs Attention (Requirement 4.5) */}
         <div className="card p-5 lg:col-span-2">
           <h3 className="text-sm font-semibold text-text">Needs Attention</h3>
-          <p className="mt-1 text-xs text-muted">
-            Students below {performanceThreshold}% performance threshold
-          </p>
-
-          {s.totalStudents === 0 ? (
-            <p className="mt-4 text-sm text-soft">{messages.emptyState.noStudents}</p>
-          ) : needsAttention.length === 0 ? (
-            <p className="mt-4 text-sm text-status-green">
-              All students are above the performance threshold. 🎉
-            </p>
+          {needsAttention.length === 0 ? (
+            <p className="mt-4 text-sm text-soft">{messages.emptyState.allStudentsGood}</p>
           ) : (
-            <ul className="mt-4 flex flex-col gap-2">
-              {needsAttention.slice(0, 5).map((student, idx) => {
-                const avgPerf = classAverage([student.internalMarks, student.quizScore, student.attendancePercent]);
-                return (
-                  <li
-                    key={student.studentId}
-                    className="flex items-center justify-between rounded-button bg-background px-3 py-2.5"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-status-red/10 text-xs font-bold text-status-red">
-                        {idx + 1}
-                      </span>
-                      <div>
-                        <span className="text-sm font-medium text-text">{student.name}</span>
-                        <span className="ml-2 text-xs text-muted">Roll #{student.studentId.slice(-4)}</span>
-                      </div>
-                    </div>
-                    <RiskBadge percent={avgPerf} />
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-left text-sm text-text border-collapse">
+                <thead>
+                  <tr className="border-b border-border pb-2 text-xs font-medium uppercase tracking-wide text-soft">
+                    <th className="py-2 pr-4">Student</th>
+                    <th className="py-2 px-4 text-right">Attendance</th>
+                    <th className="py-2 px-4 text-right">Quiz Score</th>
+                    <th className="py-2 pl-4 text-right">Marks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {needsAttention.slice(0, 5).map((st) => (
+                    <tr key={st.studentId} className="hover:bg-surface/40">
+                      <td className="py-2.5 pr-4 font-medium">{st.name}</td>
+                      <td className="py-2.5 px-4 text-right">
+                        <RiskBadge percent={st.attendancePercent} />
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-medium">
+                        {st.quizScore.toFixed(1)}/10
+                      </td>
+                      <td className="py-2.5 pl-4 text-right font-bold text-accent">
+                        {st.internalMarks}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
@@ -474,6 +496,117 @@ export default function DashboardView({
           )}
         </div>
       </div>
+
+      {/* ─── Students Detail Modal ─── */}
+      {showStudentsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="card w-full max-w-4xl max-h-[85vh] flex flex-col p-6 overflow-hidden shadow-2xl border border-border bg-surface/95 backdrop-blur-md">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-border">
+              <div>
+                <h3 className="text-lg font-bold text-text flex items-center gap-2">
+                  <span>👥</span> Student Directory
+                </h3>
+                <p className="text-xs text-soft">
+                  Detailed profile list of all students across sections in this semester.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowStudentsModal(false);
+                  setSearchQuery('');
+                  setSelectedSectionFilter('All');
+                }}
+                className="rounded-lg p-1.5 hover:bg-background text-soft hover:text-text transition-colors"
+                title="Close directory"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Filters Row */}
+            <div className="flex flex-col sm:flex-row gap-3 py-4">
+              <input
+                type="text"
+                placeholder="Search by name or enrollment number..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 rounded-button border border-border bg-background px-3 py-2 text-sm text-text focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+              />
+              <select
+                value={selectedSectionFilter}
+                onChange={(e) => setSelectedSectionFilter(e.target.value)}
+                className="rounded-button border border-border bg-background px-3 py-2.5 text-sm text-text focus:border-accent focus:outline-none"
+              >
+                <option value="All">All Sections</option>
+                {Array.from(new Set(studentMetrics.map(m => m.sectionName).filter(Boolean))).sort().map(sec => (
+                  <option key={sec} value={sec}>{sec}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Modal Table Body */}
+            <div className="flex-1 overflow-y-auto rounded-lg border border-border bg-background">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-surface border-b border-border text-xs font-semibold text-soft uppercase tracking-wider">
+                    <th className="px-4 py-3">Name</th>
+                    <th className="px-4 py-3">Enrollment Number</th>
+                    <th className="px-4 py-3">Section</th>
+                    <th className="px-4 py-3 text-right">Attendance</th>
+                    <th className="px-4 py-3 text-right">Quiz Avg</th>
+                    <th className="px-4 py-3 text-right">Internal Marks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border text-sm text-text">
+                  {filteredStudents.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="text-center py-8 text-soft">
+                        No students found matching filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredStudents.map((st) => (
+                      <tr key={st.studentId} className="hover:bg-surface/40 transition-colors">
+                        <td className="px-4 py-3 font-medium">{st.name}</td>
+                        <td className="px-4 py-3 text-mono text-xs text-soft">{st.enrollmentNumber || 'N/A'}</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-block px-2 py-0.5 text-xs font-semibold bg-accent-tint text-accent rounded-button">
+                            {st.sectionName || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`font-semibold ${st.attendancePercent < 75 ? 'text-status-red' : 'text-status-green'}`}>
+                            {st.attendancePercent.toFixed(1)}%
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium">{st.quizScore ? `${st.quizScore.toFixed(1)}/10` : '0/10'}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-accent">{st.internalMarks.toFixed(1)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-between items-center pt-4 border-t border-border mt-4 text-xs text-soft">
+              <span>Showing {filteredStudents.length} of {studentMetrics.length} students</span>
+              <button
+                onClick={() => {
+                  setShowStudentsModal(false);
+                  setSearchQuery('');
+                  setSelectedSectionFilter('All');
+                }}
+                className="btn btn-secondary py-1.5 px-4"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

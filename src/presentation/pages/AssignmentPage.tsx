@@ -1,9 +1,3 @@
-/**
- * Connected page wrapper for AssignmentView.
- * Wires Supabase-backed assignmentAccess with file storage, and loads
- * subjects/units/students from the database.
- */
-
 import { useEffect, useState } from 'react';
 import AssignmentView, {
   type AssignmentSubjectOption,
@@ -18,6 +12,7 @@ import { createTimetableAccess } from '@data/access/timetableAccess';
 import { fileStorage } from '@data/storage';
 import { supabase } from '@data/supabase';
 import { formatSectionLabel } from '@presentation/format/sectionLabel';
+import { useSelectedSemester, useSelectedSection, mapSemesterToDb } from '@presentation/hooks';
 import type { UploadPolicy } from '@domain/services/storageRouter';
 
 const assignmentAccess = createAssignmentAccess(supabase);
@@ -54,10 +49,22 @@ const access: AssignmentViewAccess = {
   },
 
   async listAssignments(): Promise<AssignmentListItem[]> {
+    const sem = localStorage.getItem('mis_selected_semester') || 'Semester 5';
+    const dbSemester = mapSemesterToDb(sem);
+
+    // Fetch subjects for this semester to filter assignments
+    const { data: subjectRows } = await supabase
+      .from('subjects')
+      .select('id')
+      .eq('semester', dbSemester);
+    const subjectIds = (subjectRows || []).map((s) => s.id);
+
     const { data } = await supabase
       .from('assignments')
       .select('id, title, subject_id, unit_id, due_date, share_token')
+      .in('subject_id', subjectIds)
       .order('created_at', { ascending: false });
+
     if (!data) return [];
     return data.map((row: Record<string, unknown>) => ({
       id: row.id as string,
@@ -88,24 +95,39 @@ export default function AssignmentPage() {
   const [subjects, setSubjects] = useState<AssignmentSubjectOption[]>([]);
   const [units, setUnits] = useState<AssignmentUnitOption[]>([]);
   const [students, setStudents] = useState<AssignmentStudent[]>([]);
+  const semester = useSelectedSemester();
+  const section = useSelectedSection();
 
   useEffect(() => {
     void (async () => {
       try {
-        const [subjectRes, unitRes, sectionRes, studentRes] = await Promise.all([
-          supabase.from('subjects').select('id, name').order('name'),
-          supabase.from('units').select('id, name').order('name'),
-          supabase.from('sections').select('id, name, batch, semester, department'),
-          supabase
-            .from('students')
-            .select('id, name, enrollment_number, section_id')
-            .order('name'),
-        ]);
-        if (subjectRes.data) setSubjects(subjectRes.data as AssignmentSubjectOption[]);
-        if (unitRes.data) setUnits(unitRes.data as AssignmentUnitOption[]);
+        const dbSemester = mapSemesterToDb(semester);
 
-        // Build a section-id → human label map (formatSectionLabel) so each
-        // student row can be labelled by the section it belongs to.
+        // Subjects are scoped to the selected semester; units follow those subjects.
+        const subjectRes = await supabase
+          .from('subjects')
+          .select('id, name')
+          .eq('semester', dbSemester)
+          .order('name');
+        const activeSubjects = (subjectRes.data as AssignmentSubjectOption[]) || [];
+        setSubjects(activeSubjects);
+
+        const activeSubjectIds = activeSubjects.map((s) => s.id);
+        const unitRes = await supabase
+          .from('units')
+          .select('id, name, subject_id')
+          .in('subject_id', activeSubjectIds)
+          .order('name');
+        setUnits((unitRes.data as AssignmentUnitOption[]) || []);
+
+        // Assignments/quizzes/materials are shared across every section that
+        // studies a subject, so the tracker lists students from ALL sections
+        // (each labelled by its section), not just the globally-selected one.
+        const [sectionRes, studentRes] = await Promise.all([
+          supabase.from('sections').select('id, name, batch, semester, department'),
+          supabase.from('students').select('id, name, enrollment_number, section_id').order('name'),
+        ]);
+
         const sectionLabelById = new Map<string, string>();
         for (const row of (sectionRes.data ?? []) as Array<{
           id: string;
@@ -141,7 +163,7 @@ export default function AssignmentPage() {
         // View handles empty arrays gracefully.
       }
     })();
-  }, []);
+  }, [semester, section]);
 
   return (
     <AssignmentView

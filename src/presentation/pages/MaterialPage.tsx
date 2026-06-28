@@ -1,12 +1,8 @@
-/**
- * Connected page wrapper for MaterialView.
- * Wires Supabase-backed file storage as the MaterialPersistence.
- */
-
 import MaterialView, { type MaterialPersistence, type MaterialItem } from '@presentation/views/MaterialView';
 import { fileStorage } from '@data/storage';
 import { supabase } from '@data/supabase';
-import type { UploadPolicy } from '@domain/services/storageRouter';
+import { useSelectedSemester } from '@presentation/hooks';
+import type { UploadPolicy, FileCategory } from '@domain/services/storageRouter';
 
 const STUDY_MATERIAL_POLICY: UploadPolicy = {
   allowedTypes: [
@@ -22,8 +18,9 @@ const STUDY_MATERIAL_POLICY: UploadPolicy = {
 
 const persistence: MaterialPersistence = {
   async uploadMaterial(file: File): Promise<MaterialItem> {
+    const sem = localStorage.getItem('mis_selected_semester') || 'Semester 5';
     const result = await fileStorage.uploadFile({
-      category: 'study-material',
+      category: `study-material-${sem}` as FileCategory,
       data: file,
       fileName: file.name,
       mimeType: file.type,
@@ -44,10 +41,18 @@ const persistence: MaterialPersistence = {
   },
 
   async loadMaterials(): Promise<MaterialItem[]> {
+    const sem = localStorage.getItem('mis_selected_semester') || 'Semester 5';
+    const categories = [`study-material-${sem}`];
+    
+    // For backward compatibility, Semester 5 also loads the old legacy 'study-material' category files
+    if (sem === 'Semester 5') {
+      categories.push('study-material');
+    }
+
     const { data } = await supabase
       .from('files')
       .select('id, file_name, mime_type, size_bytes, url_or_path, created_at')
-      .eq('category', 'study-material')
+      .in('category', categories)
       .order('created_at', { ascending: false });
     if (!data) return [];
     return data.map((row: Record<string, unknown>) => ({
@@ -62,5 +67,7 @@ const persistence: MaterialPersistence = {
 };
 
 export default function MaterialPage() {
-  return <MaterialView persistence={persistence} />;
+  const semester = useSelectedSemester();
+
+  return <MaterialView key={semester} persistence={persistence} />;
 }
