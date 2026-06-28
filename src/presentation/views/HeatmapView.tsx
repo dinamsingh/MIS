@@ -143,6 +143,17 @@ export default function HeatmapView({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
+  // Auto-select the first section when the options load or change
+  useEffect(() => {
+    if (sections.length > 0) {
+      if (!sections.some((s) => s.id === sectionId)) {
+        setSectionId(sections[0].id);
+      }
+    } else {
+      setSectionId('');
+    }
+  }, [sections, sectionId]);
+
   // Load all heatmap data when section changes (Req 13.4: recomputed on load)
   useEffect(() => {
     if (!sectionId) {

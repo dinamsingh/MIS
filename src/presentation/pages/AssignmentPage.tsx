@@ -1,9 +1,3 @@
-/**
- * Connected page wrapper for AssignmentView.
- * Wires Supabase-backed assignmentAccess with file storage, and loads
- * subjects/units/students from the database.
- */
-
 import { useEffect, useState } from 'react';
 import AssignmentView, {
   type AssignmentSubjectOption,
@@ -16,6 +10,7 @@ import AssignmentView, {
 import { createAssignmentAccess } from '@data/access/assignmentAccess';
 import { fileStorage } from '@data/storage';
 import { supabase } from '@data/supabase';
+import { useSelectedSemester, useSelectedSection, mapSemesterToDb } from '@presentation/hooks';
 import type { UploadPolicy } from '@domain/services/storageRouter';
 
 const assignmentAccess = createAssignmentAccess(supabase);
@@ -51,10 +46,22 @@ const access: AssignmentViewAccess = {
   },
 
   async listAssignments(): Promise<AssignmentListItem[]> {
+    const sem = localStorage.getItem('mis_selected_semester') || 'Semester 5';
+    const dbSemester = mapSemesterToDb(sem);
+
+    // Fetch subjects for this semester to filter assignments
+    const { data: subjectRows } = await supabase
+      .from('subjects')
+      .select('id')
+      .eq('semester', dbSemester);
+    const subjectIds = (subjectRows || []).map((s) => s.id);
+
     const { data } = await supabase
       .from('assignments')
       .select('id, title, subject_id, unit_id, due_date, share_token')
+      .in('subject_id', subjectIds)
       .order('created_at', { ascending: false });
+
     if (!data) return [];
     return data.map((row: Record<string, unknown>) => ({
       id: row.id as string,
@@ -80,23 +87,54 @@ export default function AssignmentPage() {
   const [subjects, setSubjects] = useState<AssignmentSubjectOption[]>([]);
   const [units, setUnits] = useState<AssignmentUnitOption[]>([]);
   const [students, setStudents] = useState<AssignmentStudent[]>([]);
+  const semester = useSelectedSemester();
+  const section = useSelectedSection();
 
   useEffect(() => {
     void (async () => {
       try {
-        const [subjectRes, unitRes, studentRes] = await Promise.all([
-          supabase.from('subjects').select('id, name').order('name'),
-          supabase.from('units').select('id, name').order('name'),
-          supabase.from('student_roster').select('id, name, enrollment_number').order('name'),
-        ]);
-        if (subjectRes.data) setSubjects(subjectRes.data as AssignmentSubjectOption[]);
-        if (unitRes.data) setUnits(unitRes.data as AssignmentUnitOption[]);
+        const dbSemester = mapSemesterToDb(semester);
+        const semNum = dbSemester[0];
+        const targetSectionName = `CS-${semNum}${section}`;
+
+        // Fetch subjects for active semester
+        const subjectRes = await supabase
+          .from('subjects')
+          .select('id, name')
+          .eq('semester', dbSemester)
+          .order('name');
+
+        const activeSubjects = subjectRes.data as AssignmentSubjectOption[] || [];
+        setSubjects(activeSubjects);
+
+        // Fetch units belonging to active semester's subjects
+        const activeSubjectIds = activeSubjects.map((s) => s.id);
+        const unitRes = await supabase
+          .from('units')
+          .select('id, name, subject_id')
+          .in('subject_id', activeSubjectIds)
+          .order('name');
+        setUnits((unitRes.data as AssignmentUnitOption[]) || []);
+
+        // Fetch sections for this semester and filter
+        const { data: sections } = await supabase.from('sections').select('id, name');
+        const semSectionIds = (sections || [])
+          .filter((sec) => sec.name === targetSectionName)
+          .map((sec) => sec.id);
+
+        // Fetch students in these sections
+        const studentRes = await supabase
+          .from('students')
+          .select('id, name, enrollment_number')
+          .in('section_id', semSectionIds)
+          .order('name');
+
         if (studentRes.data) {
           setStudents(
-            studentRes.data.map((row: { id: string; name: string; enrollment_number?: string }) => ({
+            studentRes.data.map((row: { id: string; name: string; enrollment_number?: string | null }) => ({
               id: row.id,
               name: row.name,
-              enrollmentNumber: row.enrollment_number,
+              enrollmentNumber: row.enrollment_number || undefined,
             })),
           );
         }
@@ -104,7 +142,7 @@ export default function AssignmentPage() {
         // View handles empty arrays gracefully.
       }
     })();
-  }, []);
+  }, [semester, section]);
 
   return (
     <AssignmentView

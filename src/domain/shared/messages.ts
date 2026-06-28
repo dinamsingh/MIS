@@ -47,6 +47,7 @@ export const messages = {
     insufficientChartData: 'Not enough data to display this chart yet.',
     noClassesToday: 'No classes scheduled for today.',
     noDefaulters: 'No defaulters. Every student is above the attendance threshold.',
+    allStudentsGood: 'All students are above the performance threshold.',
   },
 
   /** Generic infrastructure/error feedback. */

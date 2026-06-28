@@ -132,6 +132,17 @@ export default function AttendanceView({
     return { sectionId, subjectId, date, timeSlot };
   }, [sectionId, subjectId, date, timeSlot]);
 
+  // Auto-select the first section when the options load or change
+  useEffect(() => {
+    if (sections.length > 0) {
+      if (!sections.some((s) => s.id === sectionId)) {
+        setSectionId(sections[0].id);
+      }
+    } else {
+      setSectionId('');
+    }
+  }, [sections, sectionId]);
+
   // Load the Section roster whenever the Section changes (Req 5.1).
   useEffect(() => {
     if (!sectionId) {
