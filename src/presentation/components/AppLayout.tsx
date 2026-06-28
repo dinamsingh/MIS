@@ -13,6 +13,15 @@ interface AppLayoutProps {
  */
 export default function AppLayout({ activePath, onNavigate, onLogout, children }: AppLayoutProps) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedSemester, setSelectedSemester] = useState(() => {
+    return localStorage.getItem('mis_selected_semester') || 'Semester 5';
+  });
+
+  const handleSemesterChange = (sem: string) => {
+    setSelectedSemester(sem);
+    localStorage.setItem('mis_selected_semester', sem);
+    window.dispatchEvent(new CustomEvent('semesterChanged', { detail: sem }));
+  };
 
   const handleNavigate = (path: string) => {
     setIsDrawerOpen(false);
@@ -56,10 +65,25 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
               </svg>
             </button>
             <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-soft">
-              <span className="font-medium text-text">Current assignment</span>
+              <span className="font-medium text-text">Current Semester</span>
               <span className="text-muted">·</span>
-              <span>5th Sem · IWT</span>
-              <span className="text-muted">▾</span>
+              <div className="relative flex items-center">
+                <select
+                  value={selectedSemester}
+                  onChange={(e) => handleSemesterChange(e.target.value)}
+                  className="appearance-none bg-transparent pr-4 font-semibold text-text outline-none cursor-pointer"
+                >
+                  <option value="Semester 1" className="bg-surface text-text">Semester 1</option>
+                  <option value="Semester 2" className="bg-surface text-text">Semester 2</option>
+                  <option value="Semester 3" className="bg-surface text-text">Semester 3</option>
+                  <option value="Semester 4" className="bg-surface text-text">Semester 4</option>
+                  <option value="Semester 5" className="bg-surface text-text">Semester 5</option>
+                  <option value="Semester 6" className="bg-surface text-text">Semester 6</option>
+                  <option value="Semester 7" className="bg-surface text-text">Semester 7</option>
+                  <option value="Semester 8" className="bg-surface text-text">Semester 8</option>
+                </select>
+                <span className="pointer-events-none absolute right-0 text-muted">▾</span>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
