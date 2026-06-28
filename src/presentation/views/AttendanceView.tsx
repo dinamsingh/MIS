@@ -33,6 +33,7 @@ import {
   type PeriodKey,
 } from '@domain/services/attendanceService';
 import { messages } from '@domain/shared/messages';
+import { TableSkeleton } from '@presentation/components/skeletons';
 
 /** A selectable option (Section or subject) rendered in a dropdown. */
 export interface AttendanceOption {
@@ -400,7 +401,7 @@ export default function AttendanceView({
             Choose a section, subject, date, and period to load the roster.
           </div>
         ) : busy ? (
-          <div className="px-6 py-10 text-center text-sm text-soft">Loading attendance…</div>
+          <TableSkeleton rows={10} columns={4} />
         ) : loadError ? (
           <div role="alert" className="px-6 py-10 text-center text-sm font-medium text-red-600">
             {messages.error.generic}

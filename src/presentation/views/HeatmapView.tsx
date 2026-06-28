@@ -27,6 +27,7 @@ import {
   type StudentAttendance,
 } from '@domain/services/heatmapService';
 import { messages } from '@domain/shared/messages';
+import { CalendarSkeleton } from '@presentation/components/skeletons';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -272,9 +273,7 @@ export default function HeatmapView({
           <p className="text-sm text-text-soft">Choose a section to view the attendance heatmap.</p>
         </div>
       ) : loading ? (
-        <div className="card p-6">
-          <p className="text-sm text-text-soft">Loading heatmap data…</p>
-        </div>
+        <CalendarSkeleton />
       ) : error ? (
         <div className="card p-6">
           <p role="alert" className="text-sm font-medium text-status-red">

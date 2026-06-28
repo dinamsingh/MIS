@@ -35,6 +35,7 @@ import {
 } from '@domain/services/marksService';
 import type { MarksAccess } from '@data/access/marksAccess';
 import { messages } from '@domain/shared/messages';
+import { TableSkeleton } from '@presentation/components/skeletons';
 
 /** A student the calculator accepts component values for. */
 export interface MarksStudent {
@@ -367,11 +368,7 @@ export default function MarksCalculatorView({
   }, [components]);
 
   if (status === 'loading') {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-sm text-gray-500">Loading marks…</p>
-      </div>
-    );
+    return <TableSkeleton rows={8} columns={6} />;
   }
 
   if (status === 'error') {

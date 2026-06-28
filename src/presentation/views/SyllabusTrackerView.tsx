@@ -23,6 +23,7 @@ import {
 } from '@domain/services/syllabusService';
 import type { SyllabusAccess } from '@data/access/syllabusAccess';
 import { messages } from '@domain/shared/messages';
+import { FormSkeleton } from '@presentation/components/skeletons';
 
 /** A subject the teacher can track syllabus progress for. */
 export interface SyllabusSubject {
@@ -552,7 +553,7 @@ export default function SyllabusTrackerView({
       )}
 
       {units === null ? (
-        <p className="text-sm text-muted">Loading units…</p>
+        <FormSkeleton fields={4} />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left column: Topics list */}

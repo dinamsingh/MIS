@@ -23,6 +23,7 @@ import {
   validateUpload,
   type UploadPolicy,
 } from '@domain/services/storageRouter';
+import { CardGridSkeleton } from '@presentation/components/skeletons';
 
 // ---------------------------------------------------------------------------
 // Data interfaces
@@ -297,7 +298,7 @@ export default function MaterialView({
       {/* Material list — card tiles */}
       <section>
         {isLoading && (
-          <p className="text-sm text-muted">Loading…</p>
+          <CardGridSkeleton cards={6} />
         )}
 
         {loadError !== null && (

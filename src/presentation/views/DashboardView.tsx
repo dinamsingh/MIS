@@ -19,6 +19,7 @@ import { messages } from '@domain/shared/messages';
 import { isAtRisk, classAverage } from '@domain/services/analyticsService';
 import { todaysClasses, type DayOfWeek, type TimetableEntry } from '@domain/services/timetableService';
 import { combinedScore, type LeaderboardWeights, type StudentMetrics } from '@domain/services/leaderboardService';
+import { DashboardSkeleton } from '@presentation/components/skeletons';
 
 // ---------------------------------------------------------------------------
 // Data provider interface
@@ -321,11 +322,7 @@ export default function DashboardView({
   }, []);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-sm text-muted">Loading dashboard…</p>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   const s = summary ?? {

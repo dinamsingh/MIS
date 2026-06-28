@@ -33,6 +33,7 @@ import {
   type StudentMetrics,
 } from '@domain/services/leaderboardService';
 import { messages } from '@domain/shared/messages';
+import { TableSkeleton } from '@presentation/components/skeletons';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -213,7 +214,7 @@ export default function LeaderboardView({ persistence }: LeaderboardViewProps) {
           </p>
         </header>
         <div className="card p-6">
-          <p className="text-sm text-soft">Loading leaderboard…</p>
+          <TableSkeleton rows={6} columns={6} />
         </div>
       </section>
     );
