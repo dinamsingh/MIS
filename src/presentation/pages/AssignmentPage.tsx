@@ -14,11 +14,14 @@ import AssignmentView, {
   type UploadedAssignmentFile,
 } from '@presentation/views/AssignmentView';
 import { createAssignmentAccess } from '@data/access/assignmentAccess';
+import { createTimetableAccess } from '@data/access/timetableAccess';
 import { fileStorage } from '@data/storage';
 import { supabase } from '@data/supabase';
+import { formatSectionLabel } from '@presentation/format/sectionLabel';
 import type { UploadPolicy } from '@domain/services/storageRouter';
 
 const assignmentAccess = createAssignmentAccess(supabase);
+const timetableAccess = createTimetableAccess(supabase);
 
 const ASSIGNMENT_POLICY: UploadPolicy = {
   allowedTypes: [
@@ -74,6 +77,11 @@ const access: AssignmentViewAccess = {
     assignmentAccess.getLabManualSubmission(studentId, unitId),
   setLabManualSubmission: (studentId, unitId, status) =>
     assignmentAccess.setLabManualSubmission(studentId, unitId, status),
+
+  // Shared-materials model: an assignment is shared across every section that
+  // studies its subject, so the trackers list students from all those sections.
+  listSectionIdsForSubject: (subjectId) =>
+    timetableAccess.listSectionIdsForSubject(subjectId),
 };
 
 export default function AssignmentPage() {
@@ -84,19 +92,48 @@ export default function AssignmentPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const [subjectRes, unitRes, studentRes] = await Promise.all([
+        const [subjectRes, unitRes, sectionRes, studentRes] = await Promise.all([
           supabase.from('subjects').select('id, name').order('name'),
           supabase.from('units').select('id, name').order('name'),
-          supabase.from('student_roster').select('id, name, enrollment_number').order('name'),
+          supabase.from('sections').select('id, name, batch, semester, department'),
+          supabase
+            .from('students')
+            .select('id, name, enrollment_number, section_id')
+            .order('name'),
         ]);
         if (subjectRes.data) setSubjects(subjectRes.data as AssignmentSubjectOption[]);
         if (unitRes.data) setUnits(unitRes.data as AssignmentUnitOption[]);
+
+        // Build a section-id → human label map (formatSectionLabel) so each
+        // student row can be labelled by the section it belongs to.
+        const sectionLabelById = new Map<string, string>();
+        for (const row of (sectionRes.data ?? []) as Array<{
+          id: string;
+          name: string;
+          batch: string | null;
+          semester: string | null;
+          department: string | null;
+        }>) {
+          sectionLabelById.set(row.id, formatSectionLabel(row));
+        }
+
         if (studentRes.data) {
           setStudents(
-            studentRes.data.map((row: { id: string; name: string; enrollment_number?: string }) => ({
+            (studentRes.data as Array<{
+              id: string;
+              name: string;
+              enrollment_number?: string;
+              section_id?: string | null;
+            }>).map((row) => ({
               id: row.id,
               name: row.name,
               enrollmentNumber: row.enrollment_number,
+              ...(row.section_id
+                ? {
+                    sectionId: row.section_id,
+                    sectionLabel: sectionLabelById.get(row.section_id),
+                  }
+                : {}),
             })),
           );
         }

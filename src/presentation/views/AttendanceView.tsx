@@ -33,12 +33,23 @@ import {
   type PeriodKey,
 } from '@domain/services/attendanceService';
 import { messages } from '@domain/shared/messages';
+import { formatSectionLabel } from '@presentation/format/sectionLabel';
 import { TableSkeleton } from '@presentation/components/skeletons';
 
 /** A selectable option (Section or subject) rendered in a dropdown. */
 export interface AttendanceOption {
   readonly id: string;
   readonly name: string;
+}
+
+/**
+ * A selectable Section option carrying the batch/semester/department
+ * descriptors so the picker can show a meaningful label instead of a bare name.
+ */
+export interface AttendanceSectionOption extends AttendanceOption {
+  readonly batch?: string | null;
+  readonly semester?: string | null;
+  readonly department?: string | null;
 }
 
 /** A roster member shown with present/absent controls. */
@@ -64,7 +75,7 @@ export interface AttendancePersistence {
 
 export interface AttendanceViewProps {
   /** Sections the teacher can mark attendance for (Req 5.2). */
-  sections: readonly AttendanceOption[];
+  sections: readonly AttendanceSectionOption[];
   /** Subjects available for selection (Req 5.2). */
   subjects: readonly AttendanceOption[];
   /** Period time slots available for selection (multiple per day, incl. labs). */
@@ -246,7 +257,10 @@ export default function AttendanceView({
 
   // Derive display labels for header subtitle
   const selectedSubject = subjects.find((s) => s.id === subjectId)?.name ?? '—';
-  const selectedSection = sections.find((s) => s.id === sectionId)?.name ?? '—';
+  const selectedSectionOption = sections.find((s) => s.id === sectionId);
+  const selectedSection = selectedSectionOption
+    ? formatSectionLabel(selectedSectionOption)
+    : '—';
 
   // Count students below 75% (placeholder logic based on current marks)
   const belowThreshold = useMemo(() => {
@@ -309,7 +323,7 @@ export default function AttendanceView({
             <option value="">Select…</option>
             {sections.map((section) => (
               <option key={section.id} value={section.id}>
-                {section.name}
+                {formatSectionLabel(section)}
               </option>
             ))}
           </select>

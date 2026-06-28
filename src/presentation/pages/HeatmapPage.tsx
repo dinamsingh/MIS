@@ -6,9 +6,11 @@
 import { useEffect, useState } from 'react';
 import HeatmapView, { type HeatmapSectionOption, type HeatmapStudent } from '@presentation/views/HeatmapView';
 import { createHeatmapAccess } from '@data/access/heatmapAccess';
+import { createSectionsAccess } from '@data/access/sectionsAccess';
 import { supabase } from '@data/supabase';
 
 const heatmap = createHeatmapAccess(supabase);
+const sectionsAccess = createSectionsAccess(supabase);
 
 async function loadStudents(sectionId: string): Promise<HeatmapStudent[]> {
   const { data } = await supabase
@@ -30,10 +32,7 @@ export default function HeatmapPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const { data } = await supabase.from('sections').select('id, name').order('name');
-        if (data) {
-          setSections(data as HeatmapSectionOption[]);
-        }
+        setSections(await sectionsAccess.listSections());
       } catch {
         // View handles empty state.
       }

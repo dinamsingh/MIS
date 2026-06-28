@@ -24,11 +24,15 @@ import type {
   TimetableEntryInput,
 } from '@data/access/timetableAccess';
 import { messages } from '@domain/shared/messages';
+import { formatSectionLabel } from '@presentation/format/sectionLabel';
 
-/** A selectable Section option (id + human label) for the section picker. */
+/** A selectable Section option (id + label + optional descriptors) for the picker. */
 export interface SectionOption {
   readonly id: string;
   readonly name: string;
+  readonly batch?: string | null;
+  readonly semester?: string | null;
+  readonly department?: string | null;
 }
 
 /** A selectable subject option (id + human label) for the entry editor. */
@@ -290,7 +294,7 @@ export default function TimetableView({
               >
                 {sections.map((section) => (
                   <option key={section.id} value={section.id}>
-                    {section.name}
+                    {formatSectionLabel(section)}
                   </option>
                 ))}
               </select>

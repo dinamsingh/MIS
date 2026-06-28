@@ -33,6 +33,7 @@ const MarksCalculatorPage = lazy(() => import('@presentation/pages/MarksCalculat
 const QuizCreationPage = lazy(() => import('@presentation/pages/QuizCreationPage'));
 const AssignmentPage = lazy(() => import('@presentation/pages/AssignmentPage'));
 const MaterialPage = lazy(() => import('@presentation/pages/MaterialPage'));
+const RosterPage = lazy(() => import('@presentation/pages/RosterPage'));
 const AnalyticsPage = lazy(() => import('@presentation/pages/AnalyticsPage'));
 const LeaderboardPage = lazy(() => import('@presentation/pages/LeaderboardPage'));
 const HeatmapPage = lazy(() => import('@presentation/pages/HeatmapPage'));
@@ -102,6 +103,7 @@ export default function App() {
             <Route element={<TeacherShell />}>
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/timetable" element={<TimetablePage />} />
+              <Route path="/roster" element={<RosterPage />} />
               <Route path="/attendance" element={<AttendancePage />} />
               <Route path="/syllabus" element={<SyllabusTrackerPage />} />
               <Route path="/marks" element={<MarksCalculatorPage />} />

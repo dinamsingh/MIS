@@ -28,6 +28,7 @@ export {
   default as AttendanceView,
   type AttendanceViewProps,
   type AttendanceOption,
+  type AttendanceSectionOption,
   type AttendancePersistence,
   type RosterStudent,
   type LoadRoster,

@@ -7,9 +7,11 @@
 import { useEffect, useState } from 'react';
 import TimetableView, { type SectionOption, type SubjectOption } from '@presentation/views/TimetableView';
 import { createTimetableAccess } from '@data/access/timetableAccess';
+import { createSectionsAccess } from '@data/access/sectionsAccess';
 import { supabase } from '@data/supabase';
 
 const access = createTimetableAccess(supabase);
+const sectionsAccess = createSectionsAccess(supabase);
 
 export default function TimetablePage() {
   const [sections, setSections] = useState<SectionOption[]>([]);
@@ -18,13 +20,7 @@ export default function TimetablePage() {
   useEffect(() => {
     void (async () => {
       try {
-        const sectionRows = await supabase
-          .from('sections')
-          .select('id, name')
-          .order('name');
-        if (sectionRows.data) {
-          setSections(sectionRows.data as SectionOption[]);
-        }
+        setSections(await sectionsAccess.listSections());
         const subjectRows = await supabase
           .from('subjects')
           .select('id, name')

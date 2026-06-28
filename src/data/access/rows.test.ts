@@ -11,9 +11,36 @@ import {
   toTimetableEntry,
   toLeaderboardWeights,
   toSubmissionStatus,
+  toSection,
   type TopicRow,
 } from './rows';
 import type { PeriodKey, AttendanceMark } from '../../domain/services/attendanceService';
+
+describe('section row mappers', () => {
+  it('maps a section row to a domain section, preserving descriptors', () => {
+    expect(
+      toSection({
+        id: 'aa1',
+        name: 'CSE-5A',
+        batch: '2024-2028',
+        semester: '5th Semester',
+        department: 'CSE',
+      }),
+    ).toEqual({
+      id: 'aa1',
+      name: 'CSE-5A',
+      batch: '2024-2028',
+      semester: '5th Semester',
+      department: 'CSE',
+    });
+  });
+
+  it('preserves null descriptors for legacy rows', () => {
+    expect(
+      toSection({ id: 's1', name: 'Section A', batch: null, semester: null, department: null }),
+    ).toEqual({ id: 's1', name: 'Section A', batch: null, semester: null, department: null });
+  });
+});
 
 describe('roster row mappers', () => {
   it('maps a row to a domain entry and back, dropping a null name', () => {

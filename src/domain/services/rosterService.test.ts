@@ -14,10 +14,15 @@ import { isOk, isErr } from '../shared/result';
 import { messages } from '../shared/messages';
 
 describe('isValidEnrollmentNumber', () => {
-  it('accepts a conforming enrollment number (4 digits, 2 uppercase letters, 6 digits)', () => {
+  it('accepts a conforming enrollment number (4 digits, 2 uppercase letters, 6 alphanumeric)', () => {
     expect(isValidEnrollmentNumber('0131CS241000')).toBe(true);
     expect(isValidEnrollmentNumber('9999ZZ000000')).toBe(true);
     expect(isValidEnrollmentNumber('0000AA999999')).toBe(true);
+  });
+
+  it('accepts back-semester enrollment numbers whose trailing segment has a letter', () => {
+    expect(isValidEnrollmentNumber('0131CS243D01')).toBe(true);
+    expect(isValidEnrollmentNumber('0131CS243D03')).toBe(true);
   });
 
   it('rejects lowercase letters in the letter segment', () => {

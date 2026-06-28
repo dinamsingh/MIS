@@ -11,7 +11,9 @@ export * from './support';
 export * from './rows';
 export * from './parsers';
 
+export * from './sectionsAccess';
 export * from './rosterAccess';
+export * from './rosterImportAccess';
 export * from './authService';
 export * from './attendanceAccess';
 export * from './syllabusAccess';

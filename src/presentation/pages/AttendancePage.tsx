@@ -5,11 +5,13 @@
  */
 
 import { useEffect, useState } from 'react';
-import AttendanceView, { type AttendanceOption, type RosterStudent } from '@presentation/views/AttendanceView';
+import AttendanceView, { type AttendanceOption, type AttendanceSectionOption, type RosterStudent } from '@presentation/views/AttendanceView';
 import { createAttendanceAccess } from '@data/access/attendanceAccess';
+import { createSectionsAccess } from '@data/access/sectionsAccess';
 import { supabase } from '@data/supabase';
 
 const attendance = createAttendanceAccess(supabase);
+const sectionsAccess = createSectionsAccess(supabase);
 
 const DEFAULT_TIME_SLOTS = [
   '09:00', '10:00', '11:00', '12:00', '14:00', '15:00', '16:00',
@@ -30,16 +32,13 @@ async function loadRoster(sectionId: string): Promise<RosterStudent[]> {
 }
 
 export default function AttendancePage() {
-  const [sections, setSections] = useState<AttendanceOption[]>([]);
+  const [sections, setSections] = useState<AttendanceSectionOption[]>([]);
   const [subjects, setSubjects] = useState<AttendanceOption[]>([]);
 
   useEffect(() => {
     void (async () => {
       try {
-        const sectionRows = await supabase.from('sections').select('id, name').order('name');
-        if (sectionRows.data) {
-          setSections(sectionRows.data as AttendanceOption[]);
-        }
+        setSections(await sectionsAccess.listSections());
         const subjectRows = await supabase.from('subjects').select('id, name').order('name');
         if (subjectRows.data) {
           setSubjects(subjectRows.data as AttendanceOption[]);

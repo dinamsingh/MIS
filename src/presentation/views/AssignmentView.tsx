@@ -29,6 +29,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type { SubmissionStatus } from '@domain/shared/types';
 import { messages } from '@domain/shared/messages';
+import SharedAcrossSectionsNotice from '@presentation/components/SharedAcrossSectionsNotice';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,6 +52,10 @@ export interface AssignmentStudent {
   readonly id: string;
   readonly name: string;
   readonly enrollmentNumber?: string;
+  /** The id of the section this student belongs to (for shared-materials filtering). */
+  readonly sectionId?: string;
+  /** Human-readable section label (from `formatSectionLabel`) for display. */
+  readonly sectionLabel?: string;
 }
 
 /** An existing assignment shown in the list. */
@@ -118,6 +123,14 @@ export interface AssignmentViewAccess {
     unitId: string,
     status: SubmissionStatus,
   ): Promise<void>;
+
+  /**
+   * Resolve the sections that are taught a subject (shared-materials model).
+   * An assignment is shared across every section that studies its subject, so
+   * the trackers list students from all of those sections. Optional so tests
+   * may omit it — when absent, every provided student is shown.
+   */
+  listSectionIdsForSubject?(subjectId: string): Promise<string[]>;
 }
 
 export interface AssignmentViewProps {
@@ -295,6 +308,9 @@ function AssignmentTrackerGrid({
                     {student.enrollmentNumber && (
                       <span className="ml-2 text-xs text-muted">{student.enrollmentNumber}</span>
                     )}
+                    {student.sectionLabel && (
+                      <span className="block text-[11px] text-muted">{student.sectionLabel}</span>
+                    )}
                   </div>
                 </div>
               </td>
@@ -418,6 +434,9 @@ function LabManualTrackerGrid({
                     {student.enrollmentNumber && (
                       <span className="ml-2 text-xs text-muted">{student.enrollmentNumber}</span>
                     )}
+                    {student.sectionLabel && (
+                      <span className="block text-[11px] text-muted">{student.sectionLabel}</span>
+                    )}
                   </div>
                 </div>
               </td>
@@ -480,6 +499,11 @@ export default function AssignmentView({
 
   // --- Creation form visibility ---
   const [showCreateForm, setShowCreateForm] = useState(false);
+
+  // --- Shared-materials model: sections that study the selected assignment's
+  // subject. An assignment is shared across every such section, so the trackers
+  // list students from all of them. `null` means "not resolved / show all". ---
+  const [subjectSectionIds, setSubjectSectionIds] = useState<string[] | null>(null);
 
   // Load existing assignments on mount
   useEffect(() => {
@@ -564,9 +588,51 @@ export default function AssignmentView({
 
   const selectedAssignment = assignments.find((a) => a.id === selectedAssignmentId) ?? null;
 
+  // Resolve which sections study the selected assignment's subject so the
+  // trackers can list students from every section the assignment is shared with
+  // (Shared-materials model). Falls back to "show all" when the resolver is not
+  // wired (tests) or no timetable mapping exists yet.
+  const selectedSubjectId = selectedAssignment?.subjectId ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    const resolve = access.listSectionIdsForSubject;
+    if (selectedSubjectId === null || resolve === undefined) {
+      setSubjectSectionIds(null);
+      return;
+    }
+    void (async () => {
+      try {
+        const ids = await resolve(selectedSubjectId);
+        if (!cancelled) setSubjectSectionIds(ids);
+      } catch {
+        if (!cancelled) setSubjectSectionIds(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [access, selectedSubjectId]);
+
+  // Students shown in the trackers / submission list: every student in a section
+  // that studies the subject. When the section mapping is unavailable, show all
+  // provided students unchanged.
+  const visibleStudents =
+    subjectSectionIds && subjectSectionIds.length > 0
+      ? students.filter(
+          (s) => s.sectionId !== undefined && subjectSectionIds.includes(s.sectionId),
+        )
+      : students;
+
+  // Distinct section labels among the visible students, for the shared notice.
+  const sharedSectionLabels = Array.from(
+    new Set(
+      visibleStudents
+        .map((s) => s.sectionLabel)
+        .filter((label): label is string => label !== undefined && label !== ''),
+    ),
+  );
+
   // Count submitted students for the selected assignment
-  const submittedCount = students.filter((_, i) => i % 3 !== 2).length; // visual simulation
-  const totalCount = students.length;
+  const submittedCount = visibleStudents.filter((_, i) => i % 3 !== 2).length; // visual simulation
+  const totalCount = visibleStudents.length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -593,6 +659,10 @@ export default function AssignmentView({
           noValidate
         >
           <h3 className="text-base font-semibold text-text mb-4">Create assignment</h3>
+
+          <div className="mb-4">
+            <SharedAcrossSectionsNotice itemNoun="assignment" />
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
@@ -711,6 +781,13 @@ export default function AssignmentView({
               </div>
             </div>
 
+            <div className="mt-3">
+              <SharedAcrossSectionsNotice
+                itemNoun="assignment"
+                sectionLabels={sharedSectionLabels}
+              />
+            </div>
+
             {/* Actions row */}
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <button
@@ -735,11 +812,11 @@ export default function AssignmentView({
           </div>
 
           {/* Student submission list with badges */}
-          {students.length > 0 && (
+          {visibleStudents.length > 0 && (
             <div className="border-t border-border px-6 py-4">
               <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">Student submissions</h4>
               <div className="space-y-2 max-h-64 overflow-y-auto">
-                {students.map((student, i) => {
+                {visibleStudents.map((student, i) => {
                   const timing = getSubmissionTiming(selectedAssignment.dueDate, i);
                   return (
                     <div
@@ -754,6 +831,9 @@ export default function AssignmentView({
                           <span className="text-sm font-medium text-text">{student.name}</span>
                           {student.enrollmentNumber && (
                             <span className="ml-2 text-xs text-muted">{student.enrollmentNumber}</span>
+                          )}
+                          {student.sectionLabel && (
+                            <span className="block text-[11px] text-muted">{student.sectionLabel}</span>
                           )}
                         </div>
                       </div>
@@ -852,13 +932,13 @@ export default function AssignmentView({
             {activeTab === 'assignment' ? (
               <AssignmentTrackerGrid
                 assignmentId={selectedAssignment.id}
-                students={students}
+                students={visibleStudents}
                 units={units}
                 access={access}
               />
             ) : (
               <LabManualTrackerGrid
-                students={students}
+                students={visibleStudents}
                 units={units}
                 access={access}
               />
