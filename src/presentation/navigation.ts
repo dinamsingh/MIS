@@ -34,6 +34,7 @@ export const navGroups: NavGroup[] = [
     id: 'academics',
     label: 'Academics',
     items: [
+      { id: 'roster', label: 'Roster', icon: '👥', path: '/roster', badge: 'NEW' },
       { id: 'attendance', label: 'Attendance', icon: '✓', path: '/attendance' },
       { id: 'heatmap', label: 'Heatmap', icon: '🗓️', path: '/heatmap' },
       { id: 'syllabus', label: 'Syllabus', icon: '📖', path: '/syllabus' },

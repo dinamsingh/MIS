@@ -33,6 +33,7 @@ import type {
   QuizAccessRepository,
 } from '@data/access/quizAccess';
 import { messages } from '@domain/shared/messages';
+import SharedAcrossSectionsNotice from '@presentation/components/SharedAcrossSectionsNotice';
 
 /** The default quiz time limit in minutes (Req 8.3). */
 export const DEFAULT_TIME_LIMIT_MINUTES = 15;
@@ -47,6 +48,18 @@ export interface QuizUnitOption {
   readonly name: string;
 }
 
+/**
+ * A student who may attempt the quiz, used to label the attempts list by
+ * section. A quiz is shared across every section that studies its subject, so
+ * the attempts span all those sections; `sectionLabel` (from
+ * `formatSectionLabel`) lets the teacher see which section each attempt is from.
+ */
+export interface QuizAttemptStudent {
+  readonly id: string;
+  readonly name: string;
+  readonly sectionLabel?: string;
+}
+
 /** Operations this view needs from the quiz data-access wrapper. */
 export type QuizCreationRepository = Pick<
   QuizAccessRepository,
@@ -58,6 +71,12 @@ export interface QuizCreationViewProps {
   quizAccess: QuizCreationRepository;
   /** The syllabus units a quiz may be linked to (Req 8.2). */
   units: ReadonlyArray<QuizUnitOption>;
+  /**
+   * Students who may attempt the quiz, across every section that studies the
+   * subject. Used only to label the attempts list with names + section labels;
+   * optional so callers/tests may omit it (attempts then show the raw id).
+   */
+  students?: ReadonlyArray<QuizAttemptStudent>;
   /** Generates a unique share token (defaults to a crypto-based generator). */
   generateShareToken?: () => string;
   /** Builds the shareable link shown after publishing from a share token. */
@@ -189,6 +208,7 @@ function validateDraft(
 export default function QuizCreationView({
   quizAccess,
   units,
+  students = [],
   generateShareToken = defaultGenerateShareToken,
   buildShareLink = defaultBuildShareLink,
 }: QuizCreationViewProps) {
@@ -204,6 +224,11 @@ export default function QuizCreationView({
   const [attempts, setAttempts] = useState<AttemptSummary[] | null>(null);
   const [isLoadingAttempts, setIsLoadingAttempts] = useState(false);
   const [attemptsError, setAttemptsError] = useState<string | null>(null);
+
+  // Lookup so each attempt row can show the student's name + section label.
+  // A quiz is shared across every section that studies the subject, so attempts
+  // span all those sections (Shared-materials model, Req 1).
+  const studentById = new Map(students.map((s) => [s.id, s] as const));
 
   const updateQuestion = useCallback(
     (key: string, patch: Partial<QuestionDraft>) => {
@@ -333,6 +358,10 @@ export default function QuizCreationView({
         </button>
       </header>
 
+      {/* Shared-materials notice: a quiz is identical across every section that
+          studies the subject; only attendance/marks are tracked per section. */}
+      <SharedAcrossSectionsNotice itemNoun="quiz" />
+
       {/* ── Published Quizzes Table ── */}
       {published !== null && (
         <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
@@ -399,19 +428,24 @@ export default function QuizCreationView({
                 <thead>
                   <tr className="bg-gray-50 dark:bg-white/5">
                     <th className="px-4 py-2 font-medium text-muted">Student</th>
+                    <th className="px-4 py-2 font-medium text-muted">Section</th>
                     <th className="px-4 py-2 font-medium text-muted">Score</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {attempts.map((attempt, idx) => (
-                    <tr
-                      key={attempt.studentId}
-                      className={idx % 2 === 0 ? 'bg-white dark:bg-transparent' : 'bg-gray-50 dark:bg-white/5'}
-                    >
-                      <td className="px-4 py-2 text-text">{attempt.studentId}</td>
-                      <td className="px-4 py-2 text-text">{attempt.score}</td>
-                    </tr>
-                  ))}
+                  {attempts.map((attempt, idx) => {
+                    const student = studentById.get(attempt.studentId);
+                    return (
+                      <tr
+                        key={attempt.studentId}
+                        className={idx % 2 === 0 ? 'bg-white dark:bg-transparent' : 'bg-gray-50 dark:bg-white/5'}
+                      >
+                        <td className="px-4 py-2 text-text">{student?.name ?? attempt.studentId}</td>
+                        <td className="px-4 py-2 text-muted">{student?.sectionLabel ?? '—'}</td>
+                        <td className="px-4 py-2 text-text">{attempt.score}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

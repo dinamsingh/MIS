@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import TimetableView, { type SectionOption, type SubjectOption } from '@presentation/views/TimetableView';
 import { createTimetableAccess } from '@data/access/timetableAccess';
+import { createSectionsAccess } from '@data/access/sectionsAccess';
 import { supabase } from '@data/supabase';
 import { useSelectedSemester, useSelectedSection, mapSemesterToDb } from '@presentation/hooks';
 
 const access = createTimetableAccess(supabase);
+const sectionsAccess = createSectionsAccess(supabase);
 
 export default function TimetablePage() {
   const [sections, setSections] = useState<SectionOption[]>([]);
@@ -17,21 +19,14 @@ export default function TimetablePage() {
       try {
         const dbSemester = mapSemesterToDb(semester);
         const semNum = dbSemester[0];
-        const targetSectionName = `CS-${semNum}${section}`;
+        const suffix = `${semNum}${section}`;
 
-        // Fetch sections filtered by semester and section suffix (e.g. CS-5A)
-        const sectionRows = await supabase
-          .from('sections')
-          .select('id, name')
-          .order('name');
-        if (sectionRows.data) {
-          const filteredSections = (sectionRows.data as SectionOption[]).filter(
-            (sec) => sec.name === targetSectionName
-          );
-          setSections(filteredSections);
-        }
+        // Real section list (with batch/semester/department labels), narrowed
+        // to the globally-selected section.
+        const allSections = await sectionsAccess.listSections();
+        setSections(allSections.filter((s) => s.name.endsWith(suffix)));
 
-        // Fetch subjects filtered by semester
+        // Subjects are scoped to the selected semester.
         const subjectRows = await supabase
           .from('subjects')
           .select('id, name')

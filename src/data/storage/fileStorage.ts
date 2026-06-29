@@ -174,6 +174,7 @@ export function createFileStorage(deps: FileStorageDeps): FileStorage {
     urlOrPath: string,
     mimeType: string,
     sizeBytes: number,
+    fileName?: string,
   ): Promise<Result<string, StorageError>> {
     const { data, error } = await client
       .from('files')
@@ -183,6 +184,7 @@ export function createFileStorage(deps: FileStorageDeps): FileStorage {
         url_or_path: urlOrPath,
         mime_type: mimeType,
         size_bytes: sizeBytes,
+        file_name: fileName,
       })
       .select('id')
       .single();
@@ -228,7 +230,13 @@ export function createFileStorage(deps: FileStorageDeps): FileStorage {
   async function uploadToCloudinary(
     request: UploadRequest,
   ): Promise<Result<{ path: string; url: string }, StorageError>> {
-    const endpoint = `https://api.cloudinary.com/v1_1/${cloudinary.cloudName}/auto/upload`;
+    // Route by file type: images use the image pipeline; documents (PDF, DOC,
+    // PPT, etc.) use the `raw` resource type so Cloudinary serves them as plain
+    // downloadable files and does NOT apply the image/PDF delivery restriction
+    // that otherwise causes "Failed to load PDF document".
+    const isImage = request.mimeType.startsWith('image/');
+    const resourceType = isImage ? 'image' : 'raw';
+    const endpoint = `https://api.cloudinary.com/v1_1/${cloudinary.cloudName}/${resourceType}/upload`;
     const form = new FormData();
     form.append('file', request.data, request.fileName);
     form.append('upload_preset', cloudinary.uploadPreset);
@@ -283,6 +291,7 @@ export function createFileStorage(deps: FileStorageDeps): FileStorage {
         stored.value.path,
         request.mimeType,
         request.sizeBytes,
+        request.fileName,
       );
       if (!recorded.ok) {
         return recorded;

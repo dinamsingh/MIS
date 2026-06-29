@@ -18,6 +18,45 @@ import type { LeaderboardWeights } from '../../domain/services/leaderboardServic
 import type { SubmissionStatus } from '../../domain/shared/types';
 
 // ---------------------------------------------------------------------------
+// sections
+// ---------------------------------------------------------------------------
+
+/**
+ * A class group the teacher works with. Beyond the bare `id`/`name`, a section
+ * is described by its `batch`, `semester`, and `department` so one teacher can
+ * organise multiple groups (e.g. CSE · 2024-2028 · 5th Semester · CSE-5A). The
+ * descriptor columns were added in migration 0007 and are nullable, so older
+ * rows that predate the migration surface them as `null`.
+ */
+export interface Section {
+  readonly id: string;
+  readonly name: string;
+  readonly batch: string | null;
+  readonly semester: string | null;
+  readonly department: string | null;
+}
+
+/** A row of the `sections` table. */
+export interface SectionRow {
+  readonly id: string;
+  readonly name: string;
+  readonly batch: string | null;
+  readonly semester: string | null;
+  readonly department: string | null;
+}
+
+/** Map a section row to the domain {@link Section}, preserving null descriptors. */
+export function toSection(row: SectionRow): Section {
+  return {
+    id: row.id,
+    name: row.name,
+    batch: row.batch,
+    semester: row.semester,
+    department: row.department,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // student_roster
 // ---------------------------------------------------------------------------
 

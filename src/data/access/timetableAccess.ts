@@ -10,6 +10,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase as defaultClient } from '../supabase';
 import {
+  sectionIdsForSubject,
   todaysClasses,
   type DayOfWeek,
   type TimetableEntry,
@@ -38,6 +39,12 @@ export interface TimetableAccess {
   deleteEntry(entryId: string): Promise<void>;
   /** Derive a section's classes for the given day of week (Requirement 14.3). */
   todaysClasses(sectionId: string, day: DayOfWeek): Promise<TimetableEntry[]>;
+  /**
+   * Resolve the distinct sections that are taught a given subject (shared
+   * materials model). Assignments, quizzes, and study material are scoped by
+   * subject/unit, so this is the set of sections that share them.
+   */
+  listSectionIdsForSubject(subjectId: string): Promise<string[]>;
 }
 
 interface InsertedId {
@@ -82,6 +89,18 @@ export function createTimetableAccess(
 
     async todaysClasses(sectionId: string, day: DayOfWeek): Promise<TimetableEntry[]> {
       return todaysClasses(await loadEntries(sectionId), day);
+    },
+
+    async listSectionIdsForSubject(subjectId: string): Promise<string[]> {
+      const rows = unwrapList(
+        await client
+          .from('timetable_entries')
+          .select('id, section_id, subject_id, day_of_week, time_slot')
+          .eq('subject_id', subjectId)
+          .order('time_slot', { ascending: true }),
+      ) as TimetableEntryRow[];
+      // Reuse the pure derivation so the distinct/ordering rule lives in one place.
+      return sectionIdsForSubject(rows.map(toTimetableEntry), subjectId);
     },
   };
 }

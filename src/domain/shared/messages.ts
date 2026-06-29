@@ -36,6 +36,20 @@ export const messages = {
     locked: 'Locked — unlock later',
   },
 
+  /** CSV roster import: per-row rejection reasons and surface-level feedback. */
+  rosterImport: {
+    invalidEnrollment:
+      'The enrollment number is not in the expected format (four digits, two uppercase letters, then six alphanumeric characters).',
+    missingName: 'The student name is missing.',
+    duplicate: 'A duplicate enrollment number appears earlier in this file.',
+    malformed: 'This line is not in the expected "enrollment,name" format.',
+    noValidRows: 'No valid rows were found to import. Review the rejected rows and try again.',
+    sectionRequired: 'Select a section before importing.',
+    importSucceeded: (count: number) =>
+      `Imported ${count} student${count === 1 ? '' : 's'} successfully. The section roster has been replaced.`,
+    importFailed: 'Could not import the roster. No changes were made. Please try again.',
+  },
+
   /** Friendly empty states rendered instead of errors when data is absent. */
   emptyState: {
     noStudents: 'No students yet. Add students to get started.',

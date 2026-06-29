@@ -51,7 +51,7 @@ const persistence: MaterialPersistence = {
 
     const { data } = await supabase
       .from('files')
-      .select('id, file_name, mime_type, size_bytes, url, created_at')
+      .select('id, file_name, mime_type, size_bytes, url_or_path, created_at')
       .in('category', categories)
       .order('created_at', { ascending: false });
     if (!data) return [];
@@ -60,7 +60,7 @@ const persistence: MaterialPersistence = {
       fileName: row.file_name as string,
       mimeType: row.mime_type as string,
       sizeBytes: row.size_bytes as number,
-      url: row.url as string,
+      url: row.url_or_path as string,
       createdAt: row.created_at as string,
     }));
   },

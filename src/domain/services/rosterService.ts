@@ -30,14 +30,19 @@ import type { AttemptResult } from './quizService';
 
 /**
  * Enrollment-number pattern: exactly four digits, two uppercase letters, then
- * six digits (for example, `0131CS241000`). Anchored so the entire string must
- * match — no leading/trailing characters are permitted.
+ * six alphanumeric (uppercase) characters (for example, `0131CS241000`, or
+ * `0131CS243D01` for a back-semester student). Anchored so the entire string
+ * must match — no leading/trailing characters are permitted.
+ *
+ * The trailing segment permits uppercase letters (not only digits) because the
+ * college ERP issues back-/lateral-entry enrollment numbers such as `243D01`.
  */
-const ENROLLMENT_NUMBER_PATTERN = /^[0-9]{4}[A-Z]{2}[0-9]{6}$/;
+const ENROLLMENT_NUMBER_PATTERN = /^[0-9]{4}[A-Z]{2}[0-9A-Z]{6}$/;
 
 /**
  * Returns true if and only if `value` matches the enrollment-number pattern of
- * four digits, two uppercase letters, then six digits.
+ * four digits, two uppercase letters, then six alphanumeric (uppercase)
+ * characters.
  *
  * Pure and synchronous so it can be reused anywhere a pattern check is needed
  * (UI inline validation, seed-data generation, access resolution).

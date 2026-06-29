@@ -8,12 +8,15 @@ import AssignmentView, {
   type UploadedAssignmentFile,
 } from '@presentation/views/AssignmentView';
 import { createAssignmentAccess } from '@data/access/assignmentAccess';
+import { createTimetableAccess } from '@data/access/timetableAccess';
 import { fileStorage } from '@data/storage';
 import { supabase } from '@data/supabase';
+import { formatSectionLabel } from '@presentation/format/sectionLabel';
 import { useSelectedSemester, useSelectedSection, mapSemesterToDb } from '@presentation/hooks';
 import type { UploadPolicy } from '@domain/services/storageRouter';
 
 const assignmentAccess = createAssignmentAccess(supabase);
+const timetableAccess = createTimetableAccess(supabase);
 
 const ASSIGNMENT_POLICY: UploadPolicy = {
   allowedTypes: [
@@ -81,6 +84,11 @@ const access: AssignmentViewAccess = {
     assignmentAccess.getLabManualSubmission(studentId, unitId),
   setLabManualSubmission: (studentId, unitId, status) =>
     assignmentAccess.setLabManualSubmission(studentId, unitId, status),
+
+  // Shared-materials model: an assignment is shared across every section that
+  // studies its subject, so the trackers list students from all those sections.
+  listSectionIdsForSubject: (subjectId) =>
+    timetableAccess.listSectionIdsForSubject(subjectId),
 };
 
 export default function AssignmentPage() {
@@ -94,20 +102,16 @@ export default function AssignmentPage() {
     void (async () => {
       try {
         const dbSemester = mapSemesterToDb(semester);
-        const semNum = dbSemester[0];
-        const targetSectionName = `CS-${semNum}${section}`;
 
-        // Fetch subjects for active semester
+        // Subjects are scoped to the selected semester; units follow those subjects.
         const subjectRes = await supabase
           .from('subjects')
           .select('id, name')
           .eq('semester', dbSemester)
           .order('name');
-
-        const activeSubjects = subjectRes.data as AssignmentSubjectOption[] || [];
+        const activeSubjects = (subjectRes.data as AssignmentSubjectOption[]) || [];
         setSubjects(activeSubjects);
 
-        // Fetch units belonging to active semester's subjects
         const activeSubjectIds = activeSubjects.map((s) => s.id);
         const unitRes = await supabase
           .from('units')
@@ -116,25 +120,42 @@ export default function AssignmentPage() {
           .order('name');
         setUnits((unitRes.data as AssignmentUnitOption[]) || []);
 
-        // Fetch sections for this semester and filter
-        const { data: sections } = await supabase.from('sections').select('id, name');
-        const semSectionIds = (sections || [])
-          .filter((sec) => sec.name === targetSectionName)
-          .map((sec) => sec.id);
+        // Assignments/quizzes/materials are shared across every section that
+        // studies a subject, so the tracker lists students from ALL sections
+        // (each labelled by its section), not just the globally-selected one.
+        const [sectionRes, studentRes] = await Promise.all([
+          supabase.from('sections').select('id, name, batch, semester, department'),
+          supabase.from('students').select('id, name, enrollment_number, section_id').order('name'),
+        ]);
 
-        // Fetch students in these sections
-        const studentRes = await supabase
-          .from('students')
-          .select('id, name, enrollment_number')
-          .in('section_id', semSectionIds)
-          .order('name');
+        const sectionLabelById = new Map<string, string>();
+        for (const row of (sectionRes.data ?? []) as Array<{
+          id: string;
+          name: string;
+          batch: string | null;
+          semester: string | null;
+          department: string | null;
+        }>) {
+          sectionLabelById.set(row.id, formatSectionLabel(row));
+        }
 
         if (studentRes.data) {
           setStudents(
-            studentRes.data.map((row: { id: string; name: string; enrollment_number?: string | null }) => ({
+            (studentRes.data as Array<{
+              id: string;
+              name: string;
+              enrollment_number?: string;
+              section_id?: string | null;
+            }>).map((row) => ({
               id: row.id,
               name: row.name,
-              enrollmentNumber: row.enrollment_number || undefined,
+              enrollmentNumber: row.enrollment_number,
+              ...(row.section_id
+                ? {
+                    sectionId: row.section_id,
+                    sectionLabel: sectionLabelById.get(row.section_id),
+                  }
+                : {}),
             })),
           );
         }

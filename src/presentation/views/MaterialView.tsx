@@ -24,6 +24,7 @@ import {
   type UploadPolicy,
 } from '@domain/services/storageRouter';
 import { CardGridSkeleton } from '@presentation/components/skeletons';
+import SharedAcrossSectionsNotice from '@presentation/components/SharedAcrossSectionsNotice';
 
 // ---------------------------------------------------------------------------
 // Data interfaces
@@ -135,6 +136,7 @@ export default function MaterialView({
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const [showUploadForm, setShowUploadForm] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -240,6 +242,10 @@ export default function MaterialView({
         </button>
       </header>
 
+      {/* Shared-materials notice: study material is identical across all
+          sections that study the subject (only attendance/marks are per-section). */}
+      <SharedAcrossSectionsNotice itemNoun="study material" />
+
       {/* Upload form — shown when toggled */}
       {showUploadForm && (
         <form
@@ -318,31 +324,59 @@ export default function MaterialView({
             {materials.map((item) => {
               const badge = getTypeBadge(item.mimeType);
               return (
-                <a
+                <div
                   key={item.id}
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex items-start gap-4 rounded-xl border border-border bg-surface p-4 shadow-sm transition hover:border-accent/40 hover:shadow-md"
-                  aria-label={`Open ${item.fileName}`}
+                  className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4 shadow-sm transition hover:border-accent/40 hover:shadow-md"
                 >
-                  {/* File type badge */}
-                  <span
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${badge.color}`}
-                  >
-                    {badge.label}
-                  </span>
+                  <div className="flex items-start gap-4">
+                    {/* File type badge */}
+                    <span
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${badge.color}`}
+                    >
+                      {badge.label}
+                    </span>
 
-                  {/* File info */}
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="truncate text-sm font-medium text-text group-hover:text-accent">
-                      {item.fileName}
-                    </span>
-                    <span className="text-xs text-muted">
-                      {formatFileSize(item.sizeBytes)} · {formatDate(item.createdAt)}
-                    </span>
+                    {/* File info */}
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span className="truncate text-sm font-medium text-text">
+                        {item.fileName}
+                      </span>
+                      <span className="text-xs text-muted">
+                        {formatFileSize(item.sizeBytes)} · {formatDate(item.createdAt)}
+                      </span>
+                    </div>
                   </div>
-                </a>
+
+                  {/* Action buttons: Open · Download · Copy link */}
+                  <div className="flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded-lg bg-accent/10 px-2.5 py-1.5 text-xs font-medium text-accent transition hover:bg-accent/20"
+                    >
+                      Open ↗
+                    </a>
+                    <a
+                      href={item.url}
+                      download={item.fileName}
+                      className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-soft transition hover:bg-background"
+                    >
+                      Download
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(item.url);
+                        setCopiedId(item.id);
+                        window.setTimeout(() => setCopiedId(null), 2000);
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-soft transition hover:bg-background"
+                    >
+                      {copiedId === item.id ? '✓ Copied' : 'Copy link'}
+                    </button>
+                  </div>
+                </div>
               );
             })}
           </div>

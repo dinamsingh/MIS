@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import HeatmapView, { type HeatmapSectionOption, type HeatmapStudent } from '@presentation/views/HeatmapView';
 import { createHeatmapAccess } from '@data/access/heatmapAccess';
+import { createSectionsAccess } from '@data/access/sectionsAccess';
 import { supabase } from '@data/supabase';
 import { useSelectedSemester, useSelectedSection, mapSemesterToDb } from '@presentation/hooks';
 
 const heatmap = createHeatmapAccess(supabase);
+const sectionsAccess = createSectionsAccess(supabase);
 
 async function loadStudents(sectionId: string): Promise<HeatmapStudent[]> {
   // Query students table which has section_id
@@ -31,15 +33,11 @@ export default function HeatmapPage() {
       try {
         const dbSemester = mapSemesterToDb(semester);
         const semNum = dbSemester[0];
-        const targetSectionName = `CS-${semNum}${section}`;
+        const suffix = `${semNum}${section}`;
 
-        const { data } = await supabase.from('sections').select('id, name').order('name');
-        if (data) {
-          const filteredSections = (data as HeatmapSectionOption[]).filter(
-            (sec) => sec.name === targetSectionName
-          );
-          setSections(filteredSections);
-        }
+        // Real section list (with labels), narrowed to the selected section.
+        const allSections = await sectionsAccess.listSections();
+        setSections(allSections.filter((s) => s.name.endsWith(suffix)));
       } catch {
         // View handles empty state.
       }

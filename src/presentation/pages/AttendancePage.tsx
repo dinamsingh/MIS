@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import AttendanceView, { type AttendanceOption, type RosterStudent } from '@presentation/views/AttendanceView';
+import AttendanceView, { type AttendanceOption, type AttendanceSectionOption, type RosterStudent } from '@presentation/views/AttendanceView';
 import { createAttendanceAccess } from '@data/access/attendanceAccess';
+import { createSectionsAccess } from '@data/access/sectionsAccess';
 import { supabase } from '@data/supabase';
 import { useSelectedSemester, useSelectedSection, mapSemesterToDb } from '@presentation/hooks';
 
 const attendance = createAttendanceAccess(supabase);
+const sectionsAccess = createSectionsAccess(supabase);
 
 const DEFAULT_TIME_SLOTS = [
   '09:00-10:00', '10:00-11:00', '11:00-12:00', '12:00-13:00', '14:00-15:00', '15:00-16:00', '16:00-17:00'
@@ -26,7 +28,7 @@ async function loadRoster(sectionId: string): Promise<RosterStudent[]> {
 }
 
 export default function AttendancePage() {
-  const [sections, setSections] = useState<AttendanceOption[]>([]);
+  const [sections, setSections] = useState<AttendanceSectionOption[]>([]);
   const [subjects, setSubjects] = useState<AttendanceOption[]>([]);
   const semester = useSelectedSemester();
   const section = useSelectedSection();
@@ -36,18 +38,15 @@ export default function AttendancePage() {
       try {
         const dbSemester = mapSemesterToDb(semester);
         const semNum = dbSemester[0];
-        const targetSectionName = `CS-${semNum}${section}`;
+        // Match the globally-selected section against the real section list
+        // (e.g. selection "5" + "A" -> a name ending in "5A", matching both
+        // legacy "CS-5A" and the imported "CSE-5A").
+        const suffix = `${semNum}${section}`;
 
-        // Fetch sections and filter for this specific section (e.g. CS-5A)
-        const sectionRows = await supabase.from('sections').select('id, name').order('name');
-        if (sectionRows.data) {
-          const filteredSections = (sectionRows.data as AttendanceOption[]).filter(
-            (sec) => sec.name === targetSectionName
-          );
-          setSections(filteredSections);
-        }
+        const allSections = await sectionsAccess.listSections();
+        setSections(allSections.filter((s) => s.name.endsWith(suffix)));
 
-        // Fetch subjects filtered by semester
+        // Subjects are scoped to the selected semester.
         const subjectRows = await supabase
           .from('subjects')
           .select('id, name')

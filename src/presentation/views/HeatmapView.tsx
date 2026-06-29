@@ -27,6 +27,7 @@ import {
   type StudentAttendance,
 } from '@domain/services/heatmapService';
 import { messages } from '@domain/shared/messages';
+import { formatSectionLabel } from '@presentation/format/sectionLabel';
 import { CalendarSkeleton } from '@presentation/components/skeletons';
 
 // ---------------------------------------------------------------------------
@@ -37,6 +38,9 @@ import { CalendarSkeleton } from '@presentation/components/skeletons';
 export interface HeatmapSectionOption {
   readonly id: string;
   readonly name: string;
+  readonly batch?: string | null;
+  readonly semester?: string | null;
+  readonly department?: string | null;
 }
 
 /** A student entry to display in the defaulter list. */
@@ -272,7 +276,7 @@ export default function HeatmapView({
           <option value="">Select section</option>
           {sections.map((section) => (
             <option key={section.id} value={section.id}>
-              {section.name}
+              {formatSectionLabel(section)}
             </option>
           ))}
         </select>
