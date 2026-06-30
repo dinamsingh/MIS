@@ -1,11 +1,22 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
+import type { ReactNode } from 'react';
 import AppLayout from '@presentation/components/AppLayout';
+import { SelectedSectionProvider } from '@presentation/context/SelectedSectionContext';
 import { navGroups } from '@presentation/navigation';
+
+/**
+ * AppLayout renders the global section dropdown, which reads the
+ * SelectedSectionProvider. With no Supabase in tests the section list stays
+ * empty (the dropdown shows "No sections"), which is fine for these shell tests.
+ */
+function renderLayout(ui: ReactNode) {
+  return render(<SelectedSectionProvider>{ui}</SelectedSectionProvider>);
+}
 
 describe('AppLayout shell', () => {
   it('renders the grouped-section navigation with every module (Req 20.7)', () => {
-    render(<AppLayout activePath="/dashboard">content</AppLayout>);
+    renderLayout(<AppLayout activePath="/dashboard">content</AppLayout>);
 
     // Each group label is rendered.
     for (const group of navGroups) {
@@ -21,19 +32,19 @@ describe('AppLayout shell', () => {
   });
 
   it('marks the active item with aria-current=page', () => {
-    render(<AppLayout activePath="/dashboard">content</AppLayout>);
+    renderLayout(<AppLayout activePath="/dashboard">content</AppLayout>);
     const active = screen.getByRole('button', { name: /Dashboard/i });
     expect(active).toHaveAttribute('aria-current', 'page');
   });
 
   it('renders locked AI items as disabled placeholders', () => {
-    render(<AppLayout activePath="/dashboard">content</AppLayout>);
+    renderLayout(<AppLayout activePath="/dashboard">content</AppLayout>);
     const lockedItem = screen.getByRole('button', { name: /AI Quiz Generator/i });
     expect(lockedItem).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('renders the provided main content', () => {
-    render(
+    renderLayout(
       <AppLayout activePath="/dashboard">
         <span>region-content</span>
       </AppLayout>,

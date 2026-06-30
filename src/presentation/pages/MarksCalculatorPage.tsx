@@ -2,25 +2,31 @@ import { useEffect, useState } from 'react';
 import MarksCalculatorView, { type MarksStudent } from '@presentation/views/MarksCalculatorView';
 import { createMarksAccess } from '@data/access/marksAccess';
 import { supabase } from '@data/supabase';
-import { useSelectedSemester, useSelectedSection, mapSemesterToDb } from '@presentation/hooks';
+import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 
 const access = createMarksAccess(supabase);
 
 export default function MarksCalculatorPage() {
+  const { selectedSection } = useSelectedSection();
   const [subjectId, setSubjectId] = useState<string>('');
   const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]);
   const [students, setStudents] = useState<MarksStudent[]>([]);
-  const semester = useSelectedSemester();
-  const section = useSelectedSection();
+
+  const sectionId = selectedSection?.id ?? null;
+  const semester = selectedSection?.semester ?? null;
 
   useEffect(() => {
+    if (!semester) {
+      setSubjects([]);
+      setSubjectId('');
+      return;
+    }
     void (async () => {
       try {
-        const dbSemester = mapSemesterToDb(semester);
         const { data } = await supabase
           .from('subjects')
           .select('id, name')
-          .eq('semester', dbSemester)
+          .eq('semester', semester)
           .order('name');
         if (data) {
           setSubjects(data as { id: string; name: string }[]);
@@ -37,27 +43,17 @@ export default function MarksCalculatorPage() {
   }, [semester]);
 
   useEffect(() => {
-    if (!subjectId) {
+    if (!subjectId || !sectionId) {
       setStudents([]);
       return;
     }
     void (async () => {
       try {
-        const dbSemester = mapSemesterToDb(semester);
-        const semNum = dbSemester[0];
-        const targetSectionName = `CS-${semNum}${section}`;
-
-        // Get sections for this semester
-        const { data: sections } = await supabase.from('sections').select('id, name');
-        const semSectionIds = (sections || [])
-          .filter((sec) => sec.name === targetSectionName)
-          .map((sec) => sec.id);
-
-        // Get students in these sections
+        // Students in the globally-selected section.
         const { data } = await supabase
           .from('students')
           .select('id, name, enrollment_number')
-          .in('section_id', semSectionIds)
+          .eq('section_id', sectionId)
           .order('name');
 
         if (data) {
@@ -73,7 +69,7 @@ export default function MarksCalculatorPage() {
         // empty state
       }
     })();
-  }, [subjectId, semester, section]);
+  }, [subjectId, sectionId]);
 
   if (!subjectId) {
     return (
@@ -103,7 +99,7 @@ export default function MarksCalculatorPage() {
         </div>
       )}
       <MarksCalculatorView
-        key={`${subjectId}-${semester}-${section}`}
+        key={`${subjectId}-${sectionId ?? 'none'}`}
         subjectId={subjectId}
         students={students}
         access={access}

@@ -6,7 +6,8 @@ import DashboardView, {
 } from '@presentation/views/DashboardView';
 import { useDataCache } from '@presentation/hooks';
 import { supabase } from '@data/supabase';
-import { useSelectedSemester, useSelectedSection, mapSemesterToDb } from '@presentation/hooks';
+import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
+import type { Section } from '@data/access/rows';
 import type { TimetableEntry, DayOfWeek } from '@domain/services/timetableService';
 import type { LeaderboardWeights, StudentMetrics } from '@domain/services/leaderboardService';
 
@@ -43,15 +44,20 @@ function daysAgoIso(n: number): string {
 }
 
 /**
- * Fetch the entire dashboard in one RPC round trip.
+ * Fetch the entire dashboard in one RPC round trip for the selected section.
+ *
+ * The RPC scopes timetable entries to a single section, identified by its
+ * semester + trailing section letter (e.g. semester '5th Semester' + 'A'). We
+ * derive both directly from the globally-selected {@link Section} so there is
+ * no localStorage/name-matching guesswork.
  */
-async function fetchDashboardData(semester: string, section: string): Promise<DashboardData> {
-  const dbSemester = mapSemesterToDb(semester);
+async function fetchDashboardData(section: Section): Promise<DashboardData> {
+  const sectionLetter = section.name.slice(-1);
   const { data, error } = await supabase.rpc('get_dashboard_data', {
     p_from_date: daysAgoIso(30),
     p_to_date: new Date().toISOString().slice(0, 10),
-    p_semester: dbSemester,
-    p_section: section,
+    p_semester: section.semester,
+    p_section: sectionLetter,
   });
 
   if (error || !data) {
@@ -72,13 +78,12 @@ async function fetchDashboardData(semester: string, section: string): Promise<Da
 }
 
 export default function DashboardPage() {
-  const semester = useSelectedSemester();
-  const section = useSelectedSection();
+  const { selectedSection } = useSelectedSection();
 
-  // Cache key includes semester & section so data stays distinct
+  // Cache key includes the section id so data stays distinct per selection.
   const { data } = useDataCache<DashboardData>({
-    key: `dashboard-data-${semester}-${section}`,
-    fetcher: () => fetchDashboardData(semester, section),
+    key: `dashboard-data-${selectedSection?.id ?? 'none'}`,
+    fetcher: () => (selectedSection ? fetchDashboardData(selectedSection) : Promise.resolve(EMPTY_DATA)),
     ttlMs: 60_000,
   });
 
@@ -105,5 +110,5 @@ export default function DashboardPage() {
     [resolved],
   );
 
-  return <DashboardView key={`${semester}-${section}`} dataProvider={dataProvider} />;
+  return <DashboardView key={selectedSection?.id ?? 'none'} dataProvider={dataProvider} />;
 }

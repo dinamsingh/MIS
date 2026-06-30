@@ -23,6 +23,7 @@ import { RequireTeacher } from '@presentation/auth';
 import AppLayout from '@presentation/components/AppLayout';
 import { TeacherSignInView, LockedFeatureView } from '@presentation/views';
 import PageLoader from '@presentation/components/PageLoader';
+import { SelectedSectionProvider } from '@presentation/context/SelectedSectionContext';
 
 // --- Lazy-loaded page chunks (one per route) ---
 const DashboardPage = lazy(() => import('@presentation/pages/DashboardPage'));
@@ -56,9 +57,11 @@ function TeacherShell() {
 
   return (
     <RequireTeacher>
-      <AppLayout activePath={location.pathname} onNavigate={(path) => navigate(path)} onLogout={handleLogout}>
-        <Outlet />
-      </AppLayout>
+      <SelectedSectionProvider>
+        <AppLayout activePath={location.pathname} onNavigate={(path) => navigate(path)} onLogout={handleLogout}>
+          <Outlet />
+        </AppLayout>
+      </SelectedSectionProvider>
     </RequireTeacher>
   );
 }

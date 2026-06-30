@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import Sidebar from '@presentation/components/Sidebar';
+import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
+import { formatSectionLabel } from '@presentation/format/sectionLabel';
 
 interface AppLayoutProps {
   activePath?: string;
@@ -9,58 +11,14 @@ interface AppLayoutProps {
 }
 
 /**
- * Application layout shell matching the mockup — sidebar + top bar + content.
+ * Application layout shell — sidebar + top bar + content. The top bar holds the
+ * single global section selector (driven by the database via
+ * {@link useSelectedSection}); switching it changes the active section for
+ * every section-aware page at once.
  */
 export default function AppLayout({ activePath, onNavigate, onLogout, children }: AppLayoutProps) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [selectedSemester, setSelectedSemester] = useState(() => {
-    return localStorage.getItem('mis_selected_semester') || 'Semester 5';
-  });
-  const [selectedSection, setSelectedSection] = useState(() => {
-    return localStorage.getItem('mis_selected_section') || 'A';
-  });
-  const [sectionNames, setSectionNames] = useState<Record<string, { A: string; B: string; C: string }>>(() => {
-    const saved = localStorage.getItem('mis_section_names');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // ignore
-      }
-    }
-    return {};
-  });
-
-  const handleSemesterChange = (sem: string) => {
-    setSelectedSemester(sem);
-    localStorage.setItem('mis_selected_semester', sem);
-    window.dispatchEvent(new CustomEvent('semesterChanged', { detail: sem }));
-  };
-
-  const handleSectionChange = (sec: string) => {
-    setSelectedSection(sec);
-    localStorage.setItem('mis_selected_section', sec);
-    window.dispatchEvent(new CustomEvent('sectionChanged', { detail: sec }));
-  };
-
-  const activeNames = sectionNames[selectedSemester] || { A: 'A', B: 'B', C: 'C' };
-
-  const handleRenameSection = () => {
-    const currentName = activeNames[selectedSection as 'A' | 'B' | 'C'];
-    const newName = window.prompt(`Rename Section "${currentName}" to:`, currentName);
-    if (newName && newName.trim()) {
-      const updated = {
-        ...sectionNames,
-        [selectedSemester]: {
-          ...activeNames,
-          [selectedSection]: newName.trim()
-        }
-      };
-      setSectionNames(updated);
-      localStorage.setItem('mis_section_names', JSON.stringify(updated));
-      window.dispatchEvent(new CustomEvent('sectionNamesChanged', { detail: updated }));
-    }
-  };
+  const { sections, selectedSectionId, setSelectedSectionId, isLoading } = useSelectedSection();
 
   const handleNavigate = (path: string) => {
     setIsDrawerOpen(false);
@@ -103,55 +61,32 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Semester Selector */}
-              <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-soft">
-                <span className="font-medium text-text">Semester</span>
-                <span className="text-muted">·</span>
-                <div className="relative flex items-center">
-                  <select
-                    value={selectedSemester}
-                    onChange={(e) => handleSemesterChange(e.target.value)}
-                    className="appearance-none bg-transparent pr-4 font-semibold text-text outline-none cursor-pointer"
-                  >
-                    <option value="Semester 1" className="bg-surface text-text">Semester 1</option>
-                    <option value="Semester 2" className="bg-surface text-text">Semester 2</option>
-                    <option value="Semester 3" className="bg-surface text-text">Semester 3</option>
-                    <option value="Semester 4" className="bg-surface text-text">Semester 4</option>
-                    <option value="Semester 5" className="bg-surface text-text">Semester 5</option>
-                    <option value="Semester 6" className="bg-surface text-text">Semester 6</option>
-                    <option value="Semester 7" className="bg-surface text-text">Semester 7</option>
-                    <option value="Semester 8" className="bg-surface text-text">Semester 8</option>
-                  </select>
-                  <span className="pointer-events-none absolute right-0 text-muted">▾</span>
-                </div>
-              </div>
 
-              {/* Section Selector */}
-              <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-soft">
-                <span className="font-medium text-text">Section</span>
-                <span className="text-muted">·</span>
-                <div className="relative flex items-center pr-1">
-                  <select
-                    value={selectedSection}
-                    onChange={(e) => handleSectionChange(e.target.value)}
-                    className="appearance-none bg-transparent pr-5 font-semibold text-text outline-none cursor-pointer"
-                  >
-                    <option value="A" className="bg-surface text-text">{activeNames.A}</option>
-                    <option value="B" className="bg-surface text-text">{activeNames.B}</option>
-                    <option value="C" className="bg-surface text-text">{activeNames.C}</option>
-                  </select>
-                  <span className="pointer-events-none absolute right-4 text-muted">▾</span>
-                  <button
-                    type="button"
-                    onClick={handleRenameSection}
-                    className="ml-1 text-[10px] hover:text-accent focus:outline-none cursor-pointer"
-                    title={`Rename Section ${selectedSection}`}
-                    aria-label="Rename section"
-                  >
-                    ✏️
-                  </button>
-                </div>
+            {/* Single global Section selector (database-driven) */}
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-soft">
+              <span className="font-medium text-text">Section</span>
+              <span className="text-muted">·</span>
+              <div className="relative flex items-center">
+                <select
+                  value={selectedSectionId ?? ''}
+                  onChange={(e) => setSelectedSectionId(e.target.value)}
+                  disabled={isLoading || sections.length === 0}
+                  aria-label="Select section"
+                  className="appearance-none bg-transparent pr-4 font-semibold text-text outline-none cursor-pointer disabled:cursor-default disabled:text-muted"
+                >
+                  {sections.length === 0 ? (
+                    <option value="" className="bg-surface text-text">
+                      {isLoading ? 'Loading…' : 'No sections'}
+                    </option>
+                  ) : (
+                    sections.map((s) => (
+                      <option key={s.id} value={s.id} className="bg-surface text-text">
+                        {formatSectionLabel(s)}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <span className="pointer-events-none absolute right-0 text-muted">▾</span>
               </div>
             </div>
           </div>

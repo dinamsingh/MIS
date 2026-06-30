@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AssignmentView, {
   type AssignmentSubjectOption,
   type AssignmentUnitOption,
@@ -12,7 +12,7 @@ import { createTimetableAccess } from '@data/access/timetableAccess';
 import { fileStorage } from '@data/storage';
 import { supabase } from '@data/supabase';
 import { formatSectionLabel } from '@presentation/format/sectionLabel';
-import { useSelectedSemester, useSelectedSection, mapSemesterToDb } from '@presentation/hooks';
+import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 import type { UploadPolicy } from '@domain/services/storageRouter';
 
 const assignmentAccess = createAssignmentAccess(supabase);
@@ -29,85 +29,95 @@ const ASSIGNMENT_POLICY: UploadPolicy = {
   maxSizeBytes: 25 * 1024 * 1024,
 };
 
-/** Compose the AssignmentViewAccess from the assignment data access + file storage. */
-const access: AssignmentViewAccess = {
-  createAssignment: (input) => assignmentAccess.createAssignment(input),
+/**
+ * Compose the AssignmentViewAccess from the assignment data access + file
+ * storage. `listAssignments` is scoped to the active semester's subjects, so it
+ * depends on the globally-selected section's semester.
+ */
+function createAccess(semester: string | null): AssignmentViewAccess {
+  return {
+    createAssignment: (input) => assignmentAccess.createAssignment(input),
 
-  async uploadFile(file: File): Promise<UploadedAssignmentFile> {
-    const result = await fileStorage.uploadFile({
-      category: 'assignment',
-      data: file,
-      fileName: file.name,
-      mimeType: file.type,
-      sizeBytes: file.size,
-      policy: ASSIGNMENT_POLICY,
-    });
-    if (!result.ok) {
-      throw new Error(result.error.message);
-    }
-    return { fileId: result.value.fileId, url: result.value.url };
-  },
+    async uploadFile(file: File): Promise<UploadedAssignmentFile> {
+      const result = await fileStorage.uploadFile({
+        category: 'assignment',
+        data: file,
+        fileName: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
+        policy: ASSIGNMENT_POLICY,
+      });
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+      return { fileId: result.value.fileId, url: result.value.url };
+    },
 
-  async listAssignments(): Promise<AssignmentListItem[]> {
-    const sem = localStorage.getItem('mis_selected_semester') || 'Semester 5';
-    const dbSemester = mapSemesterToDb(sem);
+    async listAssignments(): Promise<AssignmentListItem[]> {
+      if (!semester) return [];
 
-    // Fetch subjects for this semester to filter assignments
-    const { data: subjectRows } = await supabase
-      .from('subjects')
-      .select('id')
-      .eq('semester', dbSemester);
-    const subjectIds = (subjectRows || []).map((s) => s.id);
+      // Fetch subjects for this semester to filter assignments
+      const { data: subjectRows } = await supabase
+        .from('subjects')
+        .select('id')
+        .eq('semester', semester);
+      const subjectIds = (subjectRows || []).map((s) => s.id);
 
-    const { data } = await supabase
-      .from('assignments')
-      .select('id, title, subject_id, unit_id, due_date, share_token')
-      .in('subject_id', subjectIds)
-      .order('created_at', { ascending: false });
+      const { data } = await supabase
+        .from('assignments')
+        .select('id, title, subject_id, unit_id, due_date, share_token')
+        .in('subject_id', subjectIds)
+        .order('created_at', { ascending: false });
 
-    if (!data) return [];
-    return data.map((row: Record<string, unknown>) => ({
-      id: row.id as string,
-      title: row.title as string,
-      subjectId: row.subject_id as string,
-      unitId: row.unit_id as string,
-      dueDate: (row.due_date as string) ?? null,
-      shareLink: `${window.location.origin}/assignment/${row.share_token as string}`,
-    }));
-  },
+      if (!data) return [];
+      return data.map((row: Record<string, unknown>) => ({
+        id: row.id as string,
+        title: row.title as string,
+        subjectId: row.subject_id as string,
+        unitId: row.unit_id as string,
+        dueDate: (row.due_date as string) ?? null,
+        shareLink: `${window.location.origin}/assignment/${row.share_token as string}`,
+      }));
+    },
 
-  getAssignmentSubmission: (assignmentId, studentId, unitId) =>
-    assignmentAccess.getAssignmentSubmission(assignmentId, studentId, unitId),
-  setAssignmentSubmission: (assignmentId, studentId, unitId, status) =>
-    assignmentAccess.setAssignmentSubmission(assignmentId, studentId, unitId, status),
-  getLabManualSubmission: (studentId, unitId) =>
-    assignmentAccess.getLabManualSubmission(studentId, unitId),
-  setLabManualSubmission: (studentId, unitId, status) =>
-    assignmentAccess.setLabManualSubmission(studentId, unitId, status),
+    getAssignmentSubmission: (assignmentId, studentId, unitId) =>
+      assignmentAccess.getAssignmentSubmission(assignmentId, studentId, unitId),
+    setAssignmentSubmission: (assignmentId, studentId, unitId, status) =>
+      assignmentAccess.setAssignmentSubmission(assignmentId, studentId, unitId, status),
+    getLabManualSubmission: (studentId, unitId) =>
+      assignmentAccess.getLabManualSubmission(studentId, unitId),
+    setLabManualSubmission: (studentId, unitId, status) =>
+      assignmentAccess.setLabManualSubmission(studentId, unitId, status),
 
-  // Shared-materials model: an assignment is shared across every section that
-  // studies its subject, so the trackers list students from all those sections.
-  listSectionIdsForSubject: (subjectId) =>
-    timetableAccess.listSectionIdsForSubject(subjectId),
-};
+    // Shared-materials model: an assignment is shared across every section that
+    // studies its subject, so the trackers list students from all those sections.
+    listSectionIdsForSubject: (subjectId) =>
+      timetableAccess.listSectionIdsForSubject(subjectId),
+  };
+}
 
 export default function AssignmentPage() {
+  const { selectedSection } = useSelectedSection();
   const [subjects, setSubjects] = useState<AssignmentSubjectOption[]>([]);
   const [units, setUnits] = useState<AssignmentUnitOption[]>([]);
   const [students, setStudents] = useState<AssignmentStudent[]>([]);
-  const semester = useSelectedSemester();
-  const section = useSelectedSection();
+
+  const semester = selectedSection?.semester ?? null;
+  const access = useMemo(() => createAccess(semester), [semester]);
 
   useEffect(() => {
+    if (!semester) {
+      setSubjects([]);
+      setUnits([]);
+      return;
+    }
     void (async () => {
       try {
-        const dbSemester = mapSemesterToDb(semester);
-
         // Subjects are scoped to the selected semester; units follow those subjects.
         const subjectRes = await supabase
           .from('subjects')
           .select('id, name')
-          .eq('semester', dbSemester)
+          .eq('semester', semester)
           .order('name');
         const activeSubjects = (subjectRes.data as AssignmentSubjectOption[]) || [];
         setSubjects(activeSubjects);
@@ -119,7 +129,15 @@ export default function AssignmentPage() {
           .in('subject_id', activeSubjectIds)
           .order('name');
         setUnits((unitRes.data as AssignmentUnitOption[]) || []);
+      } catch {
+        // View handles empty arrays gracefully.
+      }
+    })();
+  }, [semester]);
 
+  useEffect(() => {
+    void (async () => {
+      try {
         // Assignments/quizzes/materials are shared across every section that
         // studies a subject, so the tracker lists students from ALL sections
         // (each labelled by its section), not just the globally-selected one.
@@ -163,7 +181,7 @@ export default function AssignmentPage() {
         // View handles empty arrays gracefully.
       }
     })();
-  }, [semester, section]);
+  }, []);
 
   return (
     <AssignmentView

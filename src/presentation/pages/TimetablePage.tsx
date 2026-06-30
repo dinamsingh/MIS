@@ -1,49 +1,43 @@
 import { useEffect, useState } from 'react';
 import TimetableView, { type SectionOption, type SubjectOption } from '@presentation/views/TimetableView';
 import { createTimetableAccess } from '@data/access/timetableAccess';
-import { createSectionsAccess } from '@data/access/sectionsAccess';
 import { supabase } from '@data/supabase';
-import { useSelectedSemester, useSelectedSection, mapSemesterToDb } from '@presentation/hooks';
+import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 
 const access = createTimetableAccess(supabase);
-const sectionsAccess = createSectionsAccess(supabase);
 
 export default function TimetablePage() {
-  const [sections, setSections] = useState<SectionOption[]>([]);
+  const { selectedSection } = useSelectedSection();
   const [subjects, setSubjects] = useState<SubjectOption[]>([]);
-  const semester = useSelectedSemester();
-  const section = useSelectedSection();
+
+  // The globally-selected section is authoritative — no per-page picker.
+  const sections: SectionOption[] = selectedSection ? [selectedSection] : [];
 
   useEffect(() => {
+    if (!selectedSection?.semester) {
+      setSubjects([]);
+      return;
+    }
     void (async () => {
       try {
-        const dbSemester = mapSemesterToDb(semester);
-        const semNum = dbSemester[0];
-        const suffix = `${semNum}${section}`;
-
-        // Real section list (with batch/semester/department labels), narrowed
-        // to the globally-selected section.
-        const allSections = await sectionsAccess.listSections();
-        setSections(allSections.filter((s) => s.name.endsWith(suffix)));
-
-        // Subjects are scoped to the selected semester.
+        // Subjects are scoped to the selected section's semester.
         const subjectRows = await supabase
           .from('subjects')
           .select('id, name')
-          .eq('semester', dbSemester)
+          .eq('semester', selectedSection.semester)
           .order('name');
         if (subjectRows.data) {
           setSubjects(subjectRows.data as SubjectOption[]);
         }
       } catch {
-        // Sections/subjects will remain empty; view handles empty state gracefully.
+        // Subjects will remain empty; view handles empty state gracefully.
       }
     })();
-  }, [semester, section]);
+  }, [selectedSection?.id, selectedSection?.semester]);
 
   return (
     <TimetableView
-      key={`${semester}-${section}`}
+      key={selectedSection?.id ?? 'none'}
       access={access}
       sections={sections}
       subjects={subjects}
