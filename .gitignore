@@ -27,4 +27,7 @@ dist-ssr
 # SQL dummy data / local seed scripts
 *.sql
 SEED_300_STUDENTS.sql
+# ...but DO track the project's real migrations and seed scripts (source of truth)
+!src/data/migrations/*.sql
+!src/data/seeds/*.sql
 
