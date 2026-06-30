@@ -3,39 +3,78 @@ import { navGroups } from '@presentation/navigation';
 
 interface SidebarProps {
   activePath?: string;
+  collapsed?: boolean;
+  mobile?: boolean;
   onNavigate?: (path: string) => void;
   onLogout?: () => void;
+  onToggleCollapse?: () => void;
 }
 
 /**
- * Left sidebar matching the mockup — grouped nav with icons, badges,
- * AI locked state, and teacher avatar at the bottom.
+ * Primary navigation shell. The item model remains in navigation.ts; this
+ * component only controls layout, responsive behavior, and visual state.
  */
-export default function Sidebar({ activePath, onNavigate, onLogout }: SidebarProps) {
+export default function Sidebar({
+  activePath,
+  collapsed = false,
+  mobile = false,
+  onNavigate,
+  onLogout,
+  onToggleCollapse,
+}: SidebarProps) {
+  const isCollapsed = collapsed && !mobile;
+
   return (
     <nav
       aria-label="Primary"
-      className="flex h-full w-64 flex-col overflow-y-auto border-r border-border bg-surface"
+      className={[
+        'flex h-full flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-soft transition-[width] duration-slow ease-entrance motion-reduce:transition-none',
+        isCollapsed ? 'w-20' : 'w-72',
+      ].join(' ')}
     >
-      {/* Logo / Brand */}
-      <div className="flex items-center gap-2 px-5 py-5">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white">
+      <div className="flex h-16 shrink-0 items-center gap-3 border-b border-sidebar-border px-4">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-accent text-sm font-bold text-surface shadow-soft">
           A
         </span>
-        <div className="flex flex-col">
-          <span className="text-sm font-bold text-text">Academic MIS</span>
-          <span className="text-[10px] text-muted">Teacher Workspace</span>
-        </div>
+        {!isCollapsed && (
+          <div className="min-w-0 flex-1 animate-foundation-fade-in">
+            <p className="truncate text-sm font-bold text-text">Academic MIS</p>
+            <p className="truncate text-[11px] font-medium text-muted">Teacher Workspace</p>
+          </div>
+        )}
+        {!mobile && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="icon-btn h-8 w-8 shrink-0"
+            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-pressed={isCollapsed}
+          >
+            <svg
+              className={['h-4 w-4 transition-transform duration-fast ease-standard', isCollapsed ? 'rotate-180' : ''].join(' ')}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 6l-6 6 6 6" />
+            </svg>
+          </button>
+        )}
       </div>
 
-      {/* Nav groups */}
-      <div className="flex flex-1 flex-col gap-5 px-3 py-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overflow-x-hidden px-3 py-4">
         {navGroups.map((group) => (
-          <div key={group.id} className="flex flex-col gap-0.5">
-            <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted">
-              {group.label}
-            </p>
-            <ul className="flex flex-col gap-0.5">
+          <div key={group.id} className="flex flex-col gap-1">
+            {!isCollapsed ? (
+              <p className="px-3 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                {group.label}
+              </p>
+            ) : (
+              <div className="mx-auto my-1 h-px w-8 bg-sidebar-border" aria-hidden="true" />
+            )}
+
+            <ul className="flex flex-col gap-1">
               {group.items.map((item) => {
                 const isActive = activePath === item.path;
                 const effectivelyLocked = item.locked && !isFeatureEnabled('ai');
@@ -43,33 +82,56 @@ export default function Sidebar({ activePath, onNavigate, onLogout }: SidebarPro
                   <li key={item.id}>
                     <button
                       type="button"
+                      title={isCollapsed ? item.label : undefined}
                       aria-current={isActive ? 'page' : undefined}
                       aria-disabled={effectivelyLocked || undefined}
                       onClick={() => !effectivelyLocked && onNavigate?.(item.path)}
                       className={[
-                        'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors',
+                        'group relative flex min-h-touch w-full items-center rounded-control text-left text-[13px] font-medium transition-colors duration-fast ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar',
+                        isCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
                         effectivelyLocked
                           ? 'cursor-not-allowed text-muted/60'
                           : isActive
-                            ? 'bg-accent/10 text-accent'
-                            : 'text-soft hover:bg-background hover:text-text',
+                            ? 'bg-accent text-surface shadow-soft'
+                            : 'text-soft hover:bg-sidebar-accent hover:text-text',
                       ].join(' ')}
                     >
-                      <span className="w-5 text-center text-sm">{item.icon}</span>
-                      <span className="flex-1">{item.label}</span>
-                      {item.badge && (
+                      {isActive && (
                         <span
                           className={[
-                            'rounded px-1.5 py-0.5 text-[9px] font-bold uppercase',
-                            item.badge === 'AI'
-                              ? 'bg-purple-100 text-purple-600'
-                              : item.badge === 'NEW'
-                                ? 'bg-status-green/10 text-status-green'
-                                : 'bg-accent-tint text-accent',
+                            'absolute rounded-full bg-current transition-all duration-fast ease-standard',
+                            isCollapsed ? 'left-1 h-6 w-1' : 'left-1 h-5 w-1',
                           ].join(' ')}
-                        >
-                          {item.badge}
-                        </span>
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span
+                        className={[
+                          'flex h-7 w-7 shrink-0 items-center justify-center rounded-button text-sm transition-transform duration-fast ease-standard group-hover:scale-105 motion-reduce:transition-none',
+                          isActive ? 'bg-surface/15' : 'bg-background/70',
+                        ].join(' ')}
+                        aria-hidden="true"
+                      >
+                        {item.icon}
+                      </span>
+                      {!isCollapsed && (
+                        <>
+                          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                          {item.badge && (
+                            <span
+                              className={[
+                                'rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none',
+                                item.badge === 'AI'
+                                  ? 'bg-accent-tint text-accent'
+                                  : item.badge === 'NEW'
+                                    ? 'bg-status-green/10 text-status-green'
+                                    : 'bg-accent-tint text-accent',
+                              ].join(' ')}
+                            >
+                              {item.badge}
+                            </span>
+                          )}
+                        </>
                       )}
                     </button>
                   </li>
@@ -80,27 +142,35 @@ export default function Sidebar({ activePath, onNavigate, onLogout }: SidebarPro
         ))}
       </div>
 
-      {/* Teacher profile footer + logout */}
-      <div className="border-t border-border px-4 py-4">
-        <div className="flex items-center gap-3">
+      <div className="shrink-0 border-t border-sidebar-border p-3">
+        <div
+          className={[
+            'flex items-center rounded-control border border-border bg-surface p-2 shadow-soft',
+            isCollapsed ? 'justify-center' : 'gap-3',
+          ].join(' ')}
+        >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/10 text-sm font-bold text-accent">
             T
           </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-text">Teacher</p>
-            <p className="truncate text-[10px] text-muted">Dept. of CSE</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => onLogout?.()}
-            className="rounded-lg p-1.5 text-soft hover:bg-status-red/10 hover:text-status-red transition-colors"
-            aria-label="Logout"
-            title="Logout"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-          </button>
+          {!isCollapsed && (
+            <>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-text">Teacher</p>
+                <p className="truncate text-[10px] text-muted">Dept. of CSE</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onLogout?.()}
+                className="icon-btn h-8 w-8 hover:bg-status-red/10 hover:text-status-red"
+                aria-label="Logout"
+                title="Logout"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </nav>
