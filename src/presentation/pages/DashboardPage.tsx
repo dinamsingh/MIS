@@ -46,18 +46,15 @@ function daysAgoIso(n: number): string {
 /**
  * Fetch the entire dashboard in one RPC round trip for the selected section.
  *
- * The RPC scopes timetable entries to a single section, identified by its
- * semester + trailing section letter (e.g. semester '5th Semester' + 'A'). We
- * derive both directly from the globally-selected {@link Section} so there is
- * no localStorage/name-matching guesswork.
+ * Timetable entries are scoped to the selected section by its id, and the
+ * semester-level summaries use the section's semester — no name matching.
  */
 async function fetchDashboardData(section: Section): Promise<DashboardData> {
-  const sectionLetter = section.name.slice(-1);
   const { data, error } = await supabase.rpc('get_dashboard_data', {
     p_from_date: daysAgoIso(30),
     p_to_date: new Date().toISOString().slice(0, 10),
     p_semester: section.semester,
-    p_section: sectionLetter,
+    p_section_id: section.id,
   });
 
   if (error || !data) {
