@@ -21,10 +21,8 @@
   one screen at a time. See §6 "Resume Here".
 
 ### ⚠️ Action items the human still needs to do (cannot be automated from code)
-1. **Run DB migrations in Supabase SQL editor** (paste file *contents*, not the path):
-   - `src/data/migrations/0008_dashboard_rpc_by_id.sql`
-   - `src/data/migrations/0009_dashboard_section_scoped.sql`
-   - (`0007_real_roster_support.sql` and `seed_real_roster.sql` were already run.)
+1. ✅ **DONE** — Migrations `0007`, `0008`, `0009` and `seed_real_roster.sql` have all been run in Supabase.
+   (0009 supersedes 0008 — dashboard is now section-scoped.)
 2. **Supabase Auth**: ensure the teacher user exists & email is confirmed (login depends on it).
 3. **Supabase DB setting** for data visibility (RLS): 
    `ALTER DATABASE postgres SET app.teacher_email = 'singhdindayal394@gmail.com';`
@@ -77,8 +75,8 @@ Migrations live in `src/data/migrations/` (applied manually via Supabase SQL edi
 | `0005_dashboard_rpc.sql` | Original `get_dashboard_data` RPC (name-matched `CS-5%`) | ✅ (superseded by 0008/0009) |
 | `0006_add_file_name_column.sql` | `files.file_name` column | ✅ |
 | `0007_real_roster_support.sql` | Relax enrollment pattern, nullable email, unique enrollment, `sections.batch/semester/department` | ✅ (user ran it) |
-| `0008_dashboard_rpc_by_id.sql` | Rewrite dashboard RPC to filter by `sections.semester` + `section_id` (removes `CS-` name matching) | ❗ **RUN THIS** |
-| `0009_dashboard_section_scoped.sql` | Scope dashboard metrics to the SELECTED section (not whole semester) | ❗ **RUN THIS** |
+| `0008_dashboard_rpc_by_id.sql` | Rewrite dashboard RPC to filter by `sections.semester` + `section_id` (removes `CS-` name matching) | ✅ ran |
+| `0009_dashboard_section_scoped.sql` | Scope dashboard metrics to the SELECTED section (not whole semester) | ✅ ran (active version) |
 
 Seeds in `src/data/seeds/`:
 - `seed.sql` — original 12 demo students (IWT 5th Sem). 
@@ -234,6 +232,7 @@ When you finish a task or before ending a session, update:
 3. **Work Log** below — add a dated entry at the TOP (newest first) describing what changed and why.
 
 ### Work Log (newest first)
+- **2026-06-30** — Confirmed migrations 0008 & 0009 were run in Supabase (dashboard now section-scoped via 0009).
 - **2026-06-30** — Fixed hosted login: diagnosed Cloudflare Git build using placeholder env (confirmed via
   Network tab + bundle inspection). Merged `feature/new-design` → `main`, pushed. Git build still didn't inject
   env, so deployed production via `wrangler pages deploy dist --branch=main` (verified real Supabase URL live).
