@@ -58,7 +58,7 @@ syllabus, internal marks, quizzes, assignments, study material, analytics, leade
 | `Dinamwork` / `origin/Dinamwork` | Collaborator branch | Source of the semester/section selector work (already merged). |
 
 - Remote: `https://github.com/dinamsingh/MIS.git`
-- `git push origin main` triggers a Cloudflare auto-build — **but see §4: that build does NOT inject env vars**.
+- `git push origin main` triggers a Cloudflare auto-build that now deploys a **working** build (env baked via `.env.production`). See §4.
 
 ---
 
@@ -95,26 +95,17 @@ Seeds in `src/data/seeds/`:
 `VITE_CLOUDINARY_CLOUD_NAME`, `VITE_CLOUDINARY_UPLOAD_PRESET`, `VITE_FEATURE_AI`.
 Values live in local `.env` (git-ignored). For local dev: `npm run dev`.
 
-### 🔴 Known Cloudflare issue (IMPORTANT)
-The Cloudflare Pages **Git auto-build does NOT inject the dashboard env vars** into the build, even though
-they are set as Plaintext under "Variables and secrets" for Production. Result: Git-built bundles fall back
-to placeholder Supabase config (`http://localhost:54321` / `placeholder-anon-key`) and **login fails on the
-hosted site** ("incorrect email/password"), while localhost works fine.
+### 🟢 Cloudflare git-build env — RESOLVED (2026-06-30)
+Previously the Git auto-build did not inject the dashboard env vars, so git-built bundles fell back to
+placeholder config and broke login. **Fixed** by committing **`.env.production`** (repo root) which holds the
+PUBLIC client-side values (anon key, URLs, etc. — no secrets). Vite reads `.env.production` during
+`vite build`, so EVERY build (local or Cloudflare git-build) now bakes in the correct config.
+**`git push origin main` is now SAFE** and auto-deploys a working build. (Verified: a build with `.env`
+removed still produces the real Supabase URL.)
 
-**Why:** `src/data/supabase/client.ts` uses a placeholder fallback when env is missing at build time, so the
-app still renders but all backend calls fail. The Git build isn't receiving the vars (a Cloudflare build-env
-config quirk for this project — likely the vars need to be under the **Build** configuration, not only
-"Variables and secrets").
-
-### ✅ Reliable deploy method (until the Git-build env issue is fixed): DIRECT UPLOAD
-Build locally (env is baked from `.env`), then upload the bundle directly:
-```bash
-npm run build
-npx wrangler pages deploy dist --project-name=mis-app --branch=main
-```
-- `wrangler` is already authenticated as `singhdindayal394@gmail.com`.
-- `--branch=main` deploys to **production** (`mis-app.pages.dev`). Use a different branch name for a preview.
-- This was used to fix production login on 2026-06-30 (verified: bundle now contains the real Supabase URL).
+### Deploy methods (both work now)
+- **Push to deploy:** `git push origin main` → Cloudflare git-build → correct bundle (thanks to `.env.production`).
+- **Direct upload (manual):** `npm run build` then `npx wrangler pages deploy dist --project-name=mis-app --branch=main`.
 
 ### How to VERIFY a deploy has correct env (not placeholder)
 ```powershell
@@ -189,8 +180,8 @@ time, pause + commit after each) was:
 
 - [ ] Human: run migrations **0008 & 0009** in Supabase (see §0 action items).
 - [ ] Human: confirm Supabase Auth teacher user + `app.teacher_email` DB setting (login + RLS data visibility).
-- [ ] (Optional) Fix the Cloudflare **Git-build env injection** so `git push` deploys work without manual
-      direct upload. Until then, deploy via `wrangler pages deploy` (see §4).
+- [x] ✅ Fixed the Cloudflare **Git-build env injection** by committing `.env.production` — `git push` deploys
+      now work without manual direct upload.
 - [ ] (Optional) Update the spec docs (`.kiro/specs/teacher-academic-mis/`) to reflect the features in §5.
 - [ ] (Optional) Add automated tests for the new RPC behavior and the global selector context.
 
@@ -232,6 +223,8 @@ When you finish a task or before ending a session, update:
 3. **Work Log** below — add a dated entry at the TOP (newest first) describing what changed and why.
 
 ### Work Log (newest first)
+- **2026-06-30** — RESOLVED Cloudflare git-build env issue by committing `.env.production` (public values only).
+  `git push origin main` is now safe and auto-deploys a working build (verified build without `.env` bakes real URL).
 - **2026-06-30** — Confirmed migrations 0008 & 0009 were run in Supabase (dashboard now section-scoped via 0009).
 - **2026-06-30** — Fixed hosted login: diagnosed Cloudflare Git build using placeholder env (confirmed via
   Network tab + bundle inspection). Merged `feature/new-design` → `main`, pushed. Git build still didn't inject
