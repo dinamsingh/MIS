@@ -1,11 +1,13 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
+  darkMode: 'class',
   theme: {
     extend: {
       fontFamily: {
-        // Inter as the primary UI typeface (Req 20.2)
+        // Geist as the primary UI typeface (reference template), Inter fallback.
         sans: [
+          'Geist',
           'Inter',
           'ui-sans-serif',
           'system-ui',
@@ -16,40 +18,62 @@ export default {
           'Arial',
           'sans-serif',
         ],
+        mono: ['Geist Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       colors: {
-        // Surfaces & borders (Req 20.2)
-        background: '#f4f5f9',
+        // ---- Reference template palette (shadcn neutral), adapted to Tailwind v3 ----
+        // Surfaces & borders
+        background: '#ffffff',
         surface: '#ffffff',
-        border: '#ecedf4',
-        // Accent (Req 20.3)
+        border: '#ebebeb',
+        input: '#ebebeb',
+        ring: '#b5b5b5',
+        // Primary accent is the near-black neutral primary from the reference.
         accent: {
-          DEFAULT: '#5b54e6',
-          hover: '#4a42d4',
-          tint: '#eef0fe',
+          DEFAULT: '#343434',
+          hover: '#242424',
+          tint: '#f7f7f7',
         },
-        // Text emphasis levels (Req 20.4)
+        // Secondary / muted neutral surfaces
+        secondary: '#f7f7f7',
+        // Text emphasis levels (foreground / soft / muted)
         text: {
-          DEFAULT: '#1d2030',
-          soft: '#5a6072',
-          muted: '#969cad',
+          DEFAULT: '#252525',
+          soft: '#5c5c5c',
+          muted: '#8e8e8e',
         },
-        // Status colors (Req 20.5)
+        // Status colors (functional indicators — kept stable)
         status: {
           green: '#12b886',
           amber: '#f59e0b',
           red: '#f0506e',
           blue: '#4c8dff',
         },
+        destructive: '#e54848',
+        // Left navigation surface (reference sidebar tokens)
+        sidebar: {
+          DEFAULT: '#fbfbfb',
+          foreground: '#252525',
+          border: '#ebebeb',
+          accent: '#f7f7f7',
+        },
+        // Chart palette (reference chart-1..5)
+        chart: {
+          1: '#e76e50',
+          2: '#2a9d90',
+          3: '#34556b',
+          4: '#e8c468',
+          5: '#f4a259',
+        },
       },
       borderRadius: {
-        // Card 16px, button 11px (Req 20.6)
-        card: '16px',
-        button: '11px',
+        // Reference radius scale (--radius: 0.625rem ≈ 10px)
+        card: '14px',
+        button: '8px',
       },
       boxShadow: {
-        // Soft card shadow (Req 20.6)
-        soft: '0 1px 2px rgba(29, 32, 48, 0.04), 0 8px 24px rgba(29, 32, 48, 0.06)',
+        // Subtle, flat shadow in the reference style (borders do most of the work)
+        soft: '0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06)',
       },
     },
   },
