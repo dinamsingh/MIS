@@ -10,6 +10,7 @@
 
 import { supabase } from '@data/supabase';
 import { isLocalDemoMode, readDemoValue, writeDemoValue } from '@data/demo/localDemoMode';
+import type { Section } from '@data/access/rows';
 import type {
   AssignmentInput,
   Batch,
@@ -278,6 +279,79 @@ export async function saveOnboarding(
       throw new Error(assignError.message);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Onboarded sections bridge — derive the app's global sections from the
+// teacher's onboarding output (distinct batch × section-letter combos).
+// This is what drives the global section selector, so the dashboard shows ONLY
+// the sections the teacher actually onboarded (not a hardcoded list).
+// ---------------------------------------------------------------------------
+
+/** Ordinal semester label, e.g. 5 → "5th Semester". */
+function ordinalSem(n: number): string {
+  const suffix = n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th';
+  return `${n}${suffix} Semester`;
+}
+
+/** Derive distinct app sections (one per batch × section) from assignments. */
+function deriveSections(
+  assignments: readonly AssignmentInput[],
+  batches: readonly Batch[],
+): Section[] {
+  const batchById = new Map(batches.map((b) => [b.id, b]));
+  const seen = new Map<string, Section>();
+  for (const a of assignments) {
+    const key = `${a.batchId}-${a.section}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    const sem = batchById.get(a.batchId)?.currentSem ?? 0;
+    seen.set(key, {
+      id: key,
+      name: `CSE-${sem}${a.section}`,
+      batch: a.batchId,
+      semester: sem ? ordinalSem(sem) : null,
+      department: 'CSE',
+    });
+  }
+  return Array.from(seen.values());
+}
+
+/** All batches (live + graduated) — needed to resolve a section's semester. */
+async function fetchAllBatches(): Promise<Batch[]> {
+  if (isLocalDemoMode()) {
+    return [...MOCK_BATCHES];
+  }
+  const { data, error } = await supabase
+    .from('batches')
+    .select('id, start_year, current_sem, status');
+  if (error) {
+    throw new Error(error.message);
+  }
+  return (data as BatchRow[]).map(toBatch);
+}
+
+/**
+ * The teacher's onboarded sections, derived from their assignments. Drives the
+ * global section selector. Empty when the teacher has not onboarded yet.
+ */
+export async function fetchOnboardedSections(): Promise<Section[]> {
+  if (isLocalDemoMode()) {
+    return deriveSections(readDemoRecord().assignments, MOCK_BATCHES);
+  }
+  const teacherId = await requireTeacherId();
+  const [assignmentRes, batches] = await Promise.all([
+    supabase.from('teacher_assignments').select('batch_id, section').eq('teacher_id', teacherId),
+    fetchAllBatches(),
+  ]);
+  if (assignmentRes.error) {
+    throw new Error(assignmentRes.error.message);
+  }
+  const assignments: AssignmentInput[] = (assignmentRes.data as Array<{ batch_id: string; section: AssignmentInput['section'] }>).map(
+    (row) => ({ subjectId: '', batchId: row.batch_id, section: row.section, isLab: false }),
+  );
+  return deriveSections(assignments, batches);
 }
 
 // ---------------------------------------------------------------------------
