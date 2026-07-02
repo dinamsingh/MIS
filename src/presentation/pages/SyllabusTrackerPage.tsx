@@ -1,14 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import SyllabusTrackerView, { type SyllabusSubject } from '@presentation/views/SyllabusTrackerView';
 import { createSyllabusAccess } from '@data/access/syllabusAccess';
+import { createLocalDemoSyllabusAccess, isLocalDemoMode } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 
-const access = createSyllabusAccess(supabase);
+const supabaseAccess = createSyllabusAccess(supabase);
 
 export default function SyllabusTrackerPage() {
   const { selectedSection } = useSelectedSection();
   const [subjects, setSubjects] = useState<SyllabusSubject[]>([]);
+  const access = useMemo(
+    () => (isLocalDemoMode() ? createLocalDemoSyllabusAccess() : supabaseAccess),
+    [],
+  );
 
   const semester = selectedSection?.semester ?? null;
 

@@ -1,16 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import MarksCalculatorView, { type MarksStudent } from '@presentation/views/MarksCalculatorView';
 import { createMarksAccess } from '@data/access/marksAccess';
+import { createLocalDemoMarksAccess, isLocalDemoMode } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 
-const access = createMarksAccess(supabase);
+const supabaseAccess = createMarksAccess(supabase);
 
 export default function MarksCalculatorPage() {
   const { selectedSection } = useSelectedSection();
   const [subjectId, setSubjectId] = useState<string>('');
   const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]);
   const [students, setStudents] = useState<MarksStudent[]>([]);
+  const access = useMemo(
+    () => (isLocalDemoMode() ? createLocalDemoMarksAccess() : supabaseAccess),
+    [],
+  );
 
   const sectionId = selectedSection?.id ?? null;
   const semester = selectedSection?.semester ?? null;

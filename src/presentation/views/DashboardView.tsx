@@ -14,15 +14,12 @@ import { combinedScore, type LeaderboardWeights, type StudentMetrics } from '@do
 import { DashboardSkeleton } from '@presentation/components/skeletons';
 import SkeletonPulse from '@presentation/components/skeletons/SkeletonPulse';
 import {
-  CalendarWidget,
   DashboardEmptyState,
   DashboardStatCard,
   PendingTasks,
   QuickActions,
-  RecentActivity,
   StudentDirectoryModal,
   TodaySchedule,
-  deriveActivities,
   scheduleFromEntries,
   type PendingTask,
   type QuickAction,
@@ -82,14 +79,12 @@ function daysAgo(n: number): string {
 
 function chartFallback() {
   return (
-    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2" aria-label="Loading dashboard charts">
-      {Array.from({ length: 4 }).map((_, index) => (
-        <div key={index} className="card p-5">
-          <SkeletonPulse width="w-40" height="h-4" className="mb-2" />
-          <SkeletonPulse width="w-56" height="h-3" className="mb-6" />
-          <SkeletonPulse width="w-full" height="h-52" />
-        </div>
-      ))}
+    <div className="grid grid-cols-1 gap-5" aria-label="Loading dashboard charts">
+      <div className="card p-5">
+        <SkeletonPulse width="w-40" height="h-4" className="mb-2" />
+        <SkeletonPulse width="w-56" height="h-3" className="mb-6" />
+        <SkeletonPulse width="w-full" height="h-52" />
+      </div>
     </div>
   );
 }
@@ -229,11 +224,6 @@ export default function DashboardView({
     [getClassStatus, sectionNames, subjectNames, todayClasses],
   );
 
-  const activities = useMemo(
-    () => deriveActivities(studentMetrics, pendingAssignments),
-    [pendingAssignments, studentMetrics],
-  );
-
   const pendingTasks = useMemo<PendingTask[]>(
     () => [
       {
@@ -270,11 +260,6 @@ export default function DashboardView({
       { label: 'Add Students', description: 'Manage roster imports.', href: '/roster', icon: 'S', tone: 'red' },
     ],
     [],
-  );
-
-  const calendarEvents = useMemo(
-    () => Array.from(new Set([new Date().getDate(), ...todayClasses.map((_, index) => Math.min(28, new Date().getDate() + index + 1))])),
-    [todayClasses],
   );
 
   if (isLoading) {
@@ -347,8 +332,6 @@ export default function DashboardView({
       <Suspense fallback={chartFallback()}>
         <DashboardCharts
           trendPoints={trendPoints}
-          students={studentMetrics}
-          pendingAssignments={pendingAssignments}
         />
       </Suspense>
 
@@ -357,11 +340,6 @@ export default function DashboardView({
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <TodaySchedule classes={scheduleItems} />
         <PendingTasks tasks={pendingTasks} />
-      </div>
-
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_22rem]">
-        <RecentActivity items={activities} />
-        <CalendarWidget eventDays={calendarEvents} />
       </div>
 
       {studentMetrics.length === 0 && (

@@ -1,8 +1,17 @@
 import { useMemo } from 'react';
 import AnalyticsView, { type AnalyticsDataProvider } from '@presentation/views/AnalyticsView';
 import { createAnalyticsAccess } from '@data/access/analyticsAccess';
+import {
+  buildDemoStudentMetrics,
+  demoNumber,
+  isLocalDemoMode,
+  loadDemoAnalyticsThreshold,
+  saveDemoAnalyticsThreshold,
+  type DemoStudent,
+} from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
+import { formatSectionLabel } from '@presentation/format/sectionLabel';
 import type { UnitAverage } from '@domain/services/analyticsService';
 
 const analyticsAccess = createAnalyticsAccess(supabase);
@@ -14,11 +23,37 @@ export default function AnalyticsPage() {
 
   const dataProvider = useMemo<AnalyticsDataProvider>(
     () => ({
-      loadThreshold: () => analyticsAccess.loadThreshold(),
-      saveThreshold: (threshold: number) => analyticsAccess.saveThreshold(threshold),
+      loadThreshold: () =>
+        isLocalDemoMode() ? Promise.resolve(loadDemoAnalyticsThreshold()) : analyticsAccess.loadThreshold(),
+      saveThreshold: (threshold: number) => {
+        if (isLocalDemoMode()) {
+          saveDemoAnalyticsThreshold(threshold);
+          return Promise.resolve();
+        }
+        return analyticsAccess.saveThreshold(threshold);
+      },
 
       async loadInternalMarks(): Promise<number[]> {
         if (!sectionId) return [];
+
+        if (isLocalDemoMode()) {
+          const { data: students } = await supabase
+            .from('students')
+            .select('id, name, enrollment_number')
+            .eq('section_id', sectionId)
+            .order('name');
+          const roster = ((students ?? []) as Array<{
+            id: string;
+            name: string;
+            enrollment_number?: string | null;
+          }>).map<DemoStudent>((student) => ({
+            id: student.id,
+            name: student.name,
+            enrollmentNumber: student.enrollment_number ?? undefined,
+            sectionName: selectedSection ? formatSectionLabel(selectedSection) : undefined,
+          }));
+          return buildDemoStudentMetrics(roster).map((student) => student.internalMarks);
+        }
 
         // Students in the selected section.
         const { data: students } = await supabase
@@ -61,6 +96,17 @@ export default function AnalyticsPage() {
           .in('subject_id', subjectIds);
         const unitIds = (units || []).map((u) => u.id);
 
+        if (isLocalDemoMode()) {
+          const activeUnitIds =
+            unitIds.length > 0
+              ? unitIds
+              : ['demo-unit-1', 'demo-unit-2', 'demo-unit-3', 'demo-unit-4'];
+          return activeUnitIds.map((unitId) => ({
+            unitId,
+            average: Math.round(demoNumber(`${sectionId ?? semester}:${unitId}:unit-average`, 58, 94)),
+          }));
+        }
+
         // Load quiz attempts for quizzes in these units
         const { data } = await supabase
           .from('quiz_attempts')
@@ -89,6 +135,24 @@ export default function AnalyticsPage() {
       async loadQuizScores(): Promise<number[]> {
         if (!sectionId) return [];
 
+        if (isLocalDemoMode()) {
+          const { data: students } = await supabase
+            .from('students')
+            .select('id, name, enrollment_number')
+            .eq('section_id', sectionId)
+            .order('name');
+          const roster = ((students ?? []) as Array<{
+            id: string;
+            name: string;
+            enrollment_number?: string | null;
+          }>).map<DemoStudent>((student) => ({
+            id: student.id,
+            name: student.name,
+            enrollmentNumber: student.enrollment_number ?? undefined,
+          }));
+          return buildDemoStudentMetrics(roster).map((student) => student.quizScore);
+        }
+
         // Students in the selected section.
         const { data: students } = await supabase
           .from('students')
@@ -107,7 +171,7 @@ export default function AnalyticsPage() {
         return data.map((row: { score: number }) => row.score);
       },
     }),
-    [sectionId, semester],
+    [sectionId, semester, selectedSection],
   );
 
   return <AnalyticsView key={sectionId ?? 'none'} dataProvider={dataProvider} />;

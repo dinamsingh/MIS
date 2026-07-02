@@ -10,6 +10,16 @@ import AssignmentView, {
 import { createAssignmentAccess } from '@data/access/assignmentAccess';
 import { createTimetableAccess } from '@data/access/timetableAccess';
 import { fileStorage } from '@data/storage';
+import {
+  createDemoAssignment,
+  createDemoMaterial,
+  getDemoAssignmentSubmission,
+  getDemoLabManualSubmission,
+  isLocalDemoMode,
+  listDemoAssignments,
+  setDemoAssignmentSubmission,
+  setDemoLabManualSubmission,
+} from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { formatSectionLabel } from '@presentation/format/sectionLabel';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
@@ -34,7 +44,56 @@ const ASSIGNMENT_POLICY: UploadPolicy = {
  * storage. `listAssignments` is scoped to the active semester's subjects, so it
  * depends on the globally-selected section's semester.
  */
-function createAccess(semester: string | null): AssignmentViewAccess {
+function createAccess(
+  semester: string | null,
+  subjects: readonly AssignmentSubjectOption[],
+  students: readonly AssignmentStudent[],
+): AssignmentViewAccess {
+  if (isLocalDemoMode()) {
+    return {
+      createAssignment: (input) => Promise.resolve(createDemoAssignment(input)),
+
+      async uploadFile(file: File): Promise<UploadedAssignmentFile> {
+        const material = createDemoMaterial({
+          category: 'assignment',
+          fileName: file.name,
+          mimeType: file.type,
+          sizeBytes: file.size,
+        });
+        return { fileId: material.id, url: material.url };
+      },
+
+      async listAssignments(): Promise<AssignmentListItem[]> {
+        const subjectIds = subjects.map((subject) => subject.id);
+        return listDemoAssignments(subjectIds).map((item) => ({
+          id: item.id,
+          title: item.title,
+          subjectId: item.subjectId,
+          unitId: item.unitId,
+          dueDate: item.dueDate,
+          shareLink: `${window.location.origin}/assignment/${item.shareToken}`,
+        }));
+      },
+
+      getAssignmentSubmission: (assignmentId, studentId, unitId) =>
+        Promise.resolve(getDemoAssignmentSubmission(assignmentId, studentId, unitId)),
+      setAssignmentSubmission: (assignmentId, studentId, unitId, status) => {
+        setDemoAssignmentSubmission(assignmentId, studentId, unitId, status);
+        return Promise.resolve();
+      },
+      getLabManualSubmission: (studentId, unitId) =>
+        Promise.resolve(getDemoLabManualSubmission(studentId, unitId)),
+      setLabManualSubmission: (studentId, unitId, status) => {
+        setDemoLabManualSubmission(studentId, unitId, status);
+        return Promise.resolve();
+      },
+      listSectionIdsForSubject: () =>
+        Promise.resolve(
+          Array.from(new Set(students.map((student) => student.sectionId).filter(Boolean) as string[])),
+        ),
+    };
+  }
+
   return {
     createAssignment: (input) => assignmentAccess.createAssignment(input),
 
@@ -103,7 +162,10 @@ export default function AssignmentPage() {
   const [students, setStudents] = useState<AssignmentStudent[]>([]);
 
   const semester = selectedSection?.semester ?? null;
-  const access = useMemo(() => createAccess(semester), [semester]);
+  const access = useMemo(
+    () => createAccess(semester, subjects, students),
+    [semester, subjects, students],
+  );
 
   useEffect(() => {
     if (!semester) {

@@ -7,20 +7,34 @@
  * section that studies its subject (Shared-materials model).
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import QuizCreationView, {
   type QuizUnitOption,
   type QuizAttemptStudent,
 } from '@presentation/views/QuizCreationView';
 import { createQuizAccess } from '@data/access/quizAccess';
+import { createLocalDemoQuizAccess, isLocalDemoMode } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { formatSectionLabel } from '@presentation/format/sectionLabel';
 
-const quizAccess = createQuizAccess(supabase);
+const supabaseQuizAccess = createQuizAccess(supabase);
 
 export default function QuizCreationPage() {
   const [units, setUnits] = useState<QuizUnitOption[]>([]);
   const [students, setStudents] = useState<QuizAttemptStudent[]>([]);
+  const quizAccess = useMemo(
+    () =>
+      isLocalDemoMode()
+        ? createLocalDemoQuizAccess(() =>
+            students.map((student) => ({
+              id: student.id,
+              name: student.name,
+              sectionName: student.sectionLabel,
+            })),
+          )
+        : supabaseQuizAccess,
+    [students],
+  );
 
   useEffect(() => {
     void (async () => {

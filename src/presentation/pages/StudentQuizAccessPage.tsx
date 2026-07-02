@@ -8,13 +8,19 @@ import { useParams } from 'react-router-dom';
 import StudentQuizAccessView from '@presentation/views/StudentQuizAccessView';
 import QuizAttemptView from '@presentation/views/QuizAttemptView';
 import { createQuizAccess } from '@data/access/quizAccess';
+import { createLocalDemoQuizAccess, isLocalDemoMode } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import type { QuizPayloadNoAnswers } from '@domain/services/rosterService';
+import { useMemo } from 'react';
 
-const quizAccess = createQuizAccess(supabase);
+const supabaseQuizAccess = createQuizAccess(supabase);
 
 export default function StudentQuizAccessPage() {
   const { token } = useParams<{ token: string }>();
+  const quizAccess = useMemo(
+    () => (isLocalDemoMode() ? createLocalDemoQuizAccess() : supabaseQuizAccess),
+    [],
+  );
 
   if (!token) {
     return (

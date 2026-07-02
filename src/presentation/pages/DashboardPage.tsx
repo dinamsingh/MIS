@@ -5,8 +5,18 @@ import DashboardView, {
   type AttendanceTrendPoint,
 } from '@presentation/views/DashboardView';
 import { useDataCache } from '@presentation/hooks';
+import {
+  buildDemoAttendanceTrend,
+  buildDemoStudentMetrics,
+  createLocalDemoTimetableAccess,
+  isLocalDemoMode,
+  loadDemoLeaderboardConfig,
+  type DemoStudent,
+  type DemoSubject,
+} from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
+import { formatSectionLabel } from '@presentation/format/sectionLabel';
 import type { Section } from '@data/access/rows';
 import type { TimetableEntry, DayOfWeek } from '@domain/services/timetableService';
 import type { LeaderboardWeights, StudentMetrics } from '@domain/services/leaderboardService';
@@ -74,13 +84,77 @@ async function fetchDashboardData(section: Section): Promise<DashboardData> {
   };
 }
 
+function average(values: readonly number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+async function loadDemoStudents(section: Section): Promise<DemoStudent[]> {
+  const { data } = await supabase
+    .from('students')
+    .select('id, name, enrollment_number')
+    .eq('section_id', section.id)
+    .order('name');
+
+  return ((data ?? []) as Array<{ id: string; name: string; enrollment_number?: string | null }>).map((row) => ({
+    id: row.id,
+    name: row.name,
+    enrollmentNumber: row.enrollment_number ?? undefined,
+    sectionName: formatSectionLabel(section),
+  }));
+}
+
+async function loadDemoSubjects(section: Section): Promise<DemoSubject[]> {
+  if (!section.semester) {
+    return [];
+  }
+  const { data } = await supabase
+    .from('subjects')
+    .select('id, name')
+    .eq('semester', section.semester)
+    .order('name');
+  return ((data ?? []) as DemoSubject[]);
+}
+
+async function fetchDemoDashboardData(section: Section): Promise<DashboardData> {
+  const [students, subjects] = await Promise.all([
+    loadDemoStudents(section),
+    loadDemoSubjects(section),
+  ]);
+  const studentMetrics = buildDemoStudentMetrics(students, formatSectionLabel(section));
+  const timetable = createLocalDemoTimetableAccess(() => subjects);
+  const timetableEntries = await timetable.listEntries(section.id);
+  const avgAttendancePercent = average(studentMetrics.map((student) => student.attendancePercent));
+  const avgInternalMarks = average(studentMetrics.map((student) => student.internalMarks));
+
+  return {
+    summary: {
+      totalStudents: students.length,
+      avgAttendancePercent,
+      avgInternalMarks,
+      syllabusProgressPercent: Math.round(average(studentMetrics.map((student) => student.quizScore))),
+    },
+    timetableEntries,
+    studentMetrics,
+    attendanceTrend: buildDemoAttendanceTrend(section.id),
+    weights: loadDemoLeaderboardConfig().weights,
+  };
+}
+
 export default function DashboardPage() {
   const { selectedSection } = useSelectedSection();
 
   // Cache key includes the section id so data stays distinct per selection.
   const { data } = useDataCache<DashboardData>({
     key: `dashboard-data-${selectedSection?.id ?? 'none'}`,
-    fetcher: () => (selectedSection ? fetchDashboardData(selectedSection) : Promise.resolve(EMPTY_DATA)),
+    fetcher: () =>
+      selectedSection
+        ? isLocalDemoMode()
+          ? fetchDemoDashboardData(selectedSection)
+          : fetchDashboardData(selectedSection)
+        : Promise.resolve(EMPTY_DATA),
     ttlMs: 60_000,
   });
 

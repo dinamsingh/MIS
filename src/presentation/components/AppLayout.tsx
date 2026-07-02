@@ -69,8 +69,8 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
   }, [isDrawerOpen, isUserMenuOpen]);
 
   return (
-    <div className="flex min-h-screen w-full overflow-x-hidden bg-secondary text-text">
-      <aside className="sticky top-0 hidden h-screen shrink-0 lg:block">
+    <div className="flex min-h-screen w-full overflow-x-clip bg-secondary text-text">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden h-screen max-h-screen shrink-0 lg:block">
         <Sidebar
           activePath={activePath}
           collapsed={isSidebarCollapsed}
@@ -94,7 +94,12 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div
+        className={[
+          'flex min-w-0 flex-1 flex-col transition-[padding-left] duration-slow ease-entrance motion-reduce:transition-none',
+          isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-72',
+        ].join(' ')}
+      >
         <header className="sticky top-0 z-30 border-b border-border/80 bg-surface/85 px-4 py-3 backdrop-blur-xl lg:px-6">
           <div className="flex min-w-0 items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
@@ -232,7 +237,7 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
           </div>
         </header>
 
-        <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-5 lg:px-6">
+        <main className="min-w-0 flex-1 overflow-x-clip px-4 py-5 lg:px-6">
           {children}
         </main>
       </div>

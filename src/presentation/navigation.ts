@@ -27,14 +27,12 @@ export const navGroups: NavGroup[] = [
     label: 'Overview',
     items: [
       { id: 'dashboard', label: 'Dashboard', icon: '▦', path: '/dashboard' },
-      { id: 'analytics', label: 'Smart Analytics', icon: '📊', path: '/analytics' },
     ],
   },
   {
     id: 'academics',
     label: 'Academics',
     items: [
-      { id: 'roster', label: 'Roster', icon: '👥', path: '/roster', badge: 'NEW' },
       { id: 'attendance', label: 'Attendance', icon: '✓', path: '/attendance' },
       { id: 'heatmap', label: 'Heatmap', icon: '🗓️', path: '/heatmap' },
       { id: 'syllabus', label: 'Syllabus', icon: '📖', path: '/syllabus' },
@@ -46,7 +44,6 @@ export const navGroups: NavGroup[] = [
     label: 'Assessments',
     items: [
       { id: 'quizzes', label: 'Quizzes', icon: '❓', path: '/quizzes' },
-      { id: 'ai-quiz', label: 'AI Quiz Generator', icon: '✨', path: '/ai/quiz-generator', locked: true, ai: true, badge: 'AI' },
       { id: 'assignments', label: 'Assignments', icon: '📝', path: '/assignments' },
       { id: 'marks', label: 'Internal Marks', icon: '🧮', path: '/marks' },
     ],
@@ -55,7 +52,6 @@ export const navGroups: NavGroup[] = [
     id: 'insights',
     label: 'Insights',
     items: [
-      { id: 'risk-predictor', label: 'Risk Predictor', icon: '🧠', path: '/ai/risk-predictor', locked: true, ai: true, badge: 'AI' },
       { id: 'leaderboard', label: 'Leaderboard', icon: '🏆', path: '/leaderboard' },
     ],
   },
@@ -64,6 +60,13 @@ export const navGroups: NavGroup[] = [
     label: 'Resources & Connect',
     items: [
       { id: 'material', label: 'Study Material', icon: '📁', path: '/material' },
+    ],
+  },
+  {
+    id: 'roster-management',
+    label: 'Roster',
+    items: [
+      { id: 'roster', label: 'Roster', icon: '👥', path: '/roster', badge: 'NEW' },
     ],
   },
 ];

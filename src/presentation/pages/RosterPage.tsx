@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import RosterView, { type RosterSectionOption } from '@presentation/views/RosterView';
 import { createRosterImportAccess } from '@data/access/rosterImportAccess';
 import { createSectionsAccess } from '@data/access/sectionsAccess';
+import { isLocalDemoMode, recordDemoRosterImport } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import type { ParsedRosterRow } from '@domain/services/rosterImportService';
 
@@ -16,6 +17,10 @@ const sectionsAccess = createSectionsAccess(supabase);
 
 const persistence = {
   importRoster(sectionId: string, rows: readonly ParsedRosterRow[]) {
+    if (isLocalDemoMode()) {
+      recordDemoRosterImport(sectionId, rows.length);
+      return Promise.resolve({ deleted: 0, imported: rows.length });
+    }
     return access.replaceSection(sectionId, rows);
   },
 };

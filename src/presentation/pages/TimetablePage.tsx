@@ -1,14 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import TimetableView, { type SectionOption, type SubjectOption } from '@presentation/views/TimetableView';
 import { createTimetableAccess } from '@data/access/timetableAccess';
+import { createLocalDemoTimetableAccess, isLocalDemoMode } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 
-const access = createTimetableAccess(supabase);
+const supabaseAccess = createTimetableAccess(supabase);
 
 export default function TimetablePage() {
   const { selectedSection } = useSelectedSection();
   const [subjects, setSubjects] = useState<SubjectOption[]>([]);
+  const access = useMemo(
+    () => (isLocalDemoMode() ? createLocalDemoTimetableAccess(() => subjects) : supabaseAccess),
+    [subjects],
+  );
 
   // The globally-selected section is authoritative — no per-page picker.
   const sections: SectionOption[] = selectedSection ? [selectedSection] : [];

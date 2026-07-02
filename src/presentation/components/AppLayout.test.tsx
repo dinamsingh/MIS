@@ -37,10 +37,9 @@ describe('AppLayout shell', () => {
     expect(active).toHaveAttribute('aria-current', 'page');
   });
 
-  it('renders locked AI items as disabled placeholders', () => {
+  it('does not render the removed AI Quiz Generator menu item', () => {
     renderLayout(<AppLayout activePath="/dashboard">content</AppLayout>);
-    const lockedItem = screen.getByRole('button', { name: /AI Quiz Generator/i });
-    expect(lockedItem).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByRole('button', { name: /AI Quiz Generator/i })).not.toBeInTheDocument();
   });
 
   it('renders the provided main content', () => {

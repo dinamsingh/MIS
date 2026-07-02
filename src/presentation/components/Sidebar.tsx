@@ -28,7 +28,7 @@ export default function Sidebar({
     <nav
       aria-label="Primary"
       className={[
-        'flex h-full flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-soft transition-[width] duration-slow ease-entrance motion-reduce:transition-none',
+        'flex h-full max-h-screen flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-soft transition-[width] duration-slow ease-entrance motion-reduce:transition-none',
         isCollapsed ? 'w-20' : 'w-72',
       ].join(' ')}
     >

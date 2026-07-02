@@ -33,6 +33,19 @@ export interface AttendanceMark {
   readonly present: boolean;
 }
 
+/** Extended teacher-facing status for a student's attendance in one period. */
+export type AttendanceStatus =
+  | 'present'
+  | 'absent'
+  | 'leave'
+  | 'not-applicable';
+
+/** A single student's extended attendance status within a period. */
+export interface AttendanceStatusMark {
+  readonly studentId: string;
+  readonly status: AttendanceStatus;
+}
+
 /** The live tally of a set of marks. */
 export interface AttendanceCounts {
   readonly present: number;
@@ -64,6 +77,27 @@ export function liveCounts(marks: AttendanceMark[]): AttendanceCounts {
     }
   }
   return { present, absent: marks.length - present };
+}
+
+/** Convert a billable present/absent mark to the extended status model. */
+export function statusFromAttendanceMark(mark: AttendanceMark): AttendanceStatusMark {
+  return { studentId: mark.studentId, status: mark.present ? 'present' : 'absent' };
+}
+
+/**
+ * Convert an extended status back to the legacy billable attendance mark.
+ *
+ * `leave` and `not-applicable` intentionally return `null`: they are excluded
+ * from the denominator, so they must not become absent rows.
+ */
+export function statusToAttendanceMark(mark: AttendanceStatusMark): AttendanceMark | null {
+  if (mark.status === 'present') {
+    return { studentId: mark.studentId, present: true };
+  }
+  if (mark.status === 'absent') {
+    return { studentId: mark.studentId, present: false };
+  }
+  return null;
 }
 
 /**

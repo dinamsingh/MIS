@@ -1,6 +1,11 @@
 import { useMemo } from 'react';
 import MaterialView, { type MaterialPersistence, type MaterialItem } from '@presentation/views/MaterialView';
 import { fileStorage } from '@data/storage';
+import {
+  createDemoMaterial,
+  isLocalDemoMode,
+  listDemoMaterials,
+} from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 import type { UploadPolicy, FileCategory } from '@domain/services/storageRouter';
@@ -23,6 +28,24 @@ const STUDY_MATERIAL_POLICY: UploadPolicy = {
  */
 function createPersistence(semester: string | null): MaterialPersistence {
   const sem = semester ?? '';
+  const category = `study-material-${sem}`;
+  if (isLocalDemoMode()) {
+    return {
+      async uploadMaterial(file: File): Promise<MaterialItem> {
+        return createDemoMaterial({
+          category,
+          fileName: file.name,
+          mimeType: file.type,
+          sizeBytes: file.size,
+        });
+      },
+
+      async loadMaterials(): Promise<MaterialItem[]> {
+        return listDemoMaterials(category);
+      },
+    };
+  }
+
   return {
     async uploadMaterial(file: File): Promise<MaterialItem> {
       const result = await fileStorage.uploadFile({

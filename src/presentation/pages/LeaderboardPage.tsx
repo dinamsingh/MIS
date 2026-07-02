@@ -1,8 +1,16 @@
 import { useMemo } from 'react';
 import LeaderboardView, { type LeaderboardPersistence } from '@presentation/views/LeaderboardView';
 import { createLeaderboardAccess } from '@data/access/leaderboardAccess';
+import {
+  buildDemoStudentMetrics,
+  isLocalDemoMode,
+  loadDemoLeaderboardConfig,
+  saveDemoLeaderboardConfig,
+  type DemoStudent,
+} from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
+import { formatSectionLabel } from '@presentation/format/sectionLabel';
 import type { StudentMetrics } from '@domain/services/leaderboardService';
 
 const leaderboardAccess = createLeaderboardAccess(supabase);
@@ -13,11 +21,37 @@ export default function LeaderboardPage() {
 
   const persistence = useMemo<LeaderboardPersistence>(
     () => ({
-      loadConfig: () => leaderboardAccess.loadConfig(),
-      saveConfig: (config) => leaderboardAccess.saveConfig(config),
+      loadConfig: () =>
+        isLocalDemoMode() ? Promise.resolve(loadDemoLeaderboardConfig()) : leaderboardAccess.loadConfig(),
+      saveConfig: (config) => {
+        if (isLocalDemoMode()) {
+          saveDemoLeaderboardConfig(config);
+          return Promise.resolve();
+        }
+        return leaderboardAccess.saveConfig(config);
+      },
 
       async loadStudentMetrics(): Promise<StudentMetrics[]> {
         if (!sectionId) return [];
+
+        if (isLocalDemoMode()) {
+          const { data: students } = await supabase
+            .from('students')
+            .select('id, name, enrollment_number')
+            .eq('section_id', sectionId)
+            .order('name');
+          const roster = ((students ?? []) as Array<{
+            id: string;
+            name: string;
+            enrollment_number?: string | null;
+          }>).map<DemoStudent>((student) => ({
+            id: student.id,
+            name: student.name,
+            enrollmentNumber: student.enrollment_number ?? undefined,
+            sectionName: selectedSection ? formatSectionLabel(selectedSection) : undefined,
+          }));
+          return buildDemoStudentMetrics(roster, selectedSection ? formatSectionLabel(selectedSection) : undefined);
+        }
 
         // Load students in the globally-selected section.
         const { data: students } = await supabase
@@ -67,7 +101,7 @@ export default function LeaderboardPage() {
         return metrics;
       },
     }),
-    [sectionId],
+    [sectionId, selectedSection],
   );
 
   return <LeaderboardView key={sectionId ?? 'none'} persistence={persistence} />;
