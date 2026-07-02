@@ -16,7 +16,7 @@
  * Requirements: 1.5, 20.7
  */
 
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@presentation/auth';
 import { RequireTeacher } from '@presentation/auth';
@@ -24,6 +24,7 @@ import AppLayout from '@presentation/components/AppLayout';
 import { TeacherSignInView, LockedFeatureView } from '@presentation/views';
 import PageLoader from '@presentation/components/PageLoader';
 import { SelectedSectionProvider } from '@presentation/context/SelectedSectionContext';
+import { useOnboardingStatus } from '../features/onboarding/hooks/useOnboardingStatus';
 
 // --- Lazy-loaded page chunks (one per route) ---
 const DashboardPage = lazy(() => import('@presentation/pages/DashboardPage'));
@@ -40,6 +41,24 @@ const LeaderboardPage = lazy(() => import('@presentation/pages/LeaderboardPage')
 const HeatmapPage = lazy(() => import('@presentation/pages/HeatmapPage'));
 const StudentQuizAccessPage = lazy(() => import('@presentation/pages/StudentQuizAccessPage'));
 const QuizAttemptPage = lazy(() => import('@presentation/pages/QuizAttemptPage'));
+const OnboardingPage = lazy(() => import('../features/onboarding/OnboardingPage'));
+
+/**
+ * Onboarding gate for the teacher app shell. While the onboarded status loads
+ * it renders a loader (no redirect flicker); an un-onboarded teacher is sent to
+ * the wizard; an onboarded teacher continues to the requested view.
+ */
+function OnboardingGate({ children }: { children: ReactNode }) {
+  const { loading, onboarded } = useOnboardingStatus();
+
+  if (loading) {
+    return <PageLoader />;
+  }
+  if (!onboarded) {
+    return <Navigate to="/onboarding" replace />;
+  }
+  return <>{children}</>;
+}
 
 /**
  * Teacher layout shell — wraps children in RequireTeacher + AppLayout with
@@ -57,13 +76,32 @@ function TeacherShell() {
 
   return (
     <RequireTeacher>
-      <SelectedSectionProvider>
-        <AppLayout activePath={location.pathname} onNavigate={(path) => navigate(path)} onLogout={handleLogout}>
-          <Outlet />
-        </AppLayout>
-      </SelectedSectionProvider>
+      <OnboardingGate>
+        <SelectedSectionProvider>
+          <AppLayout activePath={location.pathname} onNavigate={(path) => navigate(path)} onLogout={handleLogout}>
+            <Outlet />
+          </AppLayout>
+        </SelectedSectionProvider>
+      </OnboardingGate>
     </RequireTeacher>
   );
+}
+
+/**
+ * Full-screen onboarding route. Guarded by RequireTeacher (no sidebar shell).
+ * If the teacher is already onboarded they are redirected to the dashboard;
+ * while the status loads a loader is shown to avoid redirect flicker.
+ */
+function OnboardingRoute() {
+  const { loading, onboarded } = useOnboardingStatus();
+
+  if (loading) {
+    return <PageLoader />;
+  }
+  if (onboarded) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <OnboardingPage />;
 }
 
 /** Root redirect: teacher → /dashboard, unauthenticated → /sign-in. */
@@ -101,6 +139,9 @@ export default function App() {
             <Route path="/sign-in" element={<SignInRoute />} />
             <Route path="/quiz/:token" element={<StudentQuizAccessPage />} />
             <Route path="/quiz/:token/attempt" element={<QuizAttemptPage />} />
+
+            {/* Full-screen onboarding (teacher-guarded, no sidebar shell) */}
+            <Route path="/onboarding" element={<OnboardingRoute />} />
 
             {/* Teacher-guarded routes wrapped in layout shell */}
             <Route element={<TeacherShell />}>
