@@ -333,8 +333,53 @@ async function fetchAllBatches(): Promise<Batch[]> {
 }
 
 /**
+ * Get-or-create a real `public.sections` row for a derived (batch, section)
+ * combo, so the rest of the app — Roster CSV import, Attendance, Marks,
+ * Heatmap — can attach real students to it via `students.section_id`
+ * (a real uuid, not a synthetic onboarding id).
+ *
+ * Matched by the exact (name, batch, semester, department) tuple, which is
+ * deterministic for a given batch+section+sem, so re-onboarding or reloading
+ * never creates duplicate rows.
+ */
+async function getOrCreateRealSection(derived: Section): Promise<Section> {
+  const existing = await supabase
+    .from('sections')
+    .select('id, name, batch, semester, department')
+    .eq('name', derived.name)
+    .eq('batch', derived.batch)
+    .maybeSingle();
+  if (existing.error) {
+    throw new Error(existing.error.message);
+  }
+  if (existing.data) {
+    return existing.data as Section;
+  }
+
+  const inserted = await supabase
+    .from('sections')
+    .insert({
+      name: derived.name,
+      batch: derived.batch,
+      semester: derived.semester,
+      department: derived.department,
+    })
+    .select('id, name, batch, semester, department')
+    .single();
+  if (inserted.error) {
+    throw new Error(inserted.error.message);
+  }
+  return inserted.data as Section;
+}
+
+/**
  * The teacher's onboarded sections, derived from their assignments. Drives the
  * global section selector. Empty when the teacher has not onboarded yet.
+ *
+ * Live mode resolves each derived section to a REAL `sections` table row
+ * (get-or-create), so its `id` is a real uuid that Roster import / Attendance
+ * / Marks can attach students to via `students.section_id`. Demo mode has no
+ * backing `sections` table to attach to, so it keeps the synthetic ids.
  */
 export async function fetchOnboardedSections(): Promise<Section[]> {
   if (isLocalDemoMode()) {
@@ -351,7 +396,8 @@ export async function fetchOnboardedSections(): Promise<Section[]> {
   const assignments: AssignmentInput[] = (assignmentRes.data as Array<{ batch_id: string; section: AssignmentInput['section'] }>).map(
     (row) => ({ subjectId: '', batchId: row.batch_id, section: row.section, isLab: false }),
   );
-  return deriveSections(assignments, batches);
+  const derived = deriveSections(assignments, batches);
+  return Promise.all(derived.map(getOrCreateRealSection));
 }
 
 // ---------------------------------------------------------------------------
