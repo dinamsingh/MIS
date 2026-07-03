@@ -13,6 +13,12 @@ interface ProfileStepProps {
   readonly onContinue: () => void;
 }
 
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'] as const;
+
+function toRoman(sem: number): string {
+  return ROMAN[sem - 1] ?? String(sem);
+}
+
 export default function ProfileStep({ profile, onChange, activeBatches, onContinue }: ProfileStepProps) {
   const canContinue = profile.name.trim().length > 0 && profile.email.trim().length > 0;
 
@@ -72,7 +78,7 @@ export default function ProfileStep({ profile, onChange, activeBatches, onContin
                 key={batch.id}
                 className="inline-flex items-center rounded-full bg-[#eef0fe] px-3 py-1 text-xs font-semibold text-[#4a42d4]"
               >
-                Batch {batch.id}
+                Batch {batch.id} / Sem {toRoman(batch.currentSem)}
               </span>
             ))}
           </div>

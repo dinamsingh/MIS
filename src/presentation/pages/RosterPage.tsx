@@ -4,39 +4,32 @@
  * for the import target picker.
  */
 
-import { useEffect, useState } from 'react';
 import RosterView, { type RosterSectionOption } from '@presentation/views/RosterView';
 import { createRosterImportAccess } from '@data/access/rosterImportAccess';
-import { createSectionsAccess } from '@data/access/sectionsAccess';
-import { isLocalDemoMode, recordDemoRosterImport } from '@data/demo/localDemoMode';
+import { isLocalDemoMode, replaceDemoRoster } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
+import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
+import { clearCache } from '@presentation/hooks';
 import type { ParsedRosterRow } from '@domain/services/rosterImportService';
 
 const access = createRosterImportAccess(supabase);
-const sectionsAccess = createSectionsAccess(supabase);
 
 const persistence = {
-  importRoster(sectionId: string, rows: readonly ParsedRosterRow[]) {
-    if (isLocalDemoMode()) {
-      recordDemoRosterImport(sectionId, rows.length);
-      return Promise.resolve({ deleted: 0, imported: rows.length });
+  async importRoster(sectionId: string, rows: readonly ParsedRosterRow[]) {
+    try {
+      if (isLocalDemoMode()) {
+        return replaceDemoRoster(sectionId, rows);
+      }
+      return await access.replaceSection(sectionId, rows);
+    } finally {
+      clearCache();
     }
-    return access.replaceSection(sectionId, rows);
   },
 };
 
 export default function RosterPage() {
-  const [sections, setSections] = useState<RosterSectionOption[]>([]);
+  const { selectedSection } = useSelectedSection();
+  const sections = selectedSection ? [selectedSection] : [];
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        setSections(await sectionsAccess.listSections());
-      } catch {
-        // Sections remain empty; the view handles the empty state gracefully.
-      }
-    })();
-  }, []);
-
-  return <RosterView persistence={persistence} sections={sections} />;
+  return <RosterView persistence={persistence} sections={sections as RosterSectionOption[]} />;
 }

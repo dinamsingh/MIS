@@ -8,12 +8,16 @@
 -- Batches (status != 'graduated' → "live"; graduated one is excluded in UI)
 -- ----------------------------------------------------------------------------
 INSERT INTO public.batches (id, start_year, current_sem, status) VALUES
-    ('2025-29', 2025, 1, 'classes'),
-    ('2024-28', 2024, 3, 'classes'),
-    ('2023-27', 2023, 5, 'classes'),
-    ('2022-26', 2022, 7, 'classes'),
+    ('2026-30', 2026, 1, 'classes'),
+    ('2025-29', 2025, 3, 'classes'),
+    ('2024-28', 2024, 5, 'classes'),
+    ('2023-27', 2023, 7, 'classes'),
+    ('2022-26', 2022, 8, 'graduated'),
     ('2021-25', 2021, 8, 'graduated')
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE
+SET start_year = EXCLUDED.start_year,
+    current_sem = EXCLUDED.current_sem,
+    status = EXCLUDED.status;
 
 -- ----------------------------------------------------------------------------
 -- Syllabus subjects. kind: theory | lab | project | elective | special.

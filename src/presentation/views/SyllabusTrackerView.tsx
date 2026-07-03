@@ -372,6 +372,16 @@ export default function SyllabusTrackerView({
   const [error, setError] = useState<string | null>(null);
   const [unitName, setUnitName] = useState('');
 
+  useEffect(() => {
+    if (subjects.length === 0) {
+      setSelectedSubjectId('');
+      return;
+    }
+    if (!subjects.some((subject) => subject.id === selectedSubjectId)) {
+      setSelectedSubjectId(subjects[0].id);
+    }
+  }, [selectedSubjectId, subjects]);
+
   const reload = useCallback(
     async (subjectId: string) => {
       if (subjectId === '') {

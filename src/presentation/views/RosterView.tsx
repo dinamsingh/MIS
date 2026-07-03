@@ -18,7 +18,7 @@
  * Requirements: 2.1, 2.2, 20.1 (professional English).
  */
 
-import { useCallback, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { messages } from '@domain/shared/messages';
 import {
   parseRosterCsv,
@@ -84,6 +84,16 @@ export default function RosterView({ persistence, sections }: RosterViewProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (sections.length === 0) {
+      setSectionId('');
+      return;
+    }
+    if (!sections.some((section) => section.id === sectionId)) {
+      setSectionId(sections[0].id);
+    }
+  }, [sections, sectionId]);
 
   // Live parse of the current CSV text (pure, cheap, memoised).
   const { valid, rejected } = useMemo(() => parseRosterCsv(csvText), [csvText]);

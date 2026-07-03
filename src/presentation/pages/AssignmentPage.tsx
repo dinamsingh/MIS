@@ -21,8 +21,9 @@ import {
   setDemoLabManualSubmission,
 } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
-import { formatSectionLabel } from '@presentation/format/sectionLabel';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
+import { loadRosterStudentsForSections } from '@presentation/loaders/rosterStudents';
+import { loadSubjectOptionsForSection } from '@presentation/loaders/subjectOptions';
 import type { UploadPolicy } from '@domain/services/storageRouter';
 
 const assignmentAccess = createAssignmentAccess(supabase);
@@ -156,7 +157,7 @@ function createAccess(
 }
 
 export default function AssignmentPage() {
-  const { selectedSection } = useSelectedSection();
+  const { selectedSection, sections } = useSelectedSection();
   const [subjects, setSubjects] = useState<AssignmentSubjectOption[]>([]);
   const [units, setUnits] = useState<AssignmentUnitOption[]>([]);
   const [students, setStudents] = useState<AssignmentStudent[]>([]);
@@ -173,18 +174,19 @@ export default function AssignmentPage() {
       setUnits([]);
       return;
     }
+    setSubjects([]);
+    setUnits([]);
     void (async () => {
       try {
         // Subjects are scoped to the selected semester; units follow those subjects.
-        const subjectRes = await supabase
-          .from('subjects')
-          .select('id, name')
-          .eq('semester', semester)
-          .order('name');
-        const activeSubjects = (subjectRes.data as AssignmentSubjectOption[]) || [];
+        const activeSubjects = await loadSubjectOptionsForSection(selectedSection);
         setSubjects(activeSubjects);
 
         const activeSubjectIds = activeSubjects.map((s) => s.id);
+        if (activeSubjectIds.length === 0) {
+          setUnits([]);
+          return;
+        }
         const unitRes = await supabase
           .from('units')
           .select('id, name, subject_id')
@@ -195,55 +197,29 @@ export default function AssignmentPage() {
         // View handles empty arrays gracefully.
       }
     })();
-  }, [semester]);
+  }, [semester, selectedSection]);
 
   useEffect(() => {
     void (async () => {
       try {
         // Assignments/quizzes/materials are shared across every section that
-        // studies a subject, so the tracker lists students from ALL sections
-        // (each labelled by its section), not just the globally-selected one.
-        const [sectionRes, studentRes] = await Promise.all([
-          supabase.from('sections').select('id, name, batch, semester, department'),
-          supabase.from('students').select('id, name, enrollment_number, section_id').order('name'),
-        ]);
-
-        const sectionLabelById = new Map<string, string>();
-        for (const row of (sectionRes.data ?? []) as Array<{
-          id: string;
-          name: string;
-          batch: string | null;
-          semester: string | null;
-          department: string | null;
-        }>) {
-          sectionLabelById.set(row.id, formatSectionLabel(row));
-        }
-
-        if (studentRes.data) {
-          setStudents(
-            (studentRes.data as Array<{
-              id: string;
-              name: string;
-              enrollment_number?: string;
-              section_id?: string | null;
-            }>).map((row) => ({
-              id: row.id,
-              name: row.name,
-              enrollmentNumber: row.enrollment_number,
-              ...(row.section_id
-                ? {
-                    sectionId: row.section_id,
-                    sectionLabel: sectionLabelById.get(row.section_id),
-                  }
-                : {}),
-            })),
-          );
-        }
+        // studies a subject, so the tracker lists students from all onboarded
+        // sections, each labelled by its section.
+        const roster = await loadRosterStudentsForSections(sections);
+        setStudents(
+          roster.map((student) => ({
+            id: student.id,
+            name: student.name,
+            enrollmentNumber: student.enrollmentNumber,
+            sectionId: student.sectionId,
+            sectionLabel: student.sectionLabel,
+          })),
+        );
       } catch {
         // View handles empty arrays gracefully.
       }
     })();
-  }, []);
+  }, [sections]);
 
   return (
     <AssignmentView

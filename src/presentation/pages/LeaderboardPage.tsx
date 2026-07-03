@@ -6,11 +6,10 @@ import {
   isLocalDemoMode,
   loadDemoLeaderboardConfig,
   saveDemoLeaderboardConfig,
-  type DemoStudent,
 } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
-import { formatSectionLabel } from '@presentation/format/sectionLabel';
+import { loadRosterStudentsForSection } from '@presentation/loaders/rosterStudents';
 import type { StudentMetrics } from '@domain/services/leaderboardService';
 
 const leaderboardAccess = createLeaderboardAccess(supabase);
@@ -35,22 +34,8 @@ export default function LeaderboardPage() {
         if (!sectionId) return [];
 
         if (isLocalDemoMode()) {
-          const { data: students } = await supabase
-            .from('students')
-            .select('id, name, enrollment_number')
-            .eq('section_id', sectionId)
-            .order('name');
-          const roster = ((students ?? []) as Array<{
-            id: string;
-            name: string;
-            enrollment_number?: string | null;
-          }>).map<DemoStudent>((student) => ({
-            id: student.id,
-            name: student.name,
-            enrollmentNumber: student.enrollment_number ?? undefined,
-            sectionName: selectedSection ? formatSectionLabel(selectedSection) : undefined,
-          }));
-          return buildDemoStudentMetrics(roster, selectedSection ? formatSectionLabel(selectedSection) : undefined);
+          const roster = selectedSection ? await loadRosterStudentsForSection(selectedSection) : [];
+          return buildDemoStudentMetrics(roster);
         }
 
         // Load students in the globally-selected section.

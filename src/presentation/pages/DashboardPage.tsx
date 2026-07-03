@@ -11,11 +11,12 @@ import {
   createLocalDemoTimetableAccess,
   isLocalDemoMode,
   loadDemoLeaderboardConfig,
-  type DemoStudent,
   type DemoSubject,
 } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
+import { loadRosterStudentsForSection } from '@presentation/loaders/rosterStudents';
+import { loadSubjectNameMapForSection, loadSubjectOptionsForSection } from '@presentation/loaders/subjectOptions';
 import { formatSectionLabel } from '@presentation/format/sectionLabel';
 import type { Section } from '@data/access/rows';
 import type { TimetableEntry, DayOfWeek } from '@domain/services/timetableService';
@@ -31,6 +32,8 @@ interface DashboardData {
   studentMetrics: StudentMetrics[];
   attendanceTrend: AttendanceTrendPoint[];
   weights: LeaderboardWeights;
+  subjectNames: Record<string, string>;
+  sectionNames: Record<string, string>;
 }
 
 const EMPTY_DATA: DashboardData = {
@@ -44,6 +47,8 @@ const EMPTY_DATA: DashboardData = {
   studentMetrics: [],
   attendanceTrend: [],
   weights: { internalMarks: 0, quizScores: 0, attendance: 0 },
+  subjectNames: {},
+  sectionNames: {},
 };
 
 /** Last N days as an ISO date string. */
@@ -60,13 +65,17 @@ function daysAgoIso(n: number): string {
  * semester-level summaries use the section's semester — no name matching.
  */
 async function fetchDashboardData(section: Section): Promise<DashboardData> {
-  const { data, error } = await supabase.rpc('get_dashboard_data', {
-    p_from_date: daysAgoIso(30),
-    p_to_date: new Date().toISOString().slice(0, 10),
-    p_semester: section.semester,
-    p_section_id: section.id,
-  });
+  const [rpcResult, subjectNames] = await Promise.all([
+    supabase.rpc('get_dashboard_data', {
+      p_from_date: daysAgoIso(30),
+      p_to_date: new Date().toISOString().slice(0, 10),
+      p_semester: section.semester,
+      p_section_id: section.id,
+    }),
+    loadSubjectNameMapForSection(section),
+  ]);
 
+  const { data, error } = rpcResult;
   if (error || !data) {
     return EMPTY_DATA;
   }
@@ -81,6 +90,8 @@ async function fetchDashboardData(section: Section): Promise<DashboardData> {
     studentMetrics: payload.studentMetrics ?? [],
     attendanceTrend: payload.attendanceTrend ?? [],
     weights: payload.weights ?? EMPTY_DATA.weights,
+    subjectNames,
+    sectionNames: { [section.id]: formatSectionLabel(section) },
   };
 }
 
@@ -91,39 +102,16 @@ function average(values: readonly number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-async function loadDemoStudents(section: Section): Promise<DemoStudent[]> {
-  const { data } = await supabase
-    .from('students')
-    .select('id, name, enrollment_number')
-    .eq('section_id', section.id)
-    .order('name');
-
-  return ((data ?? []) as Array<{ id: string; name: string; enrollment_number?: string | null }>).map((row) => ({
-    id: row.id,
-    name: row.name,
-    enrollmentNumber: row.enrollment_number ?? undefined,
-    sectionName: formatSectionLabel(section),
-  }));
-}
-
 async function loadDemoSubjects(section: Section): Promise<DemoSubject[]> {
-  if (!section.semester) {
-    return [];
-  }
-  const { data } = await supabase
-    .from('subjects')
-    .select('id, name')
-    .eq('semester', section.semester)
-    .order('name');
-  return ((data ?? []) as DemoSubject[]);
+  return loadSubjectOptionsForSection(section);
 }
 
 async function fetchDemoDashboardData(section: Section): Promise<DashboardData> {
   const [students, subjects] = await Promise.all([
-    loadDemoStudents(section),
+    loadRosterStudentsForSection(section),
     loadDemoSubjects(section),
   ]);
-  const studentMetrics = buildDemoStudentMetrics(students, formatSectionLabel(section));
+  const studentMetrics = buildDemoStudentMetrics(students);
   const timetable = createLocalDemoTimetableAccess(() => subjects);
   const timetableEntries = await timetable.listEntries(section.id);
   const avgAttendancePercent = average(studentMetrics.map((student) => student.attendancePercent));
@@ -140,6 +128,8 @@ async function fetchDemoDashboardData(section: Section): Promise<DashboardData> 
     studentMetrics,
     attendanceTrend: buildDemoAttendanceTrend(section.id),
     weights: loadDemoLeaderboardConfig().weights,
+    subjectNames: Object.fromEntries(subjects.map((subject) => [subject.id, subject.name])),
+    sectionNames: { [section.id]: formatSectionLabel(section) },
   };
 }
 
@@ -181,5 +171,12 @@ export default function DashboardPage() {
     [resolved],
   );
 
-  return <DashboardView key={selectedSection?.id ?? 'none'} dataProvider={dataProvider} />;
+  return (
+    <DashboardView
+      key={selectedSection?.id ?? 'none'}
+      dataProvider={dataProvider}
+      subjectNames={resolved.subjectNames}
+      sectionNames={resolved.sectionNames}
+    />
+  );
 }

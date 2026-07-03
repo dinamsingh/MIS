@@ -31,10 +31,11 @@ const demoSubjectId = (code: string): string => `demo-subject-${code}`;
 
 /** Demo batches (mirrors the seed; includes the graduated one, filtered later). */
 export const MOCK_BATCHES: readonly Batch[] = [
-  { id: '2025-29', startYear: 2025, currentSem: 1, status: 'classes' },
-  { id: '2024-28', startYear: 2024, currentSem: 3, status: 'classes' },
-  { id: '2023-27', startYear: 2023, currentSem: 5, status: 'classes' },
-  { id: '2022-26', startYear: 2022, currentSem: 7, status: 'classes' },
+  { id: '2026-30', startYear: 2026, currentSem: 1, status: 'classes' },
+  { id: '2025-29', startYear: 2025, currentSem: 3, status: 'classes' },
+  { id: '2024-28', startYear: 2024, currentSem: 5, status: 'classes' },
+  { id: '2023-27', startYear: 2023, currentSem: 7, status: 'classes' },
+  { id: '2022-26', startYear: 2022, currentSem: 8, status: 'graduated' },
   { id: '2021-25', startYear: 2021, currentSem: 8, status: 'graduated' },
 ];
 

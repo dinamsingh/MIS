@@ -15,11 +15,13 @@ import QuizCreationView, {
 import { createQuizAccess } from '@data/access/quizAccess';
 import { createLocalDemoQuizAccess, isLocalDemoMode } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
-import { formatSectionLabel } from '@presentation/format/sectionLabel';
+import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
+import { loadRosterStudentsForSections } from '@presentation/loaders/rosterStudents';
 
 const supabaseQuizAccess = createQuizAccess(supabase);
 
 export default function QuizCreationPage() {
+  const { sections } = useSelectedSection();
   const [units, setUnits] = useState<QuizUnitOption[]>([]);
   const [students, setStudents] = useState<QuizAttemptStudent[]>([]);
   const quizAccess = useMemo(
@@ -39,46 +41,26 @@ export default function QuizCreationPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const [unitRes, sectionRes, studentRes] = await Promise.all([
+        const [unitRes, roster] = await Promise.all([
           supabase.from('units').select('id, name').order('name'),
-          supabase.from('sections').select('id, name, batch, semester, department'),
-          supabase.from('students').select('id, name, section_id').order('name'),
+          loadRosterStudentsForSections(sections),
         ]);
         if (unitRes.data) {
           setUnits(unitRes.data as QuizUnitOption[]);
         }
 
-        const sectionLabelById = new Map<string, string>();
-        for (const row of (sectionRes.data ?? []) as Array<{
-          id: string;
-          name: string;
-          batch: string | null;
-          semester: string | null;
-          department: string | null;
-        }>) {
-          sectionLabelById.set(row.id, formatSectionLabel(row));
-        }
-
-        if (studentRes.data) {
-          setStudents(
-            (studentRes.data as Array<{
-              id: string;
-              name: string;
-              section_id?: string | null;
-            }>).map((row) => ({
-              id: row.id,
-              name: row.name,
-              ...(row.section_id
-                ? { sectionLabel: sectionLabelById.get(row.section_id) }
-                : {}),
-            })),
-          );
-        }
+        setStudents(
+          roster.map((student) => ({
+            id: student.id,
+            name: student.name,
+            sectionLabel: student.sectionLabel,
+          })),
+        );
       } catch {
         // View handles empty state gracefully.
       }
     })();
-  }, []);
+  }, [sections]);
 
   return <QuizCreationView quizAccess={quizAccess} units={units} students={students} />;
 }

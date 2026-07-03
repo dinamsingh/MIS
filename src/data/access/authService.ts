@@ -137,6 +137,14 @@ export interface AuthService {
   /** Sign in the pre-provisioned teacher with email/password (Req 1.2, 1.4). */
   signInTeacherPassword(email: string, password: string): Promise<Result<Actor, AuthError>>;
   /**
+   * Send a one-time login code to a REGISTERED teacher email. Uses
+   * `shouldCreateUser: false`, so an email that is not a provisioned Supabase
+   * Auth user is rejected — this enforces "only registered emails may log in".
+   */
+  sendEmailOtp(email: string): Promise<Result<void, AuthError>>;
+  /** Verify the emailed OTP code and, on success, establish the session. */
+  verifyEmailOtp(email: string, token: string): Promise<Result<Actor, AuthError>>;
+  /**
    * Start Google OAuth for a teacher or student (Req 1.3, 2.3, 2.4). This
    * redirects the browser to Google; the session is established on return and
    * surfaced via {@link AuthService.getCurrentActor} / {@link AuthService.subscribe}.
@@ -183,6 +191,41 @@ export function createAuthService(
         return err<AuthError>({
           code: 'invalid_credentials',
           message: messages.auth.invalidCredentials,
+        });
+      }
+      return ok(actorFromSession(data.session, config));
+    },
+
+    async sendEmailOtp(email: string): Promise<Result<void, AuthError>> {
+      const trimmed = email.trim();
+      if (trimmed.length === 0) {
+        return err<AuthError>({ code: 'invalid_email', message: 'Enter your college email.' });
+      }
+      const { error } = await client.auth.signInWithOtp({
+        email: trimmed,
+        // Do NOT create new users — only pre-provisioned (registered) teacher
+        // emails can request a code.
+        options: { shouldCreateUser: false },
+      });
+      if (error) {
+        return err<AuthError>({
+          code: 'otp_send_failed',
+          message: 'This email is not registered, or the code could not be sent. Contact your admin.',
+        });
+      }
+      return ok(undefined);
+    },
+
+    async verifyEmailOtp(email: string, token: string): Promise<Result<Actor, AuthError>> {
+      const { data, error } = await client.auth.verifyOtp({
+        email: email.trim(),
+        token: token.trim(),
+        type: 'email',
+      });
+      if (error || !data.session) {
+        return err<AuthError>({
+          code: 'otp_invalid',
+          message: 'That code is invalid or expired. Please try again.',
         });
       }
       return ok(actorFromSession(data.session, config));
