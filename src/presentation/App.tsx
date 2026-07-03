@@ -104,28 +104,34 @@ function OnboardingRoute() {
   return <OnboardingPage />;
 }
 
-/** Root redirect: teacher → /dashboard, unauthenticated → /sign-in. */
+/** Root redirect: any authenticated user → /dashboard, unauthenticated → /sign-in. */
 function RootRedirect() {
-  const { isTeacher, isLoading } = useAuth();
+  const { actor, isLoading } = useAuth();
 
   if (isLoading) {
     return null;
   }
 
-  return <Navigate to={isTeacher ? '/dashboard' : '/sign-in'} replace />;
+  return <Navigate to={actor.kind !== 'anonymous' ? '/dashboard' : '/sign-in'} replace />;
 }
 
 /** Sign-in route — redirects to dashboard if already authenticated, or navigates after successful login. */
 function SignInRoute() {
-  const navigate = useNavigate();
-  const { isTeacher, isLoading } = useAuth();
+  const { isLoading, actor } = useAuth();
 
-  // Already authenticated teacher → go to dashboard
-  if (!isLoading && isTeacher) {
+  // Any authenticated (non-anonymous) user already has a session → send them
+  // into the teacher app. The onboarding gate decides dashboard vs wizard.
+  // We deliberately do NOT auto-sign-out lingering sessions here; that caused
+  // a 403 logout loop on expired tokens and bounced valid users back to login.
+  if (!isLoading && actor.kind !== 'anonymous') {
     return <Navigate to="/dashboard" replace />;
   }
 
-  return <TeacherSignInView onSignedIn={() => navigate('/dashboard', { replace: true })} />;
+  return <TeacherSignInView onSignedIn={() => {
+    // Force auth state to re-read the fresh session before navigating, so
+    // RequireTeacher sees the new teacher session (not a stale student one).
+    window.location.replace('/dashboard');
+  }} />;
 }
 
 /** Top-level application component. */

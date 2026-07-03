@@ -208,13 +208,18 @@ export function createAuthService(
         options: { shouldCreateUser: false },
       });
       if (error) {
-        // Differentiate server issues (5xx/timeout) from "user not found" so
-        // the teacher sees a helpful message and can fallback to password login.
         const status = (error as unknown as { status?: number }).status;
+        const msg = error.message?.toLowerCase() ?? '';
         if (status && status >= 500) {
           return err<AuthError>({
             code: 'server_unavailable',
             message: 'Server temporarily unavailable. Try again in a moment, or use password login below.',
+          });
+        }
+        if (msg.includes('rate limit')) {
+          return err<AuthError>({
+            code: 'rate_limited',
+            message: 'Too many attempts. Please wait a few minutes before trying again.',
           });
         }
         return err<AuthError>({

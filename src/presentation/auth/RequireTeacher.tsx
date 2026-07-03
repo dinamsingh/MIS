@@ -30,13 +30,17 @@ export default function RequireTeacher({
   fallback = null,
   children,
 }: RequireTeacherProps) {
-  const { isTeacher, isLoading } = useAuth();
+  const { isLoading, actor } = useAuth();
 
   if (isLoading) {
     return <>{fallback}</>;
   }
 
-  if (!isTeacher) {
+  // Any authenticated user may reach the teacher area. Whether they are a
+  // fully set-up teacher is decided per-user by the onboarding gate (teachers
+  // table + teacher_assignments), not by a single hardcoded email. Students
+  // never navigate here — they use the public /quiz/:token routes.
+  if (actor.kind === 'anonymous') {
     return <Navigate to={redirectTo} replace />;
   }
 
