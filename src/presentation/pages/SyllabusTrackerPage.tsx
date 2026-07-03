@@ -4,6 +4,7 @@ import { createSyllabusAccess } from '@data/access/syllabusAccess';
 import { createLocalDemoSyllabusAccess, isLocalDemoMode } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
+import { loadSubjectOptionsForSection } from '@presentation/loaders/subjectOptions';
 
 const supabaseAccess = createSyllabusAccess(supabase);
 
@@ -22,21 +23,15 @@ export default function SyllabusTrackerPage() {
       setSubjects([]);
       return;
     }
+    setSubjects([]);
     void (async () => {
       try {
-        const { data } = await supabase
-          .from('subjects')
-          .select('id, name')
-          .eq('semester', semester)
-          .order('name');
-        if (data) {
-          setSubjects(data as SyllabusSubject[]);
-        }
+        setSubjects(await loadSubjectOptionsForSection(selectedSection));
       } catch {
         // View handles empty state gracefully.
       }
     })();
-  }, [semester]);
+  }, [semester, selectedSection]);
 
   return <SyllabusTrackerView subjects={subjects} access={access} />;
 }

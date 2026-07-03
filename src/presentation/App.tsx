@@ -16,7 +16,7 @@
  * Requirements: 1.5, 20.7
  */
 
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@presentation/auth';
 import { RequireTeacher } from '@presentation/auth';
@@ -24,6 +24,7 @@ import AppLayout from '@presentation/components/AppLayout';
 import { TeacherSignInView, LockedFeatureView } from '@presentation/views';
 import PageLoader from '@presentation/components/PageLoader';
 import { SelectedSectionProvider } from '@presentation/context/SelectedSectionContext';
+import { useOnboardingStatus } from '../features/onboarding/hooks/useOnboardingStatus';
 
 // --- Lazy-loaded page chunks (one per route) ---
 const DashboardPage = lazy(() => import('@presentation/pages/DashboardPage'));
@@ -40,6 +41,24 @@ const LeaderboardPage = lazy(() => import('@presentation/pages/LeaderboardPage')
 const HeatmapPage = lazy(() => import('@presentation/pages/HeatmapPage'));
 const StudentQuizAccessPage = lazy(() => import('@presentation/pages/StudentQuizAccessPage'));
 const QuizAttemptPage = lazy(() => import('@presentation/pages/QuizAttemptPage'));
+const OnboardingPage = lazy(() => import('../features/onboarding/OnboardingPage'));
+
+/**
+ * Onboarding gate for the teacher app shell. While the onboarded status loads
+ * it renders a loader (no redirect flicker); an un-onboarded teacher is sent to
+ * the wizard; an onboarded teacher continues to the requested view.
+ */
+function OnboardingGate({ children }: { children: ReactNode }) {
+  const { loading, onboarded } = useOnboardingStatus();
+
+  if (loading) {
+    return <PageLoader />;
+  }
+  if (!onboarded) {
+    return <Navigate to="/onboarding" replace />;
+  }
+  return <>{children}</>;
+}
 
 /**
  * Teacher layout shell — wraps children in RequireTeacher + AppLayout with
@@ -57,37 +76,62 @@ function TeacherShell() {
 
   return (
     <RequireTeacher>
-      <SelectedSectionProvider>
-        <AppLayout activePath={location.pathname} onNavigate={(path) => navigate(path)} onLogout={handleLogout}>
-          <Outlet />
-        </AppLayout>
-      </SelectedSectionProvider>
+      <OnboardingGate>
+        <SelectedSectionProvider>
+          <AppLayout activePath={location.pathname} onNavigate={(path) => navigate(path)} onLogout={handleLogout}>
+            <Outlet />
+          </AppLayout>
+        </SelectedSectionProvider>
+      </OnboardingGate>
     </RequireTeacher>
   );
 }
 
-/** Root redirect: teacher → /dashboard, unauthenticated → /sign-in. */
+/**
+ * Full-screen onboarding route. Guarded by RequireTeacher (no sidebar shell).
+ * If the teacher is already onboarded they are redirected to the dashboard;
+ * while the status loads a loader is shown to avoid redirect flicker.
+ */
+function OnboardingRoute() {
+  const { loading, onboarded } = useOnboardingStatus();
+
+  if (loading) {
+    return <PageLoader />;
+  }
+  if (onboarded) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <OnboardingPage />;
+}
+
+/** Root redirect: any authenticated user → /dashboard, unauthenticated → /sign-in. */
 function RootRedirect() {
-  const { isTeacher, isLoading } = useAuth();
+  const { actor, isLoading } = useAuth();
 
   if (isLoading) {
     return null;
   }
 
-  return <Navigate to={isTeacher ? '/dashboard' : '/sign-in'} replace />;
+  return <Navigate to={actor.kind !== 'anonymous' ? '/dashboard' : '/sign-in'} replace />;
 }
 
 /** Sign-in route — redirects to dashboard if already authenticated, or navigates after successful login. */
 function SignInRoute() {
-  const navigate = useNavigate();
-  const { isTeacher, isLoading } = useAuth();
+  const { isLoading, actor } = useAuth();
 
-  // Already authenticated teacher → go to dashboard
-  if (!isLoading && isTeacher) {
+  // Any authenticated (non-anonymous) user already has a session → send them
+  // into the teacher app. The onboarding gate decides dashboard vs wizard.
+  // We deliberately do NOT auto-sign-out lingering sessions here; that caused
+  // a 403 logout loop on expired tokens and bounced valid users back to login.
+  if (!isLoading && actor.kind !== 'anonymous') {
     return <Navigate to="/dashboard" replace />;
   }
 
-  return <TeacherSignInView onSignedIn={() => navigate('/dashboard', { replace: true })} />;
+  return <TeacherSignInView onSignedIn={() => {
+    // Force auth state to re-read the fresh session before navigating, so
+    // RequireTeacher sees the new teacher session (not a stale student one).
+    window.location.replace('/dashboard');
+  }} />;
 }
 
 /** Top-level application component. */
@@ -101,6 +145,9 @@ export default function App() {
             <Route path="/sign-in" element={<SignInRoute />} />
             <Route path="/quiz/:token" element={<StudentQuizAccessPage />} />
             <Route path="/quiz/:token/attempt" element={<QuizAttemptPage />} />
+
+            {/* Full-screen onboarding (teacher-guarded, no sidebar shell) */}
+            <Route path="/onboarding" element={<OnboardingRoute />} />
 
             {/* Teacher-guarded routes wrapped in layout shell */}
             <Route element={<TeacherShell />}>

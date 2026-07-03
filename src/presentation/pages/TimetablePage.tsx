@@ -4,6 +4,7 @@ import { createTimetableAccess } from '@data/access/timetableAccess';
 import { createLocalDemoTimetableAccess, isLocalDemoMode } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
+import { loadSubjectOptionsForSection } from '@presentation/loaders/subjectOptions';
 
 const supabaseAccess = createTimetableAccess(supabase);
 
@@ -23,17 +24,10 @@ export default function TimetablePage() {
       setSubjects([]);
       return;
     }
+    setSubjects([]);
     void (async () => {
       try {
-        // Subjects are scoped to the selected section's semester.
-        const subjectRows = await supabase
-          .from('subjects')
-          .select('id, name')
-          .eq('semester', selectedSection.semester)
-          .order('name');
-        if (subjectRows.data) {
-          setSubjects(subjectRows.data as SubjectOption[]);
-        }
+        setSubjects(await loadSubjectOptionsForSection(selectedSection));
       } catch {
         // Subjects will remain empty; view handles empty state gracefully.
       }

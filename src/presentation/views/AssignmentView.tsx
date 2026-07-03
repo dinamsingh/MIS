@@ -505,6 +505,18 @@ export default function AssignmentView({
   // list students from all of them. `null` means "not resolved / show all". ---
   const [subjectSectionIds, setSubjectSectionIds] = useState<string[] | null>(null);
 
+  useEffect(() => {
+    if (subjects.length === 0) {
+      setSubjectId('');
+      setUnitId('');
+      return;
+    }
+    if (subjectId !== '' && !subjects.some((subject) => subject.id === subjectId)) {
+      setSubjectId('');
+      setUnitId('');
+    }
+  }, [subjectId, subjects]);
+
   // Load existing assignments on mount
   useEffect(() => {
     let cancelled = false;

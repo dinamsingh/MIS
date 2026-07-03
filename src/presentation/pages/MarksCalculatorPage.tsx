@@ -4,6 +4,8 @@ import { createMarksAccess } from '@data/access/marksAccess';
 import { createLocalDemoMarksAccess, isLocalDemoMode } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
+import { loadRosterStudentsForSection } from '@presentation/loaders/rosterStudents';
+import { loadSubjectOptionsForSection } from '@presentation/loaders/subjectOptions';
 
 const supabaseAccess = createMarksAccess(supabase);
 
@@ -26,26 +28,18 @@ export default function MarksCalculatorPage() {
       setSubjectId('');
       return;
     }
+    setSubjects([]);
+    setSubjectId('');
     void (async () => {
       try {
-        const { data } = await supabase
-          .from('subjects')
-          .select('id, name')
-          .eq('semester', semester)
-          .order('name');
-        if (data) {
-          setSubjects(data as { id: string; name: string }[]);
-          if (data.length > 0) {
-            setSubjectId(data[0].id as string);
-          } else {
-            setSubjectId('');
-          }
-        }
+        const loadedSubjects = await loadSubjectOptionsForSection(selectedSection);
+        setSubjects(loadedSubjects);
+        setSubjectId(loadedSubjects[0]?.id ?? '');
       } catch {
         // empty state
       }
     })();
-  }, [semester]);
+  }, [semester, selectedSection]);
 
   useEffect(() => {
     if (!subjectId || !sectionId) {
@@ -54,27 +48,19 @@ export default function MarksCalculatorPage() {
     }
     void (async () => {
       try {
-        // Students in the globally-selected section.
-        const { data } = await supabase
-          .from('students')
-          .select('id, name, enrollment_number')
-          .eq('section_id', sectionId)
-          .order('name');
-
-        if (data) {
-          setStudents(
-            data.map((row: { id: string; name: string; enrollment_number?: string | null }) => ({
-              id: row.id,
-              name: row.name,
-              enrollmentNumber: row.enrollment_number || undefined,
-            })),
-          );
-        }
+        const roster = selectedSection ? await loadRosterStudentsForSection(selectedSection) : [];
+        setStudents(
+          roster.map((student) => ({
+            id: student.id,
+            name: student.name,
+            enrollmentNumber: student.enrollmentNumber,
+          })),
+        );
       } catch {
         // empty state
       }
     })();
-  }, [subjectId, sectionId]);
+  }, [subjectId, sectionId, selectedSection]);
 
   if (!subjectId) {
     return (

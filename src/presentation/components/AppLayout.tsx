@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import Sidebar from '@presentation/components/Sidebar';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 import { formatSectionLabel } from '@presentation/format/sectionLabel';
+import { loadSubjectOptionsForSection } from '@presentation/loaders/subjectOptions';
 import { navGroups } from '@presentation/navigation';
 
 interface AppLayoutProps {
@@ -19,6 +20,47 @@ function formatHeaderDate(): string {
   });
 }
 
+interface SubjectSummary {
+  readonly compact: string;
+  readonly full: string;
+}
+
+const emptySubjectSummary: SubjectSummary = { compact: '', full: '' };
+
+function shortSubjectName(name: string): string {
+  const match = name.match(/^([A-Z]{2,4}-?\d{3,4})\s*[-–]\s*(.+)$/);
+  const code = match?.[1];
+  const title = (match?.[2] ?? name).replace(/\([^)]*\)/g, '').trim();
+  const words = title
+    .replace(/&/g, ' and ')
+    .split(/[\s/-]+/)
+    .map((word) => word.replace(/[^a-zA-Z0-9]/g, ''))
+    .filter((word) => word.length > 0 && !['and', 'of', 'for', 'the'].includes(word.toLowerCase()));
+
+  const initials = words.length > 1
+    ? words.map((word) => word[0]?.toUpperCase()).join('')
+    : title.slice(0, 12);
+  const shortName = initials.length > 0 ? initials : title.slice(0, 12);
+
+  return code ? `${code} ${shortName}` : shortName;
+}
+
+function summarizeSubjects(subjects: readonly { readonly name: string }[]): SubjectSummary {
+  if (subjects.length === 0) {
+    return emptySubjectSummary;
+  }
+
+  const compactSubjects = subjects.map((subject) => shortSubjectName(subject.name));
+  const compact = subjects.length > 1
+    ? `${compactSubjects[0]} +${subjects.length - 1}`
+    : compactSubjects[0];
+
+  return {
+    compact,
+    full: subjects.map((subject) => subject.name).join(', '),
+  };
+}
+
 /**
  * Application layout shell: responsive sidebar, sticky topbar, global section
  * selector, and content frame. This component owns layout-only state; routes,
@@ -28,8 +70,38 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const { sections, selectedSectionId, setSelectedSectionId, isLoading } = useSelectedSection();
+  const { sections, selectedSectionId, selectedSection, setSelectedSectionId, isLoading } = useSelectedSection();
+  const [subjectSummaryBySectionId, setSubjectSummaryBySectionId] = useState<Record<string, SubjectSummary>>({});
   const todayLabel = useMemo(() => formatHeaderDate(), []);
+
+  useEffect(() => {
+    let active = true;
+
+    if (sections.length === 0) {
+      setSubjectSummaryBySectionId({});
+      return;
+    }
+
+    void (async () => {
+      const summaries = await Promise.all(
+        sections.map(async (section) => {
+          try {
+            return [section.id, summarizeSubjects(await loadSubjectOptionsForSection(section))] as const;
+          } catch {
+            return [section.id, emptySubjectSummary] as const;
+          }
+        }),
+      );
+
+      if (active) {
+        setSubjectSummaryBySectionId(Object.fromEntries(summaries));
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [sections]);
 
   const activeTrail = useMemo(() => {
     for (const group of navGroups) {
@@ -53,6 +125,19 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
     setIsUserMenuOpen(false);
     onLogout?.();
   }, [onLogout]);
+
+  const selectedSubjectSummary = selectedSection
+    ? subjectSummaryBySectionId[selectedSection.id] ?? emptySubjectSummary
+    : emptySubjectSummary;
+
+  const sectionOptionLabel = useCallback(
+    (section: typeof sections[number]) => {
+      const base = formatSectionLabel(section);
+      const summary = subjectSummaryBySectionId[section.id];
+      return summary?.compact ? `${base} / ${summary.compact}` : base;
+    },
+    [subjectSummaryBySectionId],
+  );
 
   useEffect(() => {
     if (!isDrawerOpen && !isUserMenuOpen) return;
@@ -132,7 +217,14 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
                     onChange={(e) => setSelectedSectionId(e.target.value)}
                     disabled={isLoading || sections.length === 0}
                     aria-label="Select section"
-                    className="max-w-[52vw] cursor-pointer appearance-none bg-transparent pr-5 text-xs font-semibold text-text outline-none disabled:cursor-default disabled:text-muted sm:max-w-[18rem]"
+                    title={
+                      selectedSection
+                        ? selectedSubjectSummary.full
+                          ? `${formatSectionLabel(selectedSection)} / ${selectedSubjectSummary.full}`
+                          : formatSectionLabel(selectedSection)
+                        : undefined
+                    }
+                    className="max-w-[62vw] cursor-pointer appearance-none bg-transparent pr-5 text-xs font-semibold text-text outline-none disabled:cursor-default disabled:text-muted sm:max-w-[24rem] xl:max-w-[32rem]"
                   >
                     {sections.length === 0 ? (
                       <option value="" className="bg-surface text-text">
@@ -141,7 +233,7 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
                     ) : (
                       sections.map((section) => (
                         <option key={section.id} value={section.id} className="bg-surface text-text">
-                          {formatSectionLabel(section)}
+                          {sectionOptionLabel(section)}
                         </option>
                       ))
                     )}

@@ -1,28 +1,36 @@
 import { useMemo } from 'react';
-import HeatmapView, { type HeatmapPersistence, type HeatmapSectionOption, type HeatmapStudent } from '@presentation/views/HeatmapView';
+import HeatmapView, {
+  type HeatmapPersistence,
+  type HeatmapSectionOption,
+  type HeatmapStudent,
+} from '@presentation/views/HeatmapView';
 import { createHeatmapAccess } from '@data/access/heatmapAccess';
 import { demoNumber, isLocalDemoMode } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
+import { loadRosterStudentsForSection } from '@presentation/loaders/rosterStudents';
+import type { Section } from '@data/access/rows';
 
 const supabaseHeatmap = createHeatmapAccess(supabase);
 
-async function loadStudents(sectionId: string): Promise<HeatmapStudent[]> {
-  // Query students table which has section_id
-  const { data } = await supabase
-    .from('students')
-    .select('id, name, enrollment_number')
-    .eq('section_id', sectionId)
-    .order('name');
-  if (!data) return [];
-  return data.map((row: { id: string; name: string; enrollment_number?: string | null }) => ({
-    id: row.id,
-    name: row.name,
-    enrollmentNumber: row.enrollment_number || undefined,
-  }));
+function createStudentLoader(sections: readonly Section[]) {
+  return async function loadStudents(sectionId: string): Promise<HeatmapStudent[]> {
+    const section = sections.find((item) => item.id === sectionId);
+    if (!section) {
+      return [];
+    }
+    const roster = await loadRosterStudentsForSection(section);
+    return roster.map((student) => ({
+      id: student.id,
+      name: student.name,
+      enrollmentNumber: student.enrollmentNumber,
+    }));
+  };
 }
 
-function createLocalHeatmap(loadStudentsForSection: typeof loadStudents): HeatmapPersistence {
+function createLocalHeatmap(
+  loadStudentsForSection: (sectionId: string) => Promise<HeatmapStudent[]>,
+): HeatmapPersistence {
   async function loadStudentAttendance(sectionId: string) {
     const students = await loadStudentsForSection(sectionId);
     return students.map((student) => {
@@ -62,13 +70,17 @@ function createLocalHeatmap(loadStudentsForSection: typeof loadStudents): Heatma
 
 export default function HeatmapPage() {
   const { selectedSection } = useSelectedSection();
+
+  // The globally-selected section is authoritative; no per-page picker.
+  const sections: HeatmapSectionOption[] = selectedSection ? [selectedSection] : [];
+  const loadStudents = useMemo(
+    () => createStudentLoader(selectedSection ? [selectedSection] : []),
+    [selectedSection],
+  );
   const heatmap = useMemo(
     () => (isLocalDemoMode() ? createLocalHeatmap(loadStudents) : supabaseHeatmap),
-    [],
+    [loadStudents],
   );
-
-  // The globally-selected section is authoritative — no per-page picker.
-  const sections: HeatmapSectionOption[] = selectedSection ? [selectedSection] : [];
 
   return (
     <HeatmapView

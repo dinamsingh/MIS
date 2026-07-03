@@ -19,13 +19,11 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { createSectionsAccess } from '@data/access/sectionsAccess';
+import { fetchOnboardedSections } from '../../features/onboarding/api/onboarding';
 import type { Section } from '@data/access/rows';
 
 /** localStorage key holding the last-selected section id. */
 const STORAGE_KEY = 'mis_selected_section_id';
-
-const sectionsAccess = createSectionsAccess();
 
 /** The value exposed by {@link useSelectedSection}. */
 export interface SelectedSectionValue {
@@ -56,7 +54,7 @@ export function SelectedSectionProvider({ children }: { children: ReactNode }) {
     let active = true;
     void (async () => {
       try {
-        const loaded = await sectionsAccess.listSections();
+        const loaded = await fetchOnboardedSections();
         if (!active) return;
         setSections(loaded);
 

@@ -4,6 +4,7 @@ import type { QuizAccessRepository, QuizInput, QuestionInput, AttemptSummary } f
 import type { SubmitAttemptOutcome } from '@data/access/parsers';
 import type { SyllabusAccess, UnitInput, TopicInput } from '@data/access/syllabusAccess';
 import type { TimetableAccess, TimetableEntryInput } from '@data/access/timetableAccess';
+import type { ParsedRosterRow } from '@domain/services/rosterImportService';
 import {
   type AttendanceMark,
   type AttendanceStatusMark,
@@ -36,6 +37,7 @@ const STORAGE = {
   assignments: 'mis_demo_assignments_v1',
   materials: 'mis_demo_materials_v1',
   rosterImports: 'mis_demo_roster_imports_v1',
+  rosters: 'mis_demo_rosters_v1',
 } as const;
 
 export interface DemoStudent {
@@ -962,4 +964,31 @@ export function recordDemoRosterImport(sectionId: string, imported: number): voi
     { sectionId, imported, createdAt: new Date().toISOString() },
     ...imports,
   ]);
+}
+
+export function replaceDemoRoster(
+  sectionId: string,
+  rows: readonly ParsedRosterRow[],
+): { deleted: number; imported: number } {
+  const rosters = readDemoValue<Record<string, DemoStudent[]>>(STORAGE.rosters, {});
+  const existing = rosters[sectionId] ?? [];
+  const next = rows.map((row) => ({
+    id: `demo-student-${sectionId}-${row.enrollmentNumber}`,
+    name: row.name,
+    enrollmentNumber: row.enrollmentNumber,
+    sectionId,
+  }));
+
+  writeDemoValue(STORAGE.rosters, {
+    ...rosters,
+    [sectionId]: next,
+  });
+  recordDemoRosterImport(sectionId, rows.length);
+
+  return { deleted: existing.length, imported: rows.length };
+}
+
+export function listDemoRoster(sectionId: string): DemoStudent[] {
+  const rosters = readDemoValue<Record<string, DemoStudent[]>>(STORAGE.rosters, {});
+  return rosters[sectionId] ?? [];
 }

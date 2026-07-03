@@ -34,7 +34,6 @@ export const navGroups: NavGroup[] = [
     label: 'Academics',
     items: [
       { id: 'attendance', label: 'Attendance', icon: '✓', path: '/attendance' },
-      { id: 'heatmap', label: 'Heatmap', icon: '🗓️', path: '/heatmap' },
       { id: 'syllabus', label: 'Syllabus', icon: '📖', path: '/syllabus' },
       { id: 'timetable', label: 'Timetable', icon: '🕛', path: '/timetable', badge: 'NEW' },
     ],
@@ -52,6 +51,7 @@ export const navGroups: NavGroup[] = [
     id: 'insights',
     label: 'Insights',
     items: [
+      { id: 'heatmap', label: 'Heatmap', icon: '🗓️', path: '/heatmap' },
       { id: 'leaderboard', label: 'Leaderboard', icon: '🏆', path: '/leaderboard' },
     ],
   },
