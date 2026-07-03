@@ -208,6 +208,15 @@ export function createAuthService(
         options: { shouldCreateUser: false },
       });
       if (error) {
+        // Differentiate server issues (5xx/timeout) from "user not found" so
+        // the teacher sees a helpful message and can fallback to password login.
+        const status = (error as unknown as { status?: number }).status;
+        if (status && status >= 500) {
+          return err<AuthError>({
+            code: 'server_unavailable',
+            message: 'Server temporarily unavailable. Try again in a moment, or use password login below.',
+          });
+        }
         return err<AuthError>({
           code: 'otp_send_failed',
           message: 'This email is not registered, or the code could not be sent. Contact your admin.',
