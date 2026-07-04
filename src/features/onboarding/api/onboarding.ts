@@ -344,17 +344,23 @@ async function fetchAllBatches(): Promise<Batch[]> {
  * never creates duplicate rows.
  */
 async function getOrCreateRealSection(derived: Section): Promise<Section> {
+  // Use limit(1) rather than maybeSingle(): historically the (name, batch)
+  // pair was not uniquely constrained, so duplicate rows could exist. A plain
+  // maybeSingle() throws when it sees more than one row, which would break the
+  // whole section list. Picking the first deterministically (ordered by id)
+  // keeps the selector working even if stray duplicates remain in the table.
   const existing = await supabase
     .from('sections')
     .select('id, name, batch, semester, department')
     .eq('name', derived.name)
     .eq('batch', derived.batch)
-    .maybeSingle();
+    .order('id', { ascending: true })
+    .limit(1);
   if (existing.error) {
     throw new Error(existing.error.message);
   }
-  if (existing.data) {
-    return existing.data as Section;
+  if (existing.data && existing.data.length > 0) {
+    return existing.data[0] as Section;
   }
 
   const inserted = await supabase
