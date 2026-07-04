@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import AttendanceView, { type AttendanceOption, type AttendanceSectionOption, type RosterStudent } from '@presentation/views/AttendanceView';
 import { createAttendanceAccess } from '@data/access/attendanceAccess';
 import { createLocalDemoAttendanceAccess, isLocalDemoMode, listDemoRoster } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
-import { loadSubjectOptionsForSection } from '@presentation/loaders/subjectOptions';
 
 const supabaseAttendance = createAttendanceAccess(supabase);
 
@@ -39,35 +38,24 @@ async function loadRoster(sectionId: string): Promise<RosterStudent[]> {
 }
 
 export default function AttendancePage() {
-  const { selectedSection } = useSelectedSection();
-  const [subjects, setSubjects] = useState<AttendanceOption[]>([]);
+  const { selectedSection, subjects, selectedSubjectId } = useSelectedSection();
   const attendance = useMemo(
     () => (isLocalDemoMode() ? createLocalDemoAttendanceAccess(loadRoster) : supabaseAttendance),
     [],
   );
 
-  // The globally-selected section is authoritative — no per-page picker.
+  // Section + subject both come from the global top-bar selectors — no per-page
+  // pickers. Attendance is scoped to the one globally-selected subject.
   const sections: AttendanceSectionOption[] = selectedSection ? [selectedSection] : [];
-
-  useEffect(() => {
-    if (!selectedSection?.semester) {
-      setSubjects([]);
-      return;
-    }
-    setSubjects([]);
-    void (async () => {
-      try {
-        setSubjects(await loadSubjectOptionsForSection(selectedSection));
-      } catch {
-        // View handles empty arrays gracefully.
-      }
-    })();
-  }, [selectedSection?.id, selectedSection?.semester]);
+  const scopedSubjects: AttendanceOption[] = useMemo(
+    () => subjects.filter((s) => s.id === selectedSubjectId).map((s) => ({ id: s.id, name: s.name })),
+    [subjects, selectedSubjectId],
+  );
 
   return (
     <AttendanceView
       sections={sections}
-      subjects={subjects}
+      subjects={scopedSubjects}
       timeSlots={DEFAULT_TIME_SLOTS}
       loadRoster={loadRoster}
       attendance={attendance}
