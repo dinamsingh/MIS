@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import Sidebar from '@presentation/components/Sidebar';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 import { formatSectionLabel } from '@presentation/format/sectionLabel';
-import { loadSubjectOptionsForSection } from '@presentation/loaders/subjectOptions';
 import { navGroups } from '@presentation/navigation';
 
 interface AppLayoutProps {
@@ -20,47 +19,6 @@ function formatHeaderDate(): string {
   });
 }
 
-interface SubjectSummary {
-  readonly compact: string;
-  readonly full: string;
-}
-
-const emptySubjectSummary: SubjectSummary = { compact: '', full: '' };
-
-function shortSubjectName(name: string): string {
-  const match = name.match(/^([A-Z]{2,4}-?\d{3,4})\s*[-–]\s*(.+)$/);
-  const code = match?.[1];
-  const title = (match?.[2] ?? name).replace(/\([^)]*\)/g, '').trim();
-  const words = title
-    .replace(/&/g, ' and ')
-    .split(/[\s/-]+/)
-    .map((word) => word.replace(/[^a-zA-Z0-9]/g, ''))
-    .filter((word) => word.length > 0 && !['and', 'of', 'for', 'the'].includes(word.toLowerCase()));
-
-  const initials = words.length > 1
-    ? words.map((word) => word[0]?.toUpperCase()).join('')
-    : title.slice(0, 12);
-  const shortName = initials.length > 0 ? initials : title.slice(0, 12);
-
-  return code ? `${code} ${shortName}` : shortName;
-}
-
-function summarizeSubjects(subjects: readonly { readonly name: string }[]): SubjectSummary {
-  if (subjects.length === 0) {
-    return emptySubjectSummary;
-  }
-
-  const compactSubjects = subjects.map((subject) => shortSubjectName(subject.name));
-  const compact = subjects.length > 1
-    ? `${compactSubjects[0]} +${subjects.length - 1}`
-    : compactSubjects[0];
-
-  return {
-    compact,
-    full: subjects.map((subject) => subject.name).join(', '),
-  };
-}
-
 /**
  * Application layout shell: responsive sidebar, sticky topbar, global section
  * selector, and content frame. This component owns layout-only state; routes,
@@ -70,38 +28,18 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const { sections, selectedSectionId, selectedSection, setSelectedSectionId, isLoading } = useSelectedSection();
-  const [subjectSummaryBySectionId, setSubjectSummaryBySectionId] = useState<Record<string, SubjectSummary>>({});
+  const {
+    sections,
+    selectedSectionId,
+    selectedSection,
+    setSelectedSectionId,
+    isLoading,
+    subjects,
+    selectedSubjectId,
+    setSelectedSubjectId,
+    isSubjectsLoading,
+  } = useSelectedSection();
   const todayLabel = useMemo(() => formatHeaderDate(), []);
-
-  useEffect(() => {
-    let active = true;
-
-    if (sections.length === 0) {
-      setSubjectSummaryBySectionId({});
-      return;
-    }
-
-    void (async () => {
-      const summaries = await Promise.all(
-        sections.map(async (section) => {
-          try {
-            return [section.id, summarizeSubjects(await loadSubjectOptionsForSection(section))] as const;
-          } catch {
-            return [section.id, emptySubjectSummary] as const;
-          }
-        }),
-      );
-
-      if (active) {
-        setSubjectSummaryBySectionId(Object.fromEntries(summaries));
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [sections]);
 
   const activeTrail = useMemo(() => {
     for (const group of navGroups) {
@@ -126,17 +64,11 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
     onLogout?.();
   }, [onLogout]);
 
-  const selectedSubjectSummary = selectedSection
-    ? subjectSummaryBySectionId[selectedSection.id] ?? emptySubjectSummary
-    : emptySubjectSummary;
-
+  // The section dropdown shows ONLY the section (clean). Subjects live in their
+  // own global dropdown beside it.
   const sectionOptionLabel = useCallback(
-    (section: typeof sections[number]) => {
-      const base = formatSectionLabel(section);
-      const summary = subjectSummaryBySectionId[section.id];
-      return summary?.compact ? `${base} / ${summary.compact}` : base;
-    },
-    [subjectSummaryBySectionId],
+    (section: typeof sections[number]) => formatSectionLabel(section),
+    [],
   );
 
   useEffect(() => {
@@ -199,7 +131,7 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
                 </svg>
               </button>
 
-              <div className="hidden min-w-0 flex-col gap-0.5 md:flex">
+              <div className="hidden min-w-0 flex-col gap-0.5 xl:flex">
                 <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1 text-xs text-muted">
                   <span className="truncate">{activeTrail.group}</span>
                   <span aria-hidden="true">/</span>
@@ -208,23 +140,16 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
                 <p className="truncate text-sm font-semibold text-text">{activeTrail.item}</p>
               </div>
 
-              <div className="flex min-w-0 items-center gap-2 rounded-control border border-border bg-background px-3 py-2 text-xs text-soft shadow-soft">
-                <span className="hidden font-medium text-text sm:inline">Section</span>
-                <span className="hidden text-muted sm:inline" aria-hidden="true">/</span>
-                <div className="relative flex min-w-0 items-center">
+              <div className="flex shrink items-center gap-1.5 rounded-control border border-border bg-background px-2.5 py-2 text-xs text-soft shadow-soft">
+                <span className="hidden font-medium text-muted lg:inline">Section</span>
+                <div className="relative flex items-center">
                   <select
                     value={selectedSectionId ?? ''}
                     onChange={(e) => setSelectedSectionId(e.target.value)}
                     disabled={isLoading || sections.length === 0}
                     aria-label="Select section"
-                    title={
-                      selectedSection
-                        ? selectedSubjectSummary.full
-                          ? `${formatSectionLabel(selectedSection)} / ${selectedSubjectSummary.full}`
-                          : formatSectionLabel(selectedSection)
-                        : undefined
-                    }
-                    className="max-w-[62vw] cursor-pointer appearance-none bg-transparent pr-5 text-xs font-semibold text-text outline-none disabled:cursor-default disabled:text-muted sm:max-w-[24rem] xl:max-w-[32rem]"
+                    title={selectedSection ? formatSectionLabel(selectedSection) : undefined}
+                    className="w-24 cursor-pointer truncate appearance-none bg-transparent pr-5 text-xs font-semibold text-text outline-none disabled:cursor-default disabled:text-muted sm:w-36 lg:w-44"
                   >
                     {sections.length === 0 ? (
                       <option value="" className="bg-surface text-text">
@@ -243,6 +168,37 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
                   </span>
                 </div>
               </div>
+
+              {(subjects.length > 0 || isSubjectsLoading) && (
+                <div className="flex shrink items-center gap-1.5 rounded-control border border-border bg-background px-2.5 py-2 text-xs text-soft shadow-soft">
+                  <span className="hidden font-medium text-muted lg:inline">Subject</span>
+                  <div className="relative flex items-center">
+                    <select
+                      value={selectedSubjectId ?? ''}
+                      onChange={(e) => setSelectedSubjectId(e.target.value)}
+                      disabled={isSubjectsLoading || subjects.length === 0}
+                      aria-label="Select subject"
+                      title={subjects.find((s) => s.id === selectedSubjectId)?.name}
+                      className="w-24 cursor-pointer truncate appearance-none bg-transparent pr-5 text-xs font-semibold text-text outline-none disabled:cursor-default disabled:text-muted sm:w-36 lg:w-44"
+                    >
+                      {subjects.length === 0 ? (
+                        <option value="" className="bg-surface text-text">
+                          {isSubjectsLoading ? 'Loading...' : 'No subjects'}
+                        </option>
+                      ) : (
+                        subjects.map((subject) => (
+                          <option key={subject.id} value={subject.id} className="bg-surface text-text">
+                            {subject.name}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                    <span className="pointer-events-none absolute right-0 text-muted" aria-hidden="true">
+                      v
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex min-w-0 items-center justify-end gap-2">

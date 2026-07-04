@@ -1,37 +1,24 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import SyllabusTrackerView, { type SyllabusSubject } from '@presentation/views/SyllabusTrackerView';
 import { createSyllabusAccess } from '@data/access/syllabusAccess';
 import { createLocalDemoSyllabusAccess, isLocalDemoMode } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
-import { loadSubjectOptionsForSection } from '@presentation/loaders/subjectOptions';
 
 const supabaseAccess = createSyllabusAccess(supabase);
 
 export default function SyllabusTrackerPage() {
-  const { selectedSection } = useSelectedSection();
-  const [subjects, setSubjects] = useState<SyllabusSubject[]>([]);
+  // Subject comes from the global top-bar selector.
+  const { subjects, selectedSubjectId } = useSelectedSection();
   const access = useMemo(
     () => (isLocalDemoMode() ? createLocalDemoSyllabusAccess() : supabaseAccess),
     [],
   );
 
-  const semester = selectedSection?.semester ?? null;
+  const scopedSubjects: SyllabusSubject[] = useMemo(
+    () => subjects.filter((s) => s.id === selectedSubjectId).map((s) => ({ id: s.id, name: s.name })),
+    [subjects, selectedSubjectId],
+  );
 
-  useEffect(() => {
-    if (!semester) {
-      setSubjects([]);
-      return;
-    }
-    setSubjects([]);
-    void (async () => {
-      try {
-        setSubjects(await loadSubjectOptionsForSection(selectedSection));
-      } catch {
-        // View handles empty state gracefully.
-      }
-    })();
-  }, [semester, selectedSection]);
-
-  return <SyllabusTrackerView subjects={subjects} access={access} />;
+  return <SyllabusTrackerView subjects={scopedSubjects} access={access} />;
 }
