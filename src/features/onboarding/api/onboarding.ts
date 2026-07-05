@@ -562,3 +562,65 @@ export function buildAssignments(
 
   return rows;
 }
+
+// ---------------------------------------------------------------------------
+// Assignment rows → selection (pure) + current-selection loader
+// Used by the Profile page to pre-fill the subject editor with what the teacher
+// already teaches. This is the inverse of buildAssignments (best-effort: the
+// lab attachment is reconstructed from is_lab rows).
+// ---------------------------------------------------------------------------
+
+/**
+ * Inverse of {@link buildAssignments}: fold flat assignment rows back into the
+ * wizard's {@link import('../types').SelectionState} (batchId → subjectId →
+ * { sections, labSections }). A row with `isLab = true` marks that section's
+ * lab as attached for its subject.
+ */
+export function assignmentsToSelection(
+  assignments: readonly AssignmentInput[],
+): import('../types').SelectionState {
+  const state: import('../types').SelectionState = {};
+  for (const a of assignments) {
+    const batchSel = state[a.batchId] ?? (state[a.batchId] = {});
+    const current = batchSel[a.subjectId] ?? { sections: [], labSections: [] };
+    const sections = current.sections.includes(a.section)
+      ? current.sections
+      : [...current.sections, a.section];
+    const labSections =
+      a.isLab && !current.labSections.includes(a.section)
+        ? [...current.labSections, a.section]
+        : current.labSections;
+    batchSel[a.subjectId] = { sections, labSections };
+  }
+  return state;
+}
+
+/**
+ * Load the current teacher's saved assignments as editable SelectionState, so
+ * the Profile page can seed the subject editor with their existing choices.
+ */
+export async function fetchCurrentSelection(): Promise<import('../types').SelectionState> {
+  if (isLocalDemoMode()) {
+    return assignmentsToSelection(readDemoRecord().assignments);
+  }
+  const teacherId = await requireTeacherId();
+  const { data, error } = await supabase
+    .from('teacher_assignments')
+    .select('subject_id, batch_id, section, is_lab')
+    .eq('teacher_id', teacherId);
+  if (error) {
+    throw new Error(error.message);
+  }
+  const rows = (data as Array<{
+    subject_id: string;
+    batch_id: string;
+    section: AssignmentInput['section'];
+    is_lab: boolean;
+  }>).map((r) => ({
+    subjectId: r.subject_id,
+    batchId: r.batch_id,
+    section: r.section,
+    isLab: r.is_lab,
+  }));
+  return assignmentsToSelection(rows);
+}

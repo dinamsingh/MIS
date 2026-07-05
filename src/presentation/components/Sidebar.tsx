@@ -1,5 +1,8 @@
+import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { isFeatureEnabled } from '@domain/featureFlags';
+import { useAuth } from '@presentation/auth';
+import { fetchTeacherProfile } from '../../features/onboarding/api/onboarding';
 import { navGroups } from '@presentation/navigation';
 import { motionDurations, motionEase } from '@presentation/motion';
 
@@ -10,6 +13,25 @@ interface SidebarProps {
   onNavigate?: (path: string) => void;
   onLogout?: () => void;
   onToggleCollapse?: () => void;
+}
+
+function nameFromEmail(email: string): string {
+  const local = email.split('@')[0] ?? '';
+  return local.replace(/[._-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()).trim();
+}
+
+function compactTeacherName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) {
+    return parts[0] ?? 'Teacher';
+  }
+
+  const fullName = parts.join(' ');
+  if (fullName.length <= 18) {
+    return fullName;
+  }
+
+  return `${parts[0]} ${parts[parts.length - 1]?.charAt(0).toUpperCase() ?? ''}.`;
 }
 
 /**
@@ -25,6 +47,37 @@ export default function Sidebar({
   onToggleCollapse,
 }: SidebarProps) {
   const isCollapsed = collapsed && !mobile;
+  const { actor } = useAuth();
+  const fallbackTeacherName = actor.kind === 'teacher' ? nameFromEmail(actor.email) || 'Teacher' : 'Teacher';
+  const [teacherName, setTeacherName] = useState(fallbackTeacherName);
+  const displayTeacherName = useMemo(() => compactTeacherName(teacherName), [teacherName]);
+  const teacherInitial = displayTeacherName.charAt(0).toUpperCase() || 'T';
+
+  useEffect(() => {
+    let active = true;
+    setTeacherName(fallbackTeacherName);
+    if (actor.kind !== 'teacher') {
+      return () => {
+        active = false;
+      };
+    }
+
+    fetchTeacherProfile()
+      .then((profile) => {
+        if (active) {
+          setTeacherName(profile.name.trim() || fallbackTeacherName);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setTeacherName(fallbackTeacherName);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [actor.kind, fallbackTeacherName]);
 
   return (
     <nav
@@ -176,30 +229,42 @@ export default function Sidebar({
         <div
           className={[
             'flex items-center rounded-control border border-border bg-surface p-2 shadow-soft',
-            isCollapsed ? 'justify-center' : 'gap-3',
+            isCollapsed ? 'justify-center' : 'gap-2',
           ].join(' ')}
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/10 text-sm font-bold text-accent">
-            T
-          </span>
+          <button
+            type="button"
+            onClick={() => onNavigate?.('/profile')}
+            aria-current={activePath === '/profile' ? 'page' : undefined}
+            title="Profile"
+            className={[
+              'flex min-w-0 items-center rounded-button text-left transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              activePath === '/profile' ? 'bg-sidebar-accent' : 'hover:bg-sidebar-accent',
+              isCollapsed ? 'justify-center p-1' : 'flex-1 gap-3 p-1',
+            ].join(' ')}
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/10 text-sm font-bold text-accent">
+              {teacherInitial}
+            </span>
+            {!isCollapsed && (
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-semibold text-text">{displayTeacherName}</span>
+                <span className="block truncate text-[10px] text-muted">View profile</span>
+              </span>
+            )}
+          </button>
           {!isCollapsed && (
-            <>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-semibold text-text">Teacher</p>
-                <p className="truncate text-[10px] text-muted">Dept. of CSE</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => onLogout?.()}
-                className="icon-btn h-8 w-8 hover:bg-status-red/10 hover:text-status-red"
-                aria-label="Logout"
-                title="Logout"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => onLogout?.()}
+              className="icon-btn h-8 w-8 shrink-0 border border-status-red/20 bg-status-red/10 text-status-red shadow-[0_6px_16px_rgba(220,38,38,0.12)] hover:bg-status-red hover:text-white hover:shadow-[0_10px_22px_rgba(220,38,38,0.2)]"
+              aria-label="Logout"
+              title="Logout"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
           )}
         </div>
       </div>

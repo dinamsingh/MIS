@@ -15,6 +15,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -42,6 +43,12 @@ export interface SelectedSectionValue {
   readonly setSelectedSectionId: (id: string) => void;
   /** True while the section list is still loading. */
   readonly isLoading: boolean;
+  /**
+   * Reload the teacher's sections from the database. Call after editing the
+   * teaching setup (Profile page) so newly added/removed sections and their
+   * subjects appear immediately without a full page reload.
+   */
+  readonly refresh: () => void;
 
   /** Subjects available in the currently-selected section. */
   readonly subjects: SubjectOption[];
@@ -91,28 +98,30 @@ export function SelectedSectionProvider({ children }: { children: ReactNode }) {
   const [selectedSubjectId, setSelectedSubjectIdState] = useState<string | null>(null);
   const [isSubjectsLoading, setIsSubjectsLoading] = useState(false);
 
-  // --- Load the teacher's sections once. ---
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      try {
-        const loaded = await fetchOnboardedSections();
-        if (!active) return;
-        setSections(loaded);
-
+  // Load (or reload) the teacher's sections. Keeps the current selection when
+  // it is still valid; otherwise falls back to the saved id, then the first.
+  const loadSections = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const loaded = await fetchOnboardedSections();
+      setSections(loaded);
+      setSelectedSectionIdState((prev) => {
+        if (prev && loaded.some((s) => s.id === prev)) return prev;
         const saved = localStorage.getItem(SECTION_STORAGE_KEY);
         const validSaved = saved && loaded.some((s) => s.id === saved) ? saved : null;
-        setSelectedSectionIdState(validSaved ?? loaded[0]?.id ?? null);
-      } catch {
-        // Leave sections empty; consumers handle the empty state.
-      } finally {
-        if (active) setIsLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
+        return validSaved ?? loaded[0]?.id ?? null;
+      });
+    } catch {
+      // Leave sections empty; consumers handle the empty state.
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  // --- Load the teacher's sections on mount. ---
+  useEffect(() => {
+    void loadSections();
+  }, [loadSections]);
 
   const selectedSection = useMemo(
     () => sections.find((s) => s.id === selectedSectionId) ?? null,
@@ -174,6 +183,7 @@ export function SelectedSectionProvider({ children }: { children: ReactNode }) {
       selectedSection,
       setSelectedSectionId,
       isLoading,
+      refresh: () => void loadSections(),
       subjects,
       selectedSubjectId,
       selectedSubject,
@@ -181,7 +191,7 @@ export function SelectedSectionProvider({ children }: { children: ReactNode }) {
       isSubjectsLoading,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sections, selectedSectionId, selectedSection, isLoading, subjects, selectedSubjectId, isSubjectsLoading]);
+  }, [sections, selectedSectionId, selectedSection, isLoading, loadSections, subjects, selectedSubjectId, isSubjectsLoading]);
 
   return (
     <SelectedSectionContext.Provider value={value}>{children}</SelectedSectionContext.Provider>

@@ -19,6 +19,7 @@ export interface DialogProps extends OpenLayerProps {
 
 export function Dialog({ open, onOpenChange, title, description, children, footer, closeLabel = 'Close dialog' }: DialogProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const closeDialog = () => onOpenChange(false);
   useEscapeClose(open, onOpenChange);
   useDialogFocus(open, panelRef);
   useFocusTrap(open, panelRef);
@@ -27,14 +28,20 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
     <AnimatePresence>
       {open && (
         <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
-          <motion.button type="button" className="absolute inset-0 bg-black/35 backdrop-blur-[2px]" aria-label={closeLabel} onClick={() => onOpenChange(false)} {...overlayBackdropMotion} />
-          <motion.div ref={panelRef} className="relative flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-dialog border border-border bg-surface shadow-overlay" {...dialogMotion}>
+          <motion.button type="button" className="absolute inset-0 bg-black/35 backdrop-blur-[2px]" aria-label={closeLabel} onPointerDown={closeDialog} onClick={closeDialog} {...overlayBackdropMotion} />
+          <motion.div
+            ref={panelRef}
+            className="relative flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-dialog border border-border bg-surface shadow-overlay"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+            {...dialogMotion}
+          >
             <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
               <div>
                 <h2 id="dialog-title" className="text-lg font-semibold text-text">{title}</h2>
                 {description && <p className="mt-1 text-xs leading-5 text-muted">{description}</p>}
               </div>
-              <IconButton icon="x" label={closeLabel} size="sm" onClick={() => onOpenChange(false)} />
+              <IconButton icon="x" label={closeLabel} size="sm" onPointerDown={(event) => event.stopPropagation()} onClick={closeDialog} />
             </div>
             <div className="min-h-0 flex-1 overflow-auto p-5">{children}</div>
             {footer && <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">{footer}</div>}

@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@presentation/auth';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 import { formatSectionLabel } from '@presentation/format/sectionLabel';
@@ -144,6 +144,10 @@ export const GlobalCommandCenter = memo(function GlobalCommandCenter({
   } = useSelectedSection();
   const navItems = useMemo(() => flattenNavItems(), []);
   const teacherLabel = teacherLabelFromActor(actor);
+  const closeCommandPalette = useCallback(() => {
+    setQuery('');
+    onOpenChange(false);
+  }, [onOpenChange]);
 
   useEffect(() => {
     applyMotionDisabledPreference(motionDisabled);
@@ -207,8 +211,8 @@ export const GlobalCommandCenter = memo(function GlobalCommandCenter({
   }, [selectedSection, selectedSectionId, selectedSubject, selectedSubjectId, teacherLabel]);
 
   const navigateTo = (path: string, title?: string) => {
-    onNavigate?.(path);
-    onOpenChange(false);
+    closeCommandPalette();
+    window.setTimeout(() => onNavigate?.(path), 0);
     if (title) {
       notify({ tone: 'info', title: 'Opened', message: title, durationMs: 2200 });
     }
@@ -246,7 +250,7 @@ export const GlobalCommandCenter = memo(function GlobalCommandCenter({
       onSelect: () => {
         setSelectedSectionId(section.id);
         notify({ tone: 'success', title: 'Section selected', message: formatSectionLabel(section) });
-        onOpenChange(false);
+        closeCommandPalette();
       },
     }));
 
@@ -340,7 +344,7 @@ export const GlobalCommandCenter = memo(function GlobalCommandCenter({
             title: 'Settings not available',
             message: 'No settings route exists yet, so routing was left unchanged.',
           });
-          onOpenChange(false);
+          closeCommandPalette();
         },
       },
       {
@@ -360,7 +364,7 @@ export const GlobalCommandCenter = memo(function GlobalCommandCenter({
             });
             return next;
           });
-          onOpenChange(false);
+          closeCommandPalette();
         },
       },
     ];
@@ -395,7 +399,7 @@ export const GlobalCommandCenter = memo(function GlobalCommandCenter({
                 setSelectedSubjectId(savedFilters.subjectId);
               }
               notify({ tone: 'success', title: 'Filters restored', message: 'Last section and subject preferences were applied.' });
-              onOpenChange(false);
+              closeCommandPalette();
             },
           },
         ]
@@ -414,7 +418,7 @@ export const GlobalCommandCenter = memo(function GlobalCommandCenter({
     navItems,
     notify,
     motionDisabled,
-    onOpenChange,
+    closeCommandPalette,
     onNavigate,
     recentPages,
     savedFilters,
@@ -434,7 +438,7 @@ export const GlobalCommandCenter = memo(function GlobalCommandCenter({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange} title="Command Palette" description="Search pages, records, and quick actions.">
+      <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? onOpenChange(true) : closeCommandPalette())} title="Command Palette" description="Search pages, records, and quick actions.">
         <div className="space-y-4">
           <SearchInput
             ref={searchRef}

@@ -30,6 +30,14 @@ function formatHeaderDate(): string {
   });
 }
 
+function formatHeaderTime(): string {
+  return new Date().toLocaleTimeString('en-IN', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
 /**
  * Application layout shell: responsive sidebar, sticky topbar, global section
  * selector, and content frame. This component owns layout-only state; routes,
@@ -53,6 +61,7 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
     isSubjectsLoading,
   } = useSelectedSection();
   const todayLabel = useMemo(() => formatHeaderDate(), []);
+  const [timeLabel, setTimeLabel] = useState(() => formatHeaderTime());
 
   const activeTrail = useMemo(() => {
     for (const group of navGroups) {
@@ -105,6 +114,16 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
     return () => window.removeEventListener(MOTION_PREFERENCE_EVENT, handleMotionPreferenceChange);
   }, [motionDisabled]);
 
+  useEffect(() => {
+    const interval = window.setInterval(() => setTimeLabel(formatHeaderTime()), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    setIsCommandOpen(false);
+    setIsShortcutsOpen(false);
+  }, [activePath]);
+
   return (
     <MotionConfig reducedMotion={motionDisabled ? 'always' : 'user'}>
       <ToastProvider>
@@ -142,9 +161,9 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
             isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-72',
           ].join(' ')}
         >
-          <header className="sticky top-0 z-30 border-b border-border/80 bg-surface/85 px-4 py-3 backdrop-blur-xl lg:px-6">
-            <div className="flex min-w-0 items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
+          <header className="sticky top-0 z-30 border-b border-border/70 bg-surface/90 px-3 py-2 backdrop-blur-xl lg:px-5">
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
                 <button
                   type="button"
                   aria-label="Open navigation"
@@ -165,8 +184,8 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
                 <p className="truncate text-sm font-semibold text-text">{activeTrail.item}</p>
               </div>
 
-              <div className="motion-border group flex shrink items-center gap-2 rounded-xl border border-border/80 bg-gradient-to-b from-white to-slate-50 px-3 py-2 shadow-[0_18px_44px_rgba(15,23,42,0.18)] ring-1 ring-white/70 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_22px_52px_rgba(15,23,42,0.22)] focus-within:border-accent/60 focus-within:ring-2 focus-within:ring-accent/15">
-                <span className="hidden text-[10px] font-bold uppercase text-muted lg:inline">Section</span>
+              <div className="motion-border group flex min-w-0 shrink items-center gap-1.5 rounded-lg border border-border/70 bg-surface/95 px-2 py-1.5 shadow-[0_8px_22px_rgba(15,23,42,0.08)] ring-1 ring-white/70 transition-[transform,border-color,box-shadow,background-color] duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-surface hover:shadow-[0_14px_34px_rgba(15,23,42,0.14)] focus-within:-translate-y-0.5 focus-within:border-accent/60 focus-within:shadow-[0_14px_34px_rgba(15,23,42,0.14)] focus-within:ring-2 focus-within:ring-accent/15 motion-reduce:transform-none">
+                <span className="hidden text-[10px] font-bold uppercase text-muted 2xl:inline">Section</span>
                 <div className="relative flex min-w-0 items-center">
                   <select
                     value={selectedSectionId ?? ''}
@@ -174,7 +193,7 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
                     disabled={isLoading || sections.length === 0}
                     aria-label="Select section"
                     title={selectedSection ? formatSectionLabel(selectedSection) : undefined}
-                    className="w-28 cursor-pointer truncate appearance-none bg-transparent pr-6 text-xs font-bold text-text outline-none disabled:cursor-default disabled:text-muted sm:w-44 lg:w-56"
+                    className="w-24 cursor-pointer truncate appearance-none bg-transparent pr-5 text-xs font-bold text-text outline-none disabled:cursor-default disabled:text-muted sm:w-32 lg:w-36 xl:w-44"
                   >
                     {sections.length === 0 ? (
                       <option value="" className="bg-surface text-text">
@@ -197,8 +216,8 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
               </div>
 
               {(subjects.length > 0 || isSubjectsLoading) && (
-                <div className="motion-border group flex shrink items-center gap-2 rounded-xl border border-border/80 bg-gradient-to-b from-white to-slate-50 px-3 py-2 shadow-[0_18px_44px_rgba(15,23,42,0.18)] ring-1 ring-white/70 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_22px_52px_rgba(15,23,42,0.22)] focus-within:border-accent/60 focus-within:ring-2 focus-within:ring-accent/15">
-                  <span className="hidden text-[10px] font-bold uppercase text-muted lg:inline">Subject</span>
+                <div className="motion-border group flex min-w-0 shrink items-center gap-1.5 rounded-lg border border-border/70 bg-surface/95 px-2 py-1.5 shadow-[0_8px_22px_rgba(15,23,42,0.08)] ring-1 ring-white/70 transition-[transform,border-color,box-shadow,background-color] duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-surface hover:shadow-[0_14px_34px_rgba(15,23,42,0.14)] focus-within:-translate-y-0.5 focus-within:border-accent/60 focus-within:shadow-[0_14px_34px_rgba(15,23,42,0.14)] focus-within:ring-2 focus-within:ring-accent/15 motion-reduce:transform-none">
+                  <span className="hidden text-[10px] font-bold uppercase text-muted 2xl:inline">Subject</span>
                   <div className="relative flex min-w-0 items-center">
                     <select
                       value={selectedSubjectId ?? ''}
@@ -206,7 +225,7 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
                       disabled={isSubjectsLoading || subjects.length === 0}
                       aria-label="Select subject"
                       title={subjects.find((s) => s.id === selectedSubjectId)?.name}
-                      className="w-28 cursor-pointer truncate appearance-none bg-transparent pr-6 text-xs font-bold text-text outline-none disabled:cursor-default disabled:text-muted sm:w-44 lg:w-56"
+                      className="w-24 cursor-pointer truncate appearance-none bg-transparent pr-5 text-xs font-bold text-text outline-none disabled:cursor-default disabled:text-muted sm:w-32 lg:w-36 xl:w-44"
                     >
                       {subjects.length === 0 ? (
                         <option value="" className="bg-surface text-text">
@@ -230,15 +249,18 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
               )}
             </div>
 
-              <div className="flex min-w-0 items-center justify-end gap-2">
+              <div className="flex min-w-0 shrink-0 items-center justify-end gap-2">
                 <button
                   type="button"
                   aria-label="Open command palette"
                   onClick={() => setIsCommandOpen(true)}
-                  className="motion-interactive hidden h-touch min-w-0 items-center gap-2 rounded-xl border border-border/80 bg-white px-3 text-left text-xs font-semibold text-soft shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-[width,background-color,color,box-shadow,transform] duration-200 hover:w-36 hover:bg-secondary hover:text-text focus-visible:w-36 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:flex sm:w-28"
+                  className="motion-interactive hidden h-9 min-w-0 items-center gap-2 rounded-lg border border-border/80 bg-surface px-2.5 text-left text-xs font-semibold text-soft shadow-[0_6px_18px_rgba(15,23,42,0.07)] transition-[width,background-color,color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:bg-secondary hover:text-text hover:shadow-[0_12px_28px_rgba(15,23,42,0.12)] focus-visible:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transform-none sm:flex"
                 >
+                  <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                    <circle cx="9" cy="9" r="5.5" />
+                    <path d="m13 13 3 3" strokeLinecap="round" />
+                  </svg>
                   <span className="truncate">Search</span>
-                  <kbd className="rounded-sm border border-border bg-secondary px-1.5 py-0.5 text-[10px] text-muted">Ctrl K</kbd>
                 </button>
                 <button
                   type="button"
@@ -251,9 +273,12 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
                     <path d="m13 13 3 3" strokeLinecap="round" />
                   </svg>
                 </button>
-                <div className="motion-border hidden h-touch items-center gap-2 rounded-xl border border-border/80 bg-white px-3 text-left shadow-[0_8px_24px_rgba(15,23,42,0.06)] md:flex">
+                <div className="motion-border hidden min-h-9 items-center gap-2 rounded-lg border border-border/80 bg-surface px-2.5 py-1 text-left shadow-[0_6px_18px_rgba(15,23,42,0.07)] transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-[0_12px_28px_rgba(15,23,42,0.12)] motion-reduce:transform-none md:flex">
                   <span className="text-[10px] font-semibold uppercase text-muted">Today</span>
-                  <span className="text-xs font-semibold text-text">{todayLabel}</span>
+                  <span className="flex flex-col leading-none">
+                    <span className="whitespace-nowrap text-[11px] font-semibold text-text">{todayLabel}</span>
+                    <span className="mt-0.5 whitespace-nowrap text-[10px] font-semibold text-muted">{timeLabel}</span>
+                  </span>
                 </div>
               </div>
             </div>

@@ -43,6 +43,7 @@ const HeatmapPage = lazy(() => import('@presentation/pages/HeatmapPage'));
 const StudentQuizAccessPage = lazy(() => import('@presentation/pages/StudentQuizAccessPage'));
 const QuizAttemptPage = lazy(() => import('@presentation/pages/QuizAttemptPage'));
 const OnboardingPage = lazy(() => import('../features/onboarding/OnboardingPage'));
+const ProfilePage = lazy(() => import('../features/profile/ProfilePage'));
 const AiQuizGeneratorPage = lazy(() => import('@presentation/pages/AiQuizGeneratorPage'));
 const ReportsPage = lazy(() => import('@presentation/pages/ReportsPage'));
 
@@ -155,6 +156,7 @@ export default function App() {
             {/* Teacher-guarded routes wrapped in layout shell */}
             <Route element={<TeacherShell />}>
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
               <Route path="/timetable" element={<TimetablePage />} />
               <Route path="/roster" element={<RosterPage />} />
               <Route path="/attendance" element={<AttendancePage />} />

@@ -19,14 +19,12 @@ import {
   DashboardEmptyState,
   DashboardStatCard,
   PendingTasks,
-  QuickActions,
   RecentActivity,
   StudentDirectoryModal,
   TodaySchedule,
   deriveActivities,
   scheduleFromEntries,
   type PendingTask,
-  type QuickAction,
 } from '@presentation/components/dashboard/DashboardWidgets';
 
 const DashboardCharts = lazy(() => import('@presentation/components/dashboard/DashboardCharts'));
@@ -273,17 +271,6 @@ export default function DashboardView({
     [needsAttention.length, resolvedSummary.syllabusProgressPercent, todayClasses.length],
   );
 
-  const quickActions = useMemo<QuickAction[]>(
-    () => [
-      { label: 'Take Attendance', description: 'Mark today\'s class quickly.', href: '/attendance', icon: 'A', tone: 'green' },
-      { label: 'Upload Material', description: 'Share notes and resources.', href: '/material', icon: 'M', tone: 'blue' },
-      { label: 'Create Quiz', description: 'Publish a new assessment.', href: '/quizzes', icon: 'Q', tone: 'neutral' },
-      { label: 'View Reports', description: 'Open analytics insights.', href: '/analytics', icon: 'R', tone: 'amber' },
-      { label: 'Add Students', description: 'Manage roster imports.', href: '/roster', icon: 'S', tone: 'red' },
-    ],
-    [],
-  );
-
   const recentActivities = useMemo(
     () => deriveActivities(studentMetrics, pendingAssignments),
     [studentMetrics, pendingAssignments],
@@ -465,9 +452,6 @@ export default function DashboardView({
           trendPoints={trendPoints}
         />
       </Suspense>
-
-      {/* ── Quick Actions ── */}
-      <QuickActions actions={quickActions} />
 
       {/* ── Schedule + Pending Tasks ── */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
