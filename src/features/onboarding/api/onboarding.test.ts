@@ -10,6 +10,7 @@ const subjects: readonly SyllabusSubject[] = [
     name: 'Computer Organization & Architecture',
     kind: 'theory',
     labName: 'COA Lab',
+    electiveGroup: null,
   },
 ];
 
