@@ -5,6 +5,7 @@
 
 export { default as DashboardPage } from './DashboardPage';
 export { default as TimetablePage } from './TimetablePage';
+export { default as TeacherManagementPage } from './TeacherManagementPage';
 export { default as AttendancePage } from './AttendancePage';
 export { default as SyllabusTrackerPage } from './SyllabusTrackerPage';
 export { default as MarksCalculatorPage } from './MarksCalculatorPage';
@@ -16,3 +17,4 @@ export { default as LeaderboardPage } from './LeaderboardPage';
 export { default as HeatmapPage } from './HeatmapPage';
 export { default as StudentQuizAccessPage } from './StudentQuizAccessPage';
 export { default as QuizAttemptPage } from './QuizAttemptPage';
+export { default as ReportsPage } from './ReportsPage';

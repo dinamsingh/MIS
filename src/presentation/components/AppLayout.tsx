@@ -1,8 +1,19 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
 import Sidebar from '@presentation/components/Sidebar';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 import { formatSectionLabel } from '@presentation/format/sectionLabel';
 import { navGroups } from '@presentation/navigation';
+import {
+  applyMotionDisabledPreference,
+  drawerMotion,
+  MOTION_PREFERENCE_EVENT,
+  overlayBackdropMotion,
+  pageMotion,
+  readMotionDisabledPreference,
+} from '@presentation/motion';
+import { GlobalCommandCenter } from './GlobalCommandCenter';
+import { ToastProvider } from './ToastProvider';
 
 interface AppLayoutProps {
   activePath?: string;
@@ -27,7 +38,9 @@ function formatHeaderDate(): string {
 export default function AppLayout({ activePath, onNavigate, onLogout, children }: AppLayoutProps) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [motionDisabled, setMotionDisabled] = useState(() => readMotionDisabledPreference());
   const {
     sections,
     selectedSectionId,
@@ -59,11 +72,6 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
     [onNavigate],
   );
 
-  const handleLogout = useCallback(() => {
-    setIsUserMenuOpen(false);
-    onLogout?.();
-  }, [onLogout]);
-
   // The section dropdown shows ONLY the section (clean). Subjects live in their
   // own global dropdown beside it.
   const sectionOptionLabel = useCallback(
@@ -72,64 +80,81 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
   );
 
   useEffect(() => {
-    if (!isDrawerOpen && !isUserMenuOpen) return;
+    if (!isDrawerOpen) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsDrawerOpen(false);
-        setIsUserMenuOpen(false);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDrawerOpen, isUserMenuOpen]);
+  }, [isDrawerOpen]);
+
+  useEffect(() => {
+    applyMotionDisabledPreference(motionDisabled);
+
+    const handleMotionPreferenceChange = (event: Event) => {
+      const disabled = event instanceof CustomEvent ? Boolean(event.detail?.disabled) : readMotionDisabledPreference();
+      setMotionDisabled(disabled);
+      applyMotionDisabledPreference(disabled);
+    };
+
+    window.addEventListener(MOTION_PREFERENCE_EVENT, handleMotionPreferenceChange);
+    return () => window.removeEventListener(MOTION_PREFERENCE_EVENT, handleMotionPreferenceChange);
+  }, [motionDisabled]);
 
   return (
-    <div className="flex min-h-screen w-full overflow-x-clip bg-secondary text-text">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden h-screen max-h-screen shrink-0 lg:block">
-        <Sidebar
-          activePath={activePath}
-          collapsed={isSidebarCollapsed}
-          onNavigate={handleNavigate}
-          onLogout={onLogout}
-          onToggleCollapse={() => setIsSidebarCollapsed((value) => !value)}
-        />
-      </aside>
-
-      {isDrawerOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation menu">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/35 backdrop-blur-[2px] motion-standard animate-foundation-fade-in"
-            aria-label="Close navigation"
-            onClick={() => setIsDrawerOpen(false)}
+    <MotionConfig reducedMotion={motionDisabled ? 'always' : 'user'}>
+      <ToastProvider>
+      <div className="flex min-h-screen w-full overflow-x-clip bg-secondary text-text">
+        <aside className="fixed inset-y-0 left-0 z-40 hidden h-screen max-h-screen shrink-0 lg:block">
+          <Sidebar
+            activePath={activePath}
+            collapsed={isSidebarCollapsed}
+            onNavigate={handleNavigate}
+            onLogout={onLogout}
+            onToggleCollapse={() => setIsSidebarCollapsed((value) => !value)}
           />
-          <div className="absolute inset-y-0 left-0 w-[18rem] max-w-[86vw] animate-foundation-slide-up shadow-overlay">
-            <Sidebar activePath={activePath} onNavigate={handleNavigate} onLogout={onLogout} mobile />
-          </div>
-        </div>
-      )}
+        </aside>
 
-      <div
-        className={[
-          'flex min-w-0 flex-1 flex-col transition-[padding-left] duration-slow ease-entrance motion-reduce:transition-none',
-          isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-72',
-        ].join(' ')}
-      >
-        <header className="sticky top-0 z-30 border-b border-border/80 bg-surface/85 px-4 py-3 backdrop-blur-xl lg:px-6">
-          <div className="flex min-w-0 items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <button
+        <AnimatePresence>
+          {isDrawerOpen && (
+            <motion.div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation menu">
+              <motion.button
                 type="button"
-                aria-label="Open navigation"
-                onClick={() => setIsDrawerOpen(true)}
-                className="icon-btn h-touch w-touch lg:hidden"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
+                className="absolute inset-0 bg-black/35 backdrop-blur-[2px]"
+                aria-label="Close navigation"
+                onClick={() => setIsDrawerOpen(false)}
+                {...overlayBackdropMotion}
+              />
+              <motion.div className="absolute inset-y-0 left-0 w-[18rem] max-w-[86vw] shadow-overlay" {...drawerMotion('left')}>
+                <Sidebar activePath={activePath} onNavigate={handleNavigate} onLogout={onLogout} mobile />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div
+          className={[
+            'flex min-w-0 flex-1 flex-col transition-[padding-left] duration-slow ease-entrance motion-reduce:transition-none',
+            isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-72',
+          ].join(' ')}
+        >
+          <header className="sticky top-0 z-30 border-b border-border/80 bg-surface/85 px-4 py-3 backdrop-blur-xl lg:px-6">
+            <div className="flex min-w-0 items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <button
+                  type="button"
+                  aria-label="Open navigation"
+                  onClick={() => setIsDrawerOpen(true)}
+                  className="icon-btn h-touch w-touch lg:hidden"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                </button>
 
               <div className="hidden min-w-0 flex-col gap-0.5 xl:flex">
                 <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1 text-xs text-muted">
@@ -140,16 +165,16 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
                 <p className="truncate text-sm font-semibold text-text">{activeTrail.item}</p>
               </div>
 
-              <div className="flex shrink items-center gap-1.5 rounded-control border border-border bg-background px-2.5 py-2 text-xs text-soft shadow-soft">
-                <span className="hidden font-medium text-muted lg:inline">Section</span>
-                <div className="relative flex items-center">
+              <div className="motion-border group flex shrink items-center gap-2 rounded-xl border border-border/80 bg-gradient-to-b from-white to-slate-50 px-3 py-2 shadow-[0_18px_44px_rgba(15,23,42,0.18)] ring-1 ring-white/70 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_22px_52px_rgba(15,23,42,0.22)] focus-within:border-accent/60 focus-within:ring-2 focus-within:ring-accent/15">
+                <span className="hidden text-[10px] font-bold uppercase text-muted lg:inline">Section</span>
+                <div className="relative flex min-w-0 items-center">
                   <select
                     value={selectedSectionId ?? ''}
                     onChange={(e) => setSelectedSectionId(e.target.value)}
                     disabled={isLoading || sections.length === 0}
                     aria-label="Select section"
                     title={selectedSection ? formatSectionLabel(selectedSection) : undefined}
-                    className="w-24 cursor-pointer truncate appearance-none bg-transparent pr-5 text-xs font-semibold text-text outline-none disabled:cursor-default disabled:text-muted sm:w-36 lg:w-44"
+                    className="w-28 cursor-pointer truncate appearance-none bg-transparent pr-6 text-xs font-bold text-text outline-none disabled:cursor-default disabled:text-muted sm:w-44 lg:w-56"
                   >
                     {sections.length === 0 ? (
                       <option value="" className="bg-surface text-text">
@@ -163,23 +188,25 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
                       ))
                     )}
                   </select>
-                  <span className="pointer-events-none absolute right-0 text-muted" aria-hidden="true">
-                    v
+                  <span className="pointer-events-none absolute right-0 text-muted transition-colors group-focus-within:text-accent" aria-hidden="true">
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                    </svg>
                   </span>
                 </div>
               </div>
 
               {(subjects.length > 0 || isSubjectsLoading) && (
-                <div className="flex shrink items-center gap-1.5 rounded-control border border-border bg-background px-2.5 py-2 text-xs text-soft shadow-soft">
-                  <span className="hidden font-medium text-muted lg:inline">Subject</span>
-                  <div className="relative flex items-center">
+                <div className="motion-border group flex shrink items-center gap-2 rounded-xl border border-border/80 bg-gradient-to-b from-white to-slate-50 px-3 py-2 shadow-[0_18px_44px_rgba(15,23,42,0.18)] ring-1 ring-white/70 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_22px_52px_rgba(15,23,42,0.22)] focus-within:border-accent/60 focus-within:ring-2 focus-within:ring-accent/15">
+                  <span className="hidden text-[10px] font-bold uppercase text-muted lg:inline">Subject</span>
+                  <div className="relative flex min-w-0 items-center">
                     <select
                       value={selectedSubjectId ?? ''}
                       onChange={(e) => setSelectedSubjectId(e.target.value)}
                       disabled={isSubjectsLoading || subjects.length === 0}
                       aria-label="Select subject"
                       title={subjects.find((s) => s.id === selectedSubjectId)?.name}
-                      className="w-24 cursor-pointer truncate appearance-none bg-transparent pr-5 text-xs font-semibold text-text outline-none disabled:cursor-default disabled:text-muted sm:w-36 lg:w-44"
+                      className="w-28 cursor-pointer truncate appearance-none bg-transparent pr-6 text-xs font-bold text-text outline-none disabled:cursor-default disabled:text-muted sm:w-44 lg:w-56"
                     >
                       {subjects.length === 0 ? (
                         <option value="" className="bg-surface text-text">
@@ -193,102 +220,63 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
                         ))
                       )}
                     </select>
-                    <span className="pointer-events-none absolute right-0 text-muted" aria-hidden="true">
-                      v
+                    <span className="pointer-events-none absolute right-0 text-muted transition-colors group-focus-within:text-accent" aria-hidden="true">
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                      </svg>
                     </span>
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="flex min-w-0 items-center justify-end gap-2">
-              <label className="hidden h-touch min-w-[14rem] items-center gap-2 rounded-control border border-border bg-background px-3 text-sm text-muted shadow-soft transition-colors duration-fast ease-standard focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25 xl:flex">
-                <span aria-hidden="true">
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <circle cx="11" cy="11" r="8" />
-                    <path strokeLinecap="round" d="m21 21-4.35-4.35" />
-                  </svg>
-                </span>
-                <span className="sr-only">Search workspace</span>
-                <input
-                  type="search"
-                  placeholder="Search"
-                  className="min-w-0 flex-1 bg-transparent text-sm text-text outline-none placeholder:text-muted"
-                />
-                <kbd className="rounded-sm border border-border bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-muted">
-                  /
-                </kbd>
-              </label>
-
-              <button type="button" className="icon-btn h-touch w-touch xl:hidden" aria-label="Search">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <circle cx="11" cy="11" r="8" />
-                  <path strokeLinecap="round" d="m21 21-4.35-4.35" />
-                </svg>
-              </button>
-
-              <div className="hidden h-touch items-center gap-2 rounded-control border border-border bg-background px-3 text-left shadow-soft md:flex">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Today</span>
-                <span className="text-xs font-semibold text-text">{todayLabel}</span>
-              </div>
-
-              <button type="button" className="icon-btn relative h-touch w-touch" aria-label="Notifications">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0 1 18 14.158V11a6.002 6.002 0 0 0-4-5.659V5a2 2 0 1 0-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9" />
-                </svg>
-                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-status-red ring-2 ring-surface" />
-              </button>
-
-              <div className="relative">
+              <div className="flex min-w-0 items-center justify-end gap-2">
                 <button
                   type="button"
-                  className="flex h-touch items-center gap-2 rounded-control border border-border bg-background px-1.5 pr-2 text-left shadow-soft transition-colors duration-fast ease-standard hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                  aria-label="Open user menu"
-                  aria-haspopup="menu"
-                  aria-expanded={isUserMenuOpen}
-                  onClick={() => setIsUserMenuOpen((value) => !value)}
+                  aria-label="Open command palette"
+                  onClick={() => setIsCommandOpen(true)}
+                  className="motion-interactive hidden h-touch min-w-0 items-center gap-2 rounded-xl border border-border/80 bg-white px-3 text-left text-xs font-semibold text-soft shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-[width,background-color,color,box-shadow,transform] duration-200 hover:w-36 hover:bg-secondary hover:text-text focus-visible:w-36 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:flex sm:w-28"
                 >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-surface">
-                    T
-                  </span>
-                  <span className="hidden min-w-0 flex-col lg:flex">
-                    <span className="truncate text-xs font-semibold text-text">Teacher</span>
-                    <span className="truncate text-[10px] text-muted">CSE</span>
-                  </span>
-                  <span className="hidden text-muted lg:inline" aria-hidden="true">v</span>
+                  <span className="truncate">Search</span>
+                  <kbd className="rounded-sm border border-border bg-secondary px-1.5 py-0.5 text-[10px] text-muted">Ctrl K</kbd>
                 </button>
-
-                {isUserMenuOpen && (
-                  <div
-                    role="menu"
-                    className="absolute right-0 mt-2 w-56 animate-foundation-scale-in rounded-dialog border border-border bg-surface p-2 shadow-overlay"
-                  >
-                    <div className="border-b border-border px-3 py-2">
-                      <p className="text-sm font-semibold text-text">Teacher</p>
-                      <p className="text-xs text-muted">Dept. of CSE</p>
-                    </div>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={handleLogout}
-                      className="mt-2 flex w-full items-center justify-between rounded-button px-3 py-2 text-left text-sm font-medium text-status-red transition-colors duration-fast ease-standard hover:bg-status-red/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <span>Logout</span>
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                      </svg>
-                    </button>
-                  </div>
-                )}
+                <button
+                  type="button"
+                  aria-label="Open command palette"
+                  onClick={() => setIsCommandOpen(true)}
+                  className="icon-btn h-touch w-touch sm:hidden"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <circle cx="9" cy="9" r="5.5" />
+                    <path d="m13 13 3 3" strokeLinecap="round" />
+                  </svg>
+                </button>
+                <div className="motion-border hidden h-touch items-center gap-2 rounded-xl border border-border/80 bg-white px-3 text-left shadow-[0_8px_24px_rgba(15,23,42,0.06)] md:flex">
+                  <span className="text-[10px] font-semibold uppercase text-muted">Today</span>
+                  <span className="text-xs font-semibold text-text">{todayLabel}</span>
+                </div>
               </div>
             </div>
-          </div>
-        </header>
+          </header>
 
-        <main className="min-w-0 flex-1 overflow-x-clip px-4 py-5 lg:px-6">
-          {children}
-        </main>
+          <main className="min-w-0 flex-1 overflow-x-clip px-4 py-5 lg:px-6">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div key={activePath ?? 'workspace'} {...pageMotion}>
+                {children}
+              </motion.div>
+            </AnimatePresence>
+          </main>
+        </div>
+        <GlobalCommandCenter
+          activePath={activePath}
+          open={isCommandOpen}
+          shortcutsOpen={isShortcutsOpen}
+          onOpenChange={setIsCommandOpen}
+          onShortcutsOpenChange={setIsShortcutsOpen}
+          onNavigate={handleNavigate}
+        />
       </div>
-    </div>
+      </ToastProvider>
+    </MotionConfig>
   );
 }

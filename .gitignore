@@ -14,6 +14,8 @@ dist-ssr
 .env
 .env.*
 !.env.example
+# Cloudflare Pages Functions local secrets (holds the Gemini key) — NEVER commit.
+.dev.vars
 # .env.production is committed on purpose — it holds only PUBLIC client-side
 # values (anon key, URLs) so Cloudflare's git build bakes them in. No secrets here.
 !.env.production

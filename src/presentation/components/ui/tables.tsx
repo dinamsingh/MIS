@@ -1,6 +1,6 @@
 import { type HTMLAttributes, type ReactNode } from 'react';
 import { Button } from './foundation';
-import { EmptyState, LoadingSpinner } from './data-display';
+import { EmptyState, ErrorState, LoadingSpinner } from './data-display';
 import { cx, focusRing } from './utils';
 
 export interface DataTableColumn<T> {
@@ -41,13 +41,13 @@ export function PremiumDataTable<T>({
   };
 
   return (
-    <div className={cx('table-shell', className)}>
+    <div className={cx('table-shell motion-border motion-page-enter', className)}>
       {loading ? (
-        <div className="flex min-h-48 items-center justify-center">
+        <div className="flex min-h-48 items-center justify-center motion-page-enter">
           <LoadingSpinner />
         </div>
       ) : error ? (
-        <EmptyState title="Unable to load table" message={error} />
+        <ErrorState kind="network" title="Unable to load table" message={error} className="min-h-64 border-0 shadow-none" />
       ) : data.length === 0 ? (
         <EmptyState title={emptyTitle} message={emptyMessage} />
       ) : (
@@ -69,7 +69,7 @@ export function PremiumDataTable<T>({
                 return (
                   <tr
                     key={key}
-                    className={cx('table-row', clickable && 'cursor-pointer focus-within:bg-surface-muted')}
+                    className={cx('table-row motion-table-row', clickable && 'cursor-pointer focus-within:bg-surface-muted')}
                     onClick={clickable ? () => onRowClick?.(row, rowIndex) : undefined}
                   >
                     {columns.map((column) => (
@@ -96,7 +96,7 @@ export interface TableToolbarProps extends Omit<HTMLAttributes<HTMLDivElement>, 
 
 export function TableToolbar({ title, description, actions, children, className, ...props }: TableToolbarProps) {
   return (
-    <div className={cx('flex flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-soft lg:flex-row lg:items-center lg:justify-between', className)} {...props}>
+    <div className={cx('motion-border flex flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-soft lg:flex-row lg:items-center lg:justify-between', className)} {...props}>
       <div className="min-w-0">
         {title && <h2 className="text-card-title">{title}</h2>}
         {description && <p className="mt-1 text-xs leading-5 text-muted">{description}</p>}
@@ -116,7 +116,7 @@ export interface FilterBarProps extends HTMLAttributes<HTMLDivElement> {
 
 export function FilterBar({ leading, actions, children, className, ...props }: FilterBarProps) {
   return (
-    <div className={cx('flex flex-col gap-3 rounded-control border border-border bg-surface-muted/60 p-3 md:flex-row md:items-center md:justify-between', className)} {...props}>
+    <div className={cx('motion-border flex flex-col gap-3 rounded-control border border-border bg-surface-muted/60 p-3 md:flex-row md:items-center md:justify-between', className)} {...props}>
       {leading && <div className="min-w-0">{leading}</div>}
       <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">{children}</div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
@@ -157,7 +157,7 @@ export function Pagination({ page, pageCount, onPageChange, disabled = false, cl
               aria-current={item === currentPage ? 'page' : undefined}
               onClick={() => onPageChange(item)}
               className={cx(
-                'h-8 min-w-8 rounded-button px-2 text-xs font-semibold transition-colors duration-fast',
+                'motion-interactive h-8 min-w-8 rounded-button px-2 text-xs font-semibold transition-colors duration-fast',
                 item === currentPage ? 'bg-accent text-surface' : 'text-soft hover:bg-secondary hover:text-text',
                 focusRing,
               )}

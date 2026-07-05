@@ -26,6 +26,9 @@ export interface Batch {
   readonly status: BatchStatus;
 }
 
+/** Academic term selected by the teacher during onboarding. */
+export type AcademicSession = 'odd' | 'even';
+
 /** A master-syllabus subject for a given semester. */
 export interface SyllabusSubject {
   readonly id: string;
@@ -47,7 +50,12 @@ export interface OnboardingProfile {
  * The wizard's working selection state: for every batch, a map of
  * subjectId → the sections the teacher teaches for that subject.
  */
-export type SelectionState = Record<string, Record<string, Section[]>>;
+export interface SubjectSelection {
+  readonly sections: Section[];
+  readonly labSections: Section[];
+}
+
+export type SelectionState = Record<string, Record<string, SubjectSelection>>;
 
 /** A single row destined for `teacher_assignments`. */
 export interface AssignmentInput {
@@ -55,6 +63,7 @@ export interface AssignmentInput {
   readonly batchId: string;
   readonly section: Section;
   readonly isLab: boolean;
+  readonly semester?: number;
 }
 
 /** Live batches paired with the subjects that apply to their current semester. */

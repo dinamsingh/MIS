@@ -9,45 +9,64 @@
  * based on demo mode, so this component stays storage-agnostic.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@presentation/auth';
 import PageLoader from '@presentation/components/PageLoader';
 import { useOnboardingData } from './hooks/useOnboardingData';
-import { buildAssignments, saveOnboarding } from './api/onboarding';
+import { buildAssignments, fetchTeacherProfile, saveOnboarding } from './api/onboarding';
 import ProfileStep from './steps/ProfileStep';
 import TimetableStep from './steps/TimetableStep';
 import ReviewStep from './steps/ReviewStep';
-import type { OnboardingProfile, Section, SelectionState } from './types';
+import type { AcademicSession, OnboardingProfile, Section, SelectionState } from './types';
 import type { WizardStep } from './components/Stepper';
 
-/** Derive the initial profile from the authenticated actor when available. */
-function useInitialProfile(): OnboardingProfile {
-  const { actor } = useAuth();
-  return useMemo<OnboardingProfile>(() => {
-    if (actor.kind === 'teacher') {
-      return { name: '', email: actor.email };
-    }
-    return { name: '', email: '' };
-  }, [actor]);
-}
+const EMPTY_PROFILE: OnboardingProfile = { name: '', email: '' };
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
-  const initialProfile = useInitialProfile();
-  const { loading, error, batches, subjects, batchesWithSubjects } = useOnboardingData();
+  const [currentSession, setCurrentSession] = useState<AcademicSession | null>(null);
+  const { loading, error, batches, subjects, batchesWithSubjects } = useOnboardingData(currentSession);
 
   const [step, setStep] = useState<WizardStep>('profile');
-  const [profile, setProfile] = useState<OnboardingProfile>(initialProfile);
+  const [profile, setProfile] = useState<OnboardingProfile>(EMPTY_PROFILE);
+  const [nameEditable, setNameEditable] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [selection, setSelection] = useState<SelectionState>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
-  // Keep the profile email in sync once the actor resolves (only if untouched).
   useEffect(() => {
-    setProfile((prev) => (prev.email === '' && initialProfile.email !== '' ? initialProfile : prev));
-  }, [initialProfile]);
+    let active = true;
+    setProfileLoading(true);
+    setProfileError(null);
+
+    fetchTeacherProfile()
+      .then((loadedProfile) => {
+        if (active) {
+          setProfile(loadedProfile);
+          setNameEditable(loadedProfile.name.trim().length === 0);
+          setProfileLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (active) {
+          setProfileError(err instanceof Error ? err.message : 'Teacher profile could not be loaded.');
+          setProfileLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleSessionChange = (session: AcademicSession) => {
+    setCurrentSession(session);
+    setSelection({});
+    setSaveError(null);
+  };
 
   const handleChangeSubject = (batchId: string, subjectId: string, sections: Section[]) => {
     setSelection((prev) => {
@@ -55,8 +74,39 @@ export default function OnboardingPage() {
       if (sections.length === 0) {
         delete batchSel[subjectId];
       } else {
-        batchSel[subjectId] = sections;
+        const previous = batchSel[subjectId];
+        const previousSections = previous?.sections ?? [];
+        const previousLabSections = previous?.labSections ?? [];
+        batchSel[subjectId] = {
+          sections,
+          labSections: sections.filter((section) =>
+            previous ? (!previousSections.includes(section) || previousLabSections.includes(section)) : true,
+          ),
+        };
       }
+      return { ...prev, [batchId]: batchSel };
+    });
+  };
+
+  const handleChangeSubjectLab = (
+    batchId: string,
+    subjectId: string,
+    section: Section,
+    includeLab: boolean,
+  ) => {
+    setSelection((prev) => {
+      const batchSel = { ...(prev[batchId] ?? {}) };
+      const subjectSelection = batchSel[subjectId];
+      if (!subjectSelection) {
+        return prev;
+      }
+      const nextLabSections = includeLab
+        ? Array.from(new Set([...subjectSelection.labSections, section]))
+        : subjectSelection.labSections.filter((item) => item !== section);
+      batchSel[subjectId] = {
+        ...subjectSelection,
+        labSections: subjectSelection.sections.filter((item) => nextLabSections.includes(item)),
+      };
       return { ...prev, [batchId]: batchSel };
     });
   };
@@ -80,19 +130,22 @@ export default function OnboardingPage() {
     <div className="min-h-screen w-full bg-[#f4f5f9] font-[Inter,system-ui,sans-serif]">
       <div className="mx-auto flex min-h-screen max-w-3xl items-center justify-center px-4 py-10">
         <div className="w-full max-w-[720px] rounded-2xl border border-[#ecedf4] bg-[#fff] p-6 shadow-[0_10px_40px_-12px_rgba(29,32,48,0.18)] sm:p-8">
-          {loading ? (
+          {profileLoading || loading ? (
             <PageLoader />
-          ) : error ? (
+          ) : profileError || error ? (
             <div className="flex flex-col gap-2 text-center">
               <p className="text-sm font-semibold text-[#f0506e]">Data load nahi ho paaya.</p>
-              <p className="text-xs text-[#969cad]">{error}</p>
+              <p className="text-xs text-[#969cad]">{profileError ?? error}</p>
             </div>
           ) : (
             <>
               {step === 'profile' && (
                 <ProfileStep
                   profile={profile}
-                  onChange={setProfile}
+                  nameEditable={nameEditable}
+                  onNameChange={(name) => setProfile((prev) => ({ ...prev, name }))}
+                  currentSession={currentSession}
+                  onSessionChange={handleSessionChange}
                   activeBatches={batches}
                   onContinue={() => setStep('timetable')}
                 />
@@ -103,15 +156,17 @@ export default function OnboardingPage() {
                   batchesWithSubjects={batchesWithSubjects}
                   selection={selection}
                   onChangeSubject={handleChangeSubject}
+                  onChangeSubjectLab={handleChangeSubjectLab}
                   onBack={() => setStep('profile')}
                   onContinue={() => setStep('review')}
                 />
               )}
 
-              {step === 'review' && (
+              {step === 'review' && currentSession !== null && (
                 <ReviewStep
                   batchesWithSubjects={batchesWithSubjects}
                   selection={selection}
+                  currentSession={currentSession}
                   saving={saving}
                   onBack={() => setStep('timetable')}
                   onFinish={handleFinish}

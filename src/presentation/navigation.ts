@@ -51,6 +51,7 @@ export const navGroups: NavGroup[] = [
     id: 'insights',
     label: 'Insights',
     items: [
+      { id: 'reports', label: 'Reports', icon: '📊', path: '/reports', badge: 'NEW' },
       { id: 'heatmap', label: 'Heatmap', icon: '🗓️', path: '/heatmap' },
       { id: 'leaderboard', label: 'Leaderboard', icon: '🏆', path: '/leaderboard' },
     ],

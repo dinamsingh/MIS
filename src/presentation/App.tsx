@@ -25,6 +25,7 @@ import { TeacherSignInView, LockedFeatureView } from '@presentation/views';
 import PageLoader from '@presentation/components/PageLoader';
 import { SelectedSectionProvider } from '@presentation/context/SelectedSectionContext';
 import { useOnboardingStatus } from '../features/onboarding/hooks/useOnboardingStatus';
+import { isFeatureEnabled } from '@domain/featureFlags';
 
 // --- Lazy-loaded page chunks (one per route) ---
 const DashboardPage = lazy(() => import('@presentation/pages/DashboardPage'));
@@ -42,6 +43,8 @@ const HeatmapPage = lazy(() => import('@presentation/pages/HeatmapPage'));
 const StudentQuizAccessPage = lazy(() => import('@presentation/pages/StudentQuizAccessPage'));
 const QuizAttemptPage = lazy(() => import('@presentation/pages/QuizAttemptPage'));
 const OnboardingPage = lazy(() => import('../features/onboarding/OnboardingPage'));
+const AiQuizGeneratorPage = lazy(() => import('@presentation/pages/AiQuizGeneratorPage'));
+const ReportsPage = lazy(() => import('@presentation/pages/ReportsPage'));
 
 /**
  * Onboarding gate for the teacher app shell. While the onboarded status loads
@@ -163,7 +166,15 @@ export default function App() {
               <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
               <Route path="/heatmap" element={<HeatmapPage />} />
-              <Route path="/ai/quiz-generator" element={<LockedFeatureView title="AI Quiz Generator" description="Generate MCQ quizzes using AI." />} />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route
+                path="/ai/quiz-generator"
+                element={
+                  isFeatureEnabled('ai')
+                    ? <AiQuizGeneratorPage />
+                    : <LockedFeatureView title="AI Quiz Generator" description="Generate MCQ quizzes using AI." />
+                }
+              />
               <Route path="/ai/risk-predictor" element={<LockedFeatureView title="Risk Predictor" description="Predict at-risk students using AI." />} />
               <Route path="/ai/*" element={<LockedFeatureView title="AI Feature" />} />
             </Route>

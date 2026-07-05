@@ -150,7 +150,9 @@ export interface QuizPayloadNoAnswers {
 export type QuizAccess =
   | { status: 'granted'; quiz: QuizPayloadNoAnswers }
   | { status: 'enrollment-required' }
-  | { status: 'denied'; reason: 'not-registered' }
+  // `not-registered`: email not on roster / enrollment mismatch.
+  // `not-active`: the quiz is outside its active window (not yet live or expired).
+  | { status: 'denied'; reason: 'not-registered' | 'not-active' }
   | { status: 'already-attempted'; result: AttemptResult };
 
 /**

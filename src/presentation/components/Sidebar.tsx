@@ -1,5 +1,7 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import { isFeatureEnabled } from '@domain/featureFlags';
 import { navGroups } from '@presentation/navigation';
+import { motionDurations, motionEase } from '@presentation/motion';
 
 interface SidebarProps {
   activePath?: string;
@@ -36,12 +38,20 @@ export default function Sidebar({
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-accent text-sm font-bold text-surface shadow-soft">
           A
         </span>
-        {!isCollapsed && (
-          <div className="min-w-0 flex-1 animate-foundation-fade-in">
-            <p className="truncate text-sm font-bold text-text">Academic MIS</p>
-            <p className="truncate text-[11px] font-medium text-muted">Teacher Workspace</p>
-          </div>
-        )}
+        <AnimatePresence initial={false}>
+          {!isCollapsed && (
+            <motion.div
+              className="min-w-0 flex-1"
+              initial={{ opacity: 0, x: -6 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -4 }}
+              transition={{ duration: motionDurations.fast, ease: motionEase }}
+            >
+              <p className="truncate text-sm font-bold text-text">Academic MIS</p>
+              <p className="truncate text-[11px] font-medium text-muted">Teacher Workspace</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
         {!mobile && (
           <button
             type="button"
@@ -67,9 +77,14 @@ export default function Sidebar({
         {navGroups.map((group) => (
           <div key={group.id} className="flex flex-col gap-1">
             {!isCollapsed ? (
-              <p className="px-3 text-[10px] font-semibold uppercase tracking-wider text-muted">
+              <motion.p
+                className="px-3 text-[10px] font-semibold uppercase tracking-wider text-muted"
+                initial={{ opacity: 0, y: -3 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: motionDurations.fast, ease: motionEase }}
+              >
                 {group.label}
-              </p>
+              </motion.p>
             ) : (
               <div className="mx-auto my-1 h-px w-8 bg-sidebar-border" aria-hidden="true" />
             )}
@@ -80,14 +95,15 @@ export default function Sidebar({
                 const effectivelyLocked = item.locked && !isFeatureEnabled('ai');
                 return (
                   <li key={item.id}>
-                    <button
+                    <motion.button
+                      layout
                       type="button"
                       title={isCollapsed ? item.label : undefined}
                       aria-current={isActive ? 'page' : undefined}
                       aria-disabled={effectivelyLocked || undefined}
                       onClick={() => !effectivelyLocked && onNavigate?.(item.path)}
                       className={[
-                        'group relative flex min-h-touch w-full items-center rounded-control text-left text-[13px] font-medium transition-colors duration-fast ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar',
+                        'motion-interactive group relative flex min-h-touch w-full items-center rounded-control text-left text-[13px] font-medium transition-colors duration-fast ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar',
                         isCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
                         effectivelyLocked
                           ? 'cursor-not-allowed text-muted/60'
@@ -97,11 +113,13 @@ export default function Sidebar({
                       ].join(' ')}
                     >
                       {isActive && (
-                        <span
+                        <motion.span
+                          layoutId={mobile ? 'mobile-sidebar-active-indicator' : 'desktop-sidebar-active-indicator'}
                           className={[
                             'absolute rounded-full bg-current transition-all duration-fast ease-standard',
                             isCollapsed ? 'left-1 h-6 w-1' : 'left-1 h-5 w-1',
                           ].join(' ')}
+                          transition={{ duration: motionDurations.standard, ease: motionEase }}
                           aria-hidden="true"
                         />
                       )}
@@ -115,10 +133,18 @@ export default function Sidebar({
                         {item.icon}
                       </span>
                       {!isCollapsed && (
-                        <>
-                          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                        <AnimatePresence initial={false}>
+                          <motion.span
+                            className="min-w-0 flex-1 truncate"
+                            initial={{ opacity: 0, x: -4 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -4 }}
+                            transition={{ duration: motionDurations.fast, ease: motionEase }}
+                          >
+                            {item.label}
+                          </motion.span>
                           {item.badge && (
-                            <span
+                            <motion.span
                               className={[
                                 'rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none',
                                 item.badge === 'AI'
@@ -127,13 +153,17 @@ export default function Sidebar({
                                     ? 'bg-status-green/10 text-status-green'
                                     : 'bg-accent-tint text-accent',
                               ].join(' ')}
+                              initial={{ opacity: 0, scale: 0.96 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.96 }}
+                              transition={{ duration: motionDurations.fast, ease: motionEase }}
                             >
                               {item.badge}
-                            </span>
+                            </motion.span>
                           )}
-                        </>
+                        </AnimatePresence>
                       )}
-                    </button>
+                    </motion.button>
                   </li>
                 );
               })}

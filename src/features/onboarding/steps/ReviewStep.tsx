@@ -6,11 +6,12 @@
 
 import Stepper from '../components/Stepper';
 import { toRoman } from '../components/SemAccordion';
-import type { BatchWithSubjects, SelectionState } from '../types';
+import type { AcademicSession, BatchWithSubjects, SelectionState } from '../types';
 
 interface ReviewStepProps {
   readonly batchesWithSubjects: readonly BatchWithSubjects[];
   readonly selection: SelectionState;
+  readonly currentSession: AcademicSession;
   readonly saving: boolean;
   readonly onBack: () => void;
   readonly onFinish: () => void;
@@ -19,6 +20,7 @@ interface ReviewStepProps {
 export default function ReviewStep({
   batchesWithSubjects,
   selection,
+  currentSession,
   saving,
   onBack,
   onFinish,
@@ -27,7 +29,15 @@ export default function ReviewStep({
   const groups = batchesWithSubjects
     .map(({ batch, subjects }) => {
       const chosen = subjects
-        .map((subject) => ({ subject, sections: selection[batch.id]?.[subject.id] ?? [] }))
+        .map((subject) => ({
+          subject,
+          subjectSelection: selection[batch.id]?.[subject.id],
+        }))
+        .map(({ subject, subjectSelection }) => ({
+          subject,
+          sections: subjectSelection?.sections ?? [],
+          labSections: subjectSelection?.labSections ?? [],
+        }))
         .filter((entry) => entry.sections.length > 0);
       return { batch, chosen };
     })
@@ -42,6 +52,9 @@ export default function ReviewStep({
       <div>
         <h1 className="text-2xl font-bold text-[#1d2030]">Ek baar dekh lijiye</h1>
         <p className="mt-1 text-sm text-[#5a6072]">Sab sahi lag raha hai? Toh setup complete karein.</p>
+        <span className="mt-3 inline-flex rounded-full bg-[#eef0fe] px-3 py-1 text-xs font-semibold uppercase text-[#4a42d4]">
+          {currentSession} session
+        </span>
       </div>
 
       {!hasSelections ? (
@@ -56,8 +69,10 @@ export default function ReviewStep({
                 Sem {toRoman(batch.currentSem)} · Batch {batch.id}
               </h2>
               <ul className="mt-3 flex flex-col gap-2">
-                {chosen.map(({ subject, sections }) => {
-                  const labAttached = subject.kind === 'theory' && !!subject.labName;
+                {chosen.map(({ subject, sections, labSections }) => {
+                  const hasOptionalLab = subject.kind === 'theory' && !!subject.labName;
+                  const selectedLabSections = sections.filter((section) => labSections.includes(section));
+                  const labAttached = hasOptionalLab && selectedLabSections.length > 0;
                   return (
                     <li
                       key={subject.id}
@@ -66,12 +81,15 @@ export default function ReviewStep({
                       <span className="min-w-0">
                         <span className="text-sm font-medium text-[#1d2030]">{subject.name}</span>
                         <span className="ml-2 text-xs text-[#969cad]">{subject.code}</span>
-                        {labAttached && (
+                        {hasOptionalLab && (
                           <span
                             className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-                            style={{ backgroundColor: '#e7f8f1', color: '#0e9d6e' }}
+                            style={{
+                              backgroundColor: labAttached ? '#e7f8f1' : '#f0f1f5',
+                              color: labAttached ? '#0e9d6e' : '#6b7280',
+                            }}
                           >
-                            + Lab
+                            {labAttached ? `Lab ${selectedLabSections.join(', ')}` : 'Lab removed'}
                           </span>
                         )}
                       </span>

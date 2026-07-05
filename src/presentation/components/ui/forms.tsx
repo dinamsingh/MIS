@@ -22,7 +22,7 @@ export interface FieldChromeProps {
 
 export function FieldChrome({ label, helperText, error, success, required, className, children }: FieldChromeProps) {
   return (
-    <label className={cx('field-group', className)}>
+    <label className={cx('field-group', Boolean(error) && 'motion-upload-error', Boolean(success) && 'motion-upload-success', className)}>
       {label && (
         <span className="field-label">
           {label}
@@ -208,7 +208,7 @@ export const Checkbox = forwardRef<HTMLInputElement, ChoiceProps>(function Check
   ref,
 ) {
   return (
-    <label className={cx('flex items-start gap-3 rounded-control border border-transparent p-1.5 text-sm text-text', props.disabled && 'opacity-60', className)}>
+    <label className={cx('motion-interactive flex items-start gap-3 rounded-control border border-transparent p-1.5 text-sm text-text hover:bg-secondary/70', props.disabled && 'opacity-60', className)}>
       <input ref={ref} type="checkbox" className={cx('mt-0.5 h-4 w-4 rounded-sm border-input accent-accent', focusRing)} {...props} />
       <span>
         <span className="font-medium">{label}</span>
@@ -223,7 +223,7 @@ export const Radio = forwardRef<HTMLInputElement, ChoiceProps>(function Radio(
   ref,
 ) {
   return (
-    <label className={cx('flex items-start gap-3 rounded-control border border-transparent p-1.5 text-sm text-text', props.disabled && 'opacity-60', className)}>
+    <label className={cx('motion-interactive flex items-start gap-3 rounded-control border border-transparent p-1.5 text-sm text-text hover:bg-secondary/70', props.disabled && 'opacity-60', className)}>
       <input ref={ref} type="radio" className={cx('mt-0.5 h-4 w-4 border-input accent-accent', focusRing)} {...props} />
       <span>
         <span className="font-medium">{label}</span>
@@ -267,14 +267,22 @@ export interface FileUploadProps extends Omit<ComponentPropsWithoutRef<'input'>,
   readonly helperText?: ReactNode;
   readonly error?: ReactNode;
   readonly actionLabel?: string;
+  readonly success?: ReactNode;
 }
 
-export function FileUpload({ label, helperText, error, actionLabel = 'Choose file', className, ...props }: FileUploadProps) {
+export function FileUpload({ label, helperText, error, success, actionLabel = 'Choose file', className, ...props }: FileUploadProps) {
   const inputId = useId();
 
   return (
-    <FieldChrome label={label} helperText={helperText} error={error}>
-      <div className={cx('rounded-card border border-dashed border-border bg-surface-muted/60 p-4', className)}>
+    <FieldChrome label={label} helperText={helperText} error={error} success={success}>
+      <div
+        className={cx(
+          'motion-upload-zone rounded-card border border-dashed border-border bg-surface-muted/60 p-4',
+          Boolean(error) && 'border-status-red/40 bg-status-red/5',
+          Boolean(success) && 'border-status-green/40 bg-status-green/5',
+          className,
+        )}
+      >
         <input id={inputId} type="file" className="sr-only" {...props} />
         <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>

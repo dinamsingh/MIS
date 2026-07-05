@@ -53,7 +53,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       type={type}
       disabled={disabled || loading}
       className={cx(
-        'inline-flex items-center justify-center gap-2 rounded-button font-medium transition-all duration-fast ease-standard',
+        'motion-interactive inline-flex items-center justify-center gap-2 rounded-button font-medium transition-all duration-fast ease-standard',
         buttonVariantClass[variant],
         buttonSizeClass[size],
         focusRing,
@@ -91,7 +91,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       type="button"
       aria-label={label}
       className={cx(
-        'inline-flex items-center justify-center rounded-button text-soft transition-all duration-fast ease-standard hover:bg-secondary hover:text-text',
+        'motion-interactive inline-flex items-center justify-center rounded-button text-soft transition-all duration-fast ease-standard hover:bg-secondary hover:text-text',
         sizeClass[size],
         focusRing,
         disabledState,
@@ -114,10 +114,9 @@ export function Card({ as: Component = 'section', interactive = false, padded = 
   return (
     <Component
       className={cx(
-        'rounded-card border border-border bg-surface shadow-soft',
+        'motion-border rounded-card border border-border bg-surface shadow-soft transition-[border-color,box-shadow,transform] duration-200 ease-standard',
         padded && 'p-5',
-        interactive &&
-          'transition-all duration-fast ease-standard hover:-translate-y-0.5 hover:border-ring hover:shadow-elevated motion-reduce:hover:translate-y-0',
+        interactive && 'motion-card hover:border-ring motion-reduce:hover:translate-y-0',
         className,
       )}
       {...props}
@@ -165,13 +164,13 @@ export function StatsCard({
   const toneStyles = toneClass[tone];
 
   return (
-    <article className={cx('card relative min-h-[7.5rem] overflow-hidden p-4', className)} {...props}>
+    <article className={cx('card motion-border motion-card relative min-h-[7.5rem] overflow-hidden p-4', className)} {...props}>
       <div className={cx('absolute right-3 top-3 h-14 w-14 rounded-full opacity-60 blur-xl', toneStyles.bg)} />
       {loading ? (
         <div className="relative space-y-3">
-          <div className="h-8 w-8 animate-pulse rounded-button bg-border/60" />
-          <div className="h-3 w-24 animate-pulse rounded-button bg-border/60" />
-          <div className="h-7 w-20 animate-pulse rounded-button bg-border/60" />
+          <div className="h-8 w-8 animate-shimmer rounded-button bg-border/60" />
+          <div className="h-3 w-24 animate-shimmer rounded-button bg-border/60" />
+          <div className="h-7 w-20 animate-shimmer rounded-button bg-border/60" />
         </div>
       ) : (
         <div className="relative flex h-full flex-col justify-between gap-3">
@@ -199,15 +198,30 @@ export interface SectionHeaderProps extends Omit<HTMLAttributes<HTMLDivElement>,
   readonly title: ReactNode;
   readonly description?: ReactNode;
   readonly actions?: ReactNode;
+  readonly density?: 'default' | 'compact';
 }
 
-export function SectionHeader({ eyebrow, title, description, actions, className, ...props }: SectionHeaderProps) {
+export function SectionHeader({ eyebrow, title, description, actions, density = 'default', className, ...props }: SectionHeaderProps) {
+  const compact = density === 'compact';
+
   return (
-    <div className={cx('flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between', className)} {...props}>
+    <div
+      className={cx(
+        compact
+          ? 'motion-border flex flex-col gap-2 rounded-card border border-border bg-surface px-4 py-3 shadow-soft sm:flex-row sm:items-center sm:justify-between'
+          : 'flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between',
+        className,
+      )}
+      {...props}
+    >
       <div className="min-w-0">
-        {eyebrow && <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">{eyebrow}</p>}
-        <h1 className="truncate text-page-title">{title}</h1>
-        {description && <p className="mt-1 max-w-3xl text-body">{description}</p>}
+        {eyebrow && (
+          <p className={compact ? 'mb-0.5 text-[11px] font-semibold text-muted' : 'mb-1 text-xs font-semibold uppercase tracking-wide text-muted'}>
+            {eyebrow}
+          </p>
+        )}
+        <h1 className={compact ? 'truncate text-xl font-semibold leading-7 text-text' : 'truncate text-page-title'}>{title}</h1>
+        {description && <p className={compact ? 'mt-0.5 max-w-2xl truncate text-xs leading-5 text-muted' : 'mt-1 max-w-3xl text-body'}>{description}</p>}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -215,5 +229,5 @@ export function SectionHeader({ eyebrow, title, description, actions, className,
 }
 
 function LoadingDot() {
-  return <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />;
+  return <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none" aria-hidden="true" />;
 }

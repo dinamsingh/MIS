@@ -7,6 +7,8 @@
  */
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
+import { useAuth } from '@presentation/auth';
 import { messages } from '@domain/shared/messages';
 import { isAtRisk, classAverage } from '@domain/services/analyticsService';
 import { todaysClasses, type DayOfWeek, type TimetableEntry } from '@domain/services/timetableService';
@@ -18,8 +20,10 @@ import {
   DashboardStatCard,
   PendingTasks,
   QuickActions,
+  RecentActivity,
   StudentDirectoryModal,
   TodaySchedule,
+  deriveActivities,
   scheduleFromEntries,
   type PendingTask,
   type QuickAction,
@@ -77,6 +81,13 @@ function daysAgo(n: number): string {
   return toISODate(d);
 }
 
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
 function chartFallback() {
   return (
     <div className="grid grid-cols-1 gap-5" aria-label="Loading dashboard charts">
@@ -95,6 +106,14 @@ export default function DashboardView({
   subjectNames = {},
   sectionNames = {},
 }: DashboardViewProps) {
+  const { actor } = useAuth();
+  const teacherName = useMemo(
+    () => actor.kind === 'teacher'
+      ? actor.email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+      : 'Teacher',
+    [actor],
+  );
+
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [timetableEntries, setTimetableEntries] = useState<TimetableEntry[]>([]);
   const [trendPoints, setTrendPoints] = useState<AttendanceTrendPoint[]>([]);
@@ -232,6 +251,7 @@ export default function DashboardView({
         detail: 'Review attendance, marks, or quiz performance.',
         count: needsAttention.length,
         tone: needsAttention.length > 0 ? 'red' : 'green',
+        href: '/analytics',
       },
       {
         id: 'syllabus',
@@ -239,6 +259,7 @@ export default function DashboardView({
         detail: 'Complete planned topics for this section.',
         count: Math.max(0, Math.round(100 - resolvedSummary.syllabusProgressPercent)),
         tone: resolvedSummary.syllabusProgressPercent >= 80 ? 'green' : 'amber',
+        href: '/syllabus',
       },
       {
         id: 'classes',
@@ -246,6 +267,7 @@ export default function DashboardView({
         detail: 'Prepare attendance and class material.',
         count: todayClasses.length,
         tone: 'blue',
+        href: '/timetable',
       },
     ],
     [needsAttention.length, resolvedSummary.syllabusProgressPercent, todayClasses.length],
@@ -262,86 +284,209 @@ export default function DashboardView({
     [],
   );
 
+  const recentActivities = useMemo(
+    () => deriveActivities(studentMetrics, pendingAssignments),
+    [studentMetrics, pendingAssignments],
+  );
+
+  const attPct = resolvedSummary.avgAttendancePercent;
+  const attColor = attPct >= 75 ? 'bg-status-green' : attPct >= 60 ? 'bg-status-amber' : 'bg-status-red';
+  const openStudentsModal = useCallback(() => setShowStudentsModal(true), []);
+
+  const statCards = useMemo(() => [
+    {
+      key: 'students',
+      icon: '👥',
+      label: 'Students',
+      value: resolvedSummary.totalStudents,
+      suffix: undefined as string | undefined,
+      precision: 0,
+      trend: 'view list',
+      trendDirection: 'flat' as const,
+      tone: 'blue' as const,
+      description: 'Current roster size',
+      onClick: openStudentsModal,
+    },
+    {
+      key: 'attendance',
+      icon: '📊',
+      label: 'Attendance',
+      value: resolvedSummary.avgAttendancePercent,
+      suffix: '%',
+      precision: 1,
+      trend: resolvedSummary.avgAttendancePercent >= 75 ? 'healthy' : 'review',
+      trendDirection: resolvedSummary.avgAttendancePercent >= 75 ? 'up' as const : 'down' as const,
+      tone: resolvedSummary.avgAttendancePercent >= 75 ? 'green' as const : 'amber' as const,
+      description: 'Average class attendance',
+      onClick: undefined as (() => void) | undefined,
+    },
+    {
+      key: 'subjects',
+      icon: '📚',
+      label: 'Subjects',
+      value: subjectCount,
+      suffix: undefined,
+      precision: 0,
+      trend: 'active',
+      trendDirection: 'flat' as const,
+      tone: 'neutral' as const,
+      description: 'From timetable entries',
+      onClick: undefined,
+    },
+    {
+      key: 'pending',
+      icon: '⚠️',
+      label: 'Need Attention',
+      value: pendingAssignments,
+      suffix: undefined,
+      precision: 0,
+      trend: pendingAssignments > 0 ? 'due soon' : 'clear',
+      trendDirection: pendingAssignments > 0 ? 'down' as const : 'up' as const,
+      tone: pendingAssignments > 0 ? 'red' as const : 'green' as const,
+      description: 'Students at risk',
+      onClick: undefined,
+    },
+    {
+      key: 'quiz',
+      icon: '🧠',
+      label: 'Quiz Average',
+      value: averageQuizScore,
+      suffix: undefined,
+      precision: 1,
+      trend: 'class signal',
+      trendDirection: 'flat' as const,
+      tone: 'amber' as const,
+      description: 'Average quiz score',
+      onClick: undefined,
+    },
+    {
+      key: 'syllabus',
+      icon: '📋',
+      label: 'Syllabus',
+      value: resolvedSummary.syllabusProgressPercent,
+      suffix: '%',
+      precision: 0,
+      trend: resolvedSummary.syllabusProgressPercent >= 80 ? 'on track' : 'pending',
+      trendDirection: resolvedSummary.syllabusProgressPercent >= 80 ? 'up' as const : 'flat' as const,
+      tone: resolvedSummary.syllabusProgressPercent >= 80 ? 'green' as const : 'blue' as const,
+      description: 'Completion progress',
+      onClick: undefined,
+    },
+  ], [
+    averageQuizScore,
+    openStudentsModal,
+    pendingAssignments,
+    resolvedSummary.avgAttendancePercent,
+    resolvedSummary.syllabusProgressPercent,
+    resolvedSummary.totalStudents,
+    subjectCount,
+  ]);
+
   if (isLoading) {
     return <DashboardSkeleton />;
   }
 
   return (
     <section className="flex flex-col gap-5">
+      {/* ── Welcome Section ── */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: 'easeOut' }}
+        className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between"
+      >
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-text">
+          {getGreeting()}, {teacherName} 👋
+        </h1>
+      </motion.div>
+
+      {/* ── Stat Cards (staggered entrance) ── */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <DashboardStatCard
-          icon="S"
-          label="Students"
-          value={resolvedSummary.totalStudents}
-          trend="view list"
-          trendDirection="flat"
-          tone="blue"
-          description="Current roster size"
-          onClick={() => setShowStudentsModal(true)}
-        />
-        <DashboardStatCard
-          icon="A"
-          label="Attendance"
-          value={resolvedSummary.avgAttendancePercent}
-          suffix="%"
-          precision={1}
-          trend={resolvedSummary.avgAttendancePercent >= 75 ? 'healthy' : 'review'}
-          trendDirection={resolvedSummary.avgAttendancePercent >= 75 ? 'up' : 'down'}
-          tone={resolvedSummary.avgAttendancePercent >= 75 ? 'green' : 'amber'}
-          description="Average class attendance"
-        />
-        <DashboardStatCard
-          icon="B"
-          label="Subjects"
-          value={subjectCount}
-          trend="active"
-          tone="neutral"
-          description="From timetable entries"
-        />
-        <DashboardStatCard
-          icon="P"
-          label="Assignments Pending"
-          value={pendingAssignments}
-          trend={pendingAssignments > 0 ? 'due soon' : 'clear'}
-          trendDirection={pendingAssignments > 0 ? 'down' : 'up'}
-          tone={pendingAssignments > 0 ? 'red' : 'green'}
-          description="Follow-up workload"
-        />
-        <DashboardStatCard
-          icon="Q"
-          label="Quiz Average"
-          value={averageQuizScore}
-          precision={1}
-          trend="class signal"
-          tone="amber"
-          description="Average quiz score"
-        />
-        <DashboardStatCard
-          icon="M"
-          label="Syllabus"
-          value={resolvedSummary.syllabusProgressPercent}
-          suffix="%"
-          precision={0}
-          trend={resolvedSummary.syllabusProgressPercent >= 80 ? 'on track' : 'pending'}
-          trendDirection={resolvedSummary.syllabusProgressPercent >= 80 ? 'up' : 'flat'}
-          tone={resolvedSummary.syllabusProgressPercent >= 80 ? 'green' : 'blue'}
-          description="Completion progress"
-        />
+        {statCards.map((card, i) => (
+          <motion.div
+            key={card.key}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.045, duration: 0.2, ease: 'easeOut' }}
+          >
+            <DashboardStatCard
+              icon={card.icon}
+              label={card.label}
+              value={card.value}
+              suffix={card.suffix}
+              precision={card.precision}
+              trend={card.trend}
+              trendDirection={card.trendDirection}
+              tone={card.tone}
+              description={card.description}
+              onClick={card.onClick}
+            />
+          </motion.div>
+        ))}
       </div>
 
+      {/* ── Attendance Overview Strip ── */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.3, duration: 0.2 }}
+        className="card overflow-hidden p-4"
+        aria-label={`Average attendance: ${attPct.toFixed(1)}%`}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Attendance Overview</p>
+            <p className="mt-0.5 text-sm text-soft">Average across all students in selected section</p>
+          </div>
+          <span className={`text-2xl font-bold ${
+            attPct >= 75 ? 'text-status-green' : attPct >= 60 ? 'text-status-amber' : 'text-status-red'
+          }`}>
+            {attPct.toFixed(1)}%
+          </span>
+        </div>
+        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-border">
+          <motion.div
+            className={`h-full rounded-full ${attColor}`}
+            initial={{ width: 0 }}
+            animate={{ width: `${Math.min(100, attPct)}%` }}
+            transition={{ delay: 0.35, duration: 0.5, ease: 'easeOut' }}
+          />
+        </div>
+        <div className="mt-1.5 flex justify-between text-[10px] text-muted">
+          <span>0%</span>
+          <span className="text-status-amber">75% threshold</span>
+          <span>100%</span>
+        </div>
+      </motion.div>
+
+      {/* ── Charts (lazy) ── */}
       <Suspense fallback={chartFallback()}>
         <DashboardCharts
           trendPoints={trendPoints}
         />
       </Suspense>
 
+      {/* ── Quick Actions ── */}
       <QuickActions actions={quickActions} />
 
+      {/* ── Schedule + Pending Tasks ── */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <TodaySchedule classes={scheduleItems} />
         <PendingTasks tasks={pendingTasks} />
       </div>
 
+      {/* ── Recent Activity ── */}
+      {recentActivities.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.2 }}
+        >
+          <RecentActivity items={recentActivities} />
+        </motion.div>
+      )}
+
+      {/* ── Empty state when no students loaded yet ── */}
       {studentMetrics.length === 0 && (
         <DashboardEmptyState
           title="Dashboard is ready for data"

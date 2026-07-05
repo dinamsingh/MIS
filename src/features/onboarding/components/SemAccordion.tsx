@@ -5,16 +5,17 @@
  */
 
 import SubjectRow from './SubjectRow';
-import type { Batch, Section, SyllabusSubject } from '../types';
+import type { Batch, Section, SubjectSelection, SyllabusSubject } from '../types';
 
 interface SemAccordionProps {
   readonly batch: Batch;
   readonly subjects: readonly SyllabusSubject[];
   /** subjectId → selected sections for this batch. */
-  readonly selection: Record<string, Section[]>;
+  readonly selection: Record<string, SubjectSelection>;
   readonly expanded: boolean;
   readonly onToggle: () => void;
   readonly onChangeSubject: (subjectId: string, sections: Section[]) => void;
+  readonly onChangeSubjectLab: (subjectId: string, section: Section, includeLab: boolean) => void;
 }
 
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'] as const;
@@ -31,9 +32,10 @@ export default function SemAccordion({
   expanded,
   onToggle,
   onChangeSubject,
+  onChangeSubjectLab,
 }: SemAccordionProps) {
   const selectedCount = subjects.reduce(
-    (total, s) => total + (selection[s.id]?.length ?? 0),
+    (total, s) => total + (selection[s.id]?.sections.length ?? 0),
     0,
   );
   const bodyId = `sem-panel-${batch.id}`;
@@ -80,8 +82,10 @@ export default function SemAccordion({
               <SubjectRow
                 key={subject.id}
                 subject={subject}
-                selected={selection[subject.id] ?? []}
+                selected={selection[subject.id]?.sections ?? []}
+                labSections={selection[subject.id]?.labSections ?? []}
                 onChange={(next) => onChangeSubject(subject.id, next)}
+                onChangeLab={(section, includeLab) => onChangeSubjectLab(subject.id, section, includeLab)}
               />
             ))
           )}

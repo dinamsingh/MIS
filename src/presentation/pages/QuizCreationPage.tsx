@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import QuizCreationView, {
   type QuizUnitOption,
   type QuizAttemptStudent,
@@ -17,11 +18,13 @@ import { createLocalDemoQuizAccess, isLocalDemoMode } from '@data/demo/localDemo
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 import { loadRosterStudentsForSections } from '@presentation/loaders/rosterStudents';
+import { loadUnitsForSubject } from '@presentation/loaders/unitOptions';
 
 const supabaseQuizAccess = createQuizAccess(supabase);
 
 export default function QuizCreationPage() {
-  const { sections } = useSelectedSection();
+  const navigate = useNavigate();
+  const { sections, selectedSubjectId } = useSelectedSection();
   const [units, setUnits] = useState<QuizUnitOption[]>([]);
   const [students, setStudents] = useState<QuizAttemptStudent[]>([]);
   const quizAccess = useMemo(
@@ -41,13 +44,12 @@ export default function QuizCreationPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const [unitRes, roster] = await Promise.all([
-          supabase.from('units').select('id, name').order('name'),
+        // Units come from the globally-selected subject's master syllabus.
+        const [subjectUnits, roster] = await Promise.all([
+          loadUnitsForSubject(selectedSubjectId),
           loadRosterStudentsForSections(sections),
         ]);
-        if (unitRes.data) {
-          setUnits(unitRes.data as QuizUnitOption[]);
-        }
+        setUnits(subjectUnits.map((u) => ({ id: u.id, name: u.name })));
 
         setStudents(
           roster.map((student) => ({
@@ -60,7 +62,14 @@ export default function QuizCreationPage() {
         // View handles empty state gracefully.
       }
     })();
-  }, [sections]);
+  }, [sections, selectedSubjectId]);
 
-  return <QuizCreationView quizAccess={quizAccess} units={units} students={students} />;
+  return (
+    <QuizCreationView
+      quizAccess={quizAccess}
+      units={units}
+      students={students}
+      onAiGenerate={() => navigate('/ai/quiz-generator')}
+    />
+  );
 }

@@ -56,7 +56,7 @@ export interface StudentQuizAccessViewProps {
 type Phase =
   | { kind: 'resolving' }
   | { kind: 'enrollment-required'; submitting: boolean; error: string | null }
-  | { kind: 'denied' }
+  | { kind: 'denied'; reason: 'not-registered' | 'not-active' }
   | { kind: 'already-attempted'; score: number; totalMarks: number }
   | { kind: 'granted'; quiz: QuizPayloadNoAnswers };
 
@@ -99,8 +99,10 @@ export default function StudentQuizAccessView({
         });
         break;
       case 'denied':
+        setPhase({ kind: 'denied', reason: decision.reason });
+        break;
       default:
-        setPhase({ kind: 'denied' });
+        setPhase({ kind: 'denied', reason: 'not-registered' });
         break;
     }
   }, []);
@@ -123,7 +125,7 @@ export default function StudentQuizAccessView({
       })
       .catch(() => {
         if (active) {
-          setPhase({ kind: 'denied' });
+          setPhase({ kind: 'denied', reason: 'not-registered' });
         }
       });
     return () => {
@@ -219,7 +221,13 @@ export default function StudentQuizAccessView({
     }
 
     case 'denied':
-      return (
+      return phase.reason === 'not-active' ? (
+        <AccessCard title="Quiz not available">
+          <p role="alert">
+            This quiz is not open right now. It may not have started yet or the deadline has passed.
+          </p>
+        </AccessCard>
+      ) : (
         <AccessCard title="Access not available">
           <p role="alert">{messages.auth.notRegistered}</p>
         </AccessCard>

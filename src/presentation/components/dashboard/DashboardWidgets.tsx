@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { TimetableEntry } from '@domain/services/timetableService';
 import type { StudentMetrics } from '@domain/services/leaderboardService';
 
@@ -196,6 +197,7 @@ export interface QuickAction {
 }
 
 export const QuickActions = memo(function QuickActions({ actions }: { readonly actions: readonly QuickAction[] }) {
+  const navigate = useNavigate();
   return (
     <section className="card p-5" aria-labelledby="quick-actions-title">
       <div className="flex items-center justify-between gap-3">
@@ -208,10 +210,11 @@ export const QuickActions = memo(function QuickActions({ actions }: { readonly a
         {actions.map((action, index) => {
           const toneClass = toneClasses[action.tone];
           return (
-            <a
+            <button
               key={action.href}
-              href={action.href}
-              className="group rounded-card border border-border bg-background p-3 transition-all duration-fast ease-standard hover:-translate-y-0.5 hover:border-ring hover:shadow-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:hover:translate-y-0"
+              type="button"
+              onClick={() => navigate(action.href)}
+              className="group w-full rounded-card border border-border bg-background p-3 text-left transition-all duration-fast ease-standard hover:-translate-y-0.5 hover:border-ring hover:shadow-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:hover:translate-y-0"
               style={{ animationDelay: `${index * 35}ms` }}
             >
               <span className={`flex h-9 w-9 items-center justify-center rounded-button ${toneClass.soft} ${toneClass.text}`}>
@@ -219,7 +222,7 @@ export const QuickActions = memo(function QuickActions({ actions }: { readonly a
               </span>
               <p className="mt-3 text-sm font-semibold text-text">{action.label}</p>
               <p className="mt-1 text-xs leading-5 text-muted">{action.description}</p>
-            </a>
+            </button>
           );
         })}
       </div>
@@ -261,7 +264,7 @@ export const TodaySchedule = memo(function TodaySchedule({ classes }: { readonly
                   <span
                     className={[
                       'h-3 w-3 rounded-full ring-4',
-                      active ? 'bg-accent ring-accent/15' : item.status === 'done' ? 'bg-status-green ring-status-green/15' : 'bg-border ring-border/50',
+                      active ? 'bg-accent ring-accent/15 animate-pulse' : item.status === 'done' ? 'bg-status-green ring-status-green/15' : 'bg-border ring-border/50',
                     ].join(' ')}
                   />
                   <span className="mt-2 h-full min-h-10 w-px bg-border" />
@@ -339,9 +342,12 @@ export interface PendingTask {
   readonly detail: string;
   readonly count: number;
   readonly tone: Tone;
+  /** Optional route to navigate to when the task card is clicked. */
+  readonly href?: string;
 }
 
 export const PendingTasks = memo(function PendingTasks({ tasks }: { readonly tasks: readonly PendingTask[] }) {
+  const navigate = useNavigate();
   const activeTasks = tasks.filter((task) => task.count > 0);
   return (
     <section className="card p-5" aria-labelledby="pending-title">
@@ -355,15 +361,29 @@ export const PendingTasks = memo(function PendingTasks({ tasks }: { readonly tas
         <div className="mt-5 space-y-3">
           {activeTasks.map((task) => {
             const toneClass = toneClasses[task.tone];
+            const isClickable = Boolean(task.href);
             return (
-              <div key={task.id} className="flex items-center gap-3 rounded-card border border-border bg-background p-3">
-                <span className={`flex h-9 w-9 items-center justify-center rounded-button ${toneClass.soft} ${toneClass.text} text-sm font-bold`}>
+              <div
+                key={task.id}
+                role={isClickable ? 'button' : undefined}
+                tabIndex={isClickable ? 0 : undefined}
+                onClick={isClickable ? () => navigate(task.href!) : undefined}
+                onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') navigate(task.href!); } : undefined}
+                className={[
+                  'flex items-center gap-3 rounded-card border border-border bg-background p-3',
+                  isClickable ? 'cursor-pointer transition-all duration-fast ease-standard hover:-translate-y-0.5 hover:border-ring hover:shadow-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:hover:translate-y-0' : '',
+                ].join(' ')}
+              >
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-button ${toneClass.soft} ${toneClass.text} text-sm font-bold`}>
                   {task.count}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-text">{task.label}</p>
                   <p className="text-xs text-muted">{task.detail}</p>
                 </div>
+                {isClickable && (
+                  <span className="shrink-0 text-xs text-muted" aria-hidden="true">→</span>
+                )}
               </div>
             );
           })}

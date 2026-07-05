@@ -1,4 +1,6 @@
-import { useEffect, type HTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useRef, type HTMLAttributes, type ReactNode, type RefObject } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { dialogMotion, drawerMotion, menuMotion, overlayBackdropMotion } from '@presentation/motion';
 import { Button, IconButton } from './foundation';
 import { cx, focusRing } from './utils';
 
@@ -16,24 +18,30 @@ export interface DialogProps extends OpenLayerProps {
 }
 
 export function Dialog({ open, onOpenChange, title, description, children, footer, closeLabel = 'Close dialog' }: DialogProps) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
   useEscapeClose(open, onOpenChange);
-  if (!open) return null;
+  useDialogFocus(open, panelRef);
+  useFocusTrap(open, panelRef);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
-      <button type="button" className="absolute inset-0 animate-foundation-fade-in bg-black/35 backdrop-blur-[2px]" aria-label={closeLabel} onClick={() => onOpenChange(false)} />
-      <div className="relative flex max-h-[88vh] w-full max-w-lg animate-foundation-scale-in flex-col overflow-hidden rounded-dialog border border-border bg-surface shadow-overlay">
-        <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
-          <div>
-            <h2 id="dialog-title" className="text-lg font-semibold text-text">{title}</h2>
-            {description && <p className="mt-1 text-xs leading-5 text-muted">{description}</p>}
-          </div>
-          <IconButton icon="x" label={closeLabel} size="sm" onClick={() => onOpenChange(false)} />
-        </div>
-        <div className="min-h-0 flex-1 overflow-auto p-5">{children}</div>
-        {footer && <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">{footer}</div>}
-      </div>
-    </div>
+    <AnimatePresence>
+      {open && (
+        <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+          <motion.button type="button" className="absolute inset-0 bg-black/35 backdrop-blur-[2px]" aria-label={closeLabel} onClick={() => onOpenChange(false)} {...overlayBackdropMotion} />
+          <motion.div ref={panelRef} className="relative flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-dialog border border-border bg-surface shadow-overlay" {...dialogMotion}>
+            <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+              <div>
+                <h2 id="dialog-title" className="text-lg font-semibold text-text">{title}</h2>
+                {description && <p className="mt-1 text-xs leading-5 text-muted">{description}</p>}
+              </div>
+              <IconButton icon="x" label={closeLabel} size="sm" onClick={() => onOpenChange(false)} />
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-5">{children}</div>
+            {footer && <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">{footer}</div>}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -44,8 +52,10 @@ export interface DrawerProps extends OpenLayerProps {
 }
 
 export function Drawer({ open, onOpenChange, title, side = 'right', children }: DrawerProps) {
+  const panelRef = useRef<HTMLElement | null>(null);
   useEscapeClose(open, onOpenChange);
-  if (!open) return null;
+  useDialogFocus(open, panelRef);
+  useFocusTrap(open, panelRef);
 
   const sideClass = {
     left: 'inset-y-0 left-0 h-full w-[22rem] max-w-[88vw]',
@@ -54,20 +64,28 @@ export function Drawer({ open, onOpenChange, title, side = 'right', children }: 
   };
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : 'Drawer'}>
-      <button type="button" className="absolute inset-0 animate-foundation-fade-in bg-black/35 backdrop-blur-[2px]" aria-label="Close drawer" onClick={() => onOpenChange(false)} />
-      <aside className={cx('absolute animate-foundation-slide-up overflow-hidden border-border bg-surface shadow-overlay', side === 'bottom' ? 'border-t' : 'border-x', sideClass[side])}>
-        <div className="flex h-full flex-col">
-          {title && (
-            <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
-              <h2 className="text-sm font-semibold text-text">{title}</h2>
-              <IconButton icon="x" label="Close drawer" size="sm" onClick={() => onOpenChange(false)} />
+    <AnimatePresence>
+      {open && (
+        <motion.div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : 'Drawer'}>
+          <motion.button type="button" className="absolute inset-0 bg-black/35 backdrop-blur-[2px]" aria-label="Close drawer" onClick={() => onOpenChange(false)} {...overlayBackdropMotion} />
+          <motion.aside
+            ref={panelRef}
+            className={cx('absolute overflow-hidden border-border bg-surface shadow-overlay', side === 'bottom' ? 'border-t' : 'border-x', sideClass[side])}
+            {...drawerMotion(side)}
+          >
+            <div className="flex h-full flex-col">
+              {title && (
+                <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+                  <h2 className="text-sm font-semibold text-text">{title}</h2>
+                  <IconButton icon="x" label="Close drawer" size="sm" onClick={() => onOpenChange(false)} />
+                </div>
+              )}
+              <div className="min-h-0 flex-1 overflow-auto p-5">{children}</div>
             </div>
-          )}
-          <div className="min-h-0 flex-1 overflow-auto p-5">{children}</div>
-        </div>
-      </aside>
-    </div>
+          </motion.aside>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -92,31 +110,37 @@ export function DropdownMenu({ open, onOpenChange, trigger, items, align = 'righ
   return (
     <div className="relative inline-flex">
       <div onClick={() => onOpenChange(!open)}>{trigger}</div>
-      {open && (
-        <div role="menu" className={cx('absolute top-full z-40 mt-2 w-56 animate-foundation-scale-in rounded-dialog border border-border bg-surface p-2 shadow-overlay', align === 'right' ? 'right-0' : 'left-0')}>
-          {items.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="menuitem"
-              disabled={item.disabled}
-              onClick={() => {
-                item.onSelect();
-                onOpenChange(false);
-              }}
-              className={cx(
-                'flex w-full flex-col rounded-button px-3 py-2 text-left transition-colors duration-fast hover:bg-secondary',
-                item.danger ? 'text-status-red' : 'text-text',
-                item.disabled && 'pointer-events-none opacity-50',
-                focusRing,
-              )}
-            >
-              <span className="text-sm font-medium">{item.label}</span>
-              {item.description && <span className="text-xs leading-5 text-muted">{item.description}</span>}
-            </button>
-          ))}
-        </div>
-      )}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            role="menu"
+            className={cx('absolute top-full z-40 mt-2 w-56 rounded-dialog border border-border bg-surface p-2 shadow-overlay', align === 'right' ? 'right-0' : 'left-0')}
+            {...menuMotion}
+          >
+            {items.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="menuitem"
+                disabled={item.disabled}
+                onClick={() => {
+                  item.onSelect();
+                  onOpenChange(false);
+                }}
+                className={cx(
+                  'motion-interactive flex w-full flex-col rounded-button px-3 py-2 text-left transition-colors duration-fast hover:bg-secondary',
+                  item.danger ? 'text-status-red' : 'text-text',
+                  item.disabled && 'pointer-events-none opacity-50',
+                  focusRing,
+                )}
+              >
+                <span className="text-sm font-medium">{item.label}</span>
+                {item.description && <span className="text-xs leading-5 text-muted">{item.description}</span>}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -133,11 +157,13 @@ export function Popover({ open, onOpenChange, trigger, children, widthClass = 'w
   return (
     <div className="relative inline-flex">
       <div onClick={() => onOpenChange(!open)}>{trigger}</div>
-      {open && (
-        <div className={cx('absolute right-0 top-full z-40 mt-2 animate-foundation-scale-in rounded-control border border-border bg-surface p-3 shadow-elevated', widthClass)}>
-          {children}
-        </div>
-      )}
+      <AnimatePresence>
+        {open && (
+          <motion.div className={cx('absolute right-0 top-full z-40 mt-2 rounded-control border border-border bg-surface p-3 shadow-elevated', widthClass)} {...menuMotion}>
+            {children}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -211,4 +237,57 @@ function useEscapeClose(open: boolean, onOpenChange: (open: boolean) => void) {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onOpenChange, open]);
+}
+
+function useDialogFocus(open: boolean, panelRef: RefObject<HTMLElement>) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = window.requestAnimationFrame(() => {
+      const focusable = getFocusableElements(panelRef.current);
+      (focusable[0] ?? panelRef.current)?.focus();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      previouslyFocused?.focus();
+    };
+  }, [open, panelRef]);
+}
+
+function useFocusTrap(open: boolean, panelRef: RefObject<HTMLElement>) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const focusable = getFocusableElements(panelRef.current);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        panelRef.current?.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, panelRef]);
+}
+
+function getFocusableElements(root: HTMLElement | null): HTMLElement[] {
+  if (!root) return [];
+  return Array.from(
+    root.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true');
 }

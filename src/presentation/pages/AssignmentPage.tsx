@@ -24,6 +24,7 @@ import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 import { loadRosterStudentsForSections } from '@presentation/loaders/rosterStudents';
 import { loadSubjectOptionsForSection } from '@presentation/loaders/subjectOptions';
+import { loadUnitsForSubjects } from '@presentation/loaders/unitOptions';
 import type { UploadPolicy } from '@domain/services/storageRouter';
 
 const assignmentAccess = createAssignmentAccess(supabase);
@@ -46,7 +47,6 @@ const ASSIGNMENT_POLICY: UploadPolicy = {
  * depends on the globally-selected section's semester.
  */
 function createAccess(
-  semester: string | null,
   subjects: readonly AssignmentSubjectOption[],
   students: readonly AssignmentStudent[],
 ): AssignmentViewAccess {
@@ -114,14 +114,9 @@ function createAccess(
     },
 
     async listAssignments(): Promise<AssignmentListItem[]> {
-      if (!semester) return [];
-
-      // Fetch subjects for this semester to filter assignments
-      const { data: subjectRows } = await supabase
-        .from('subjects')
-        .select('id')
-        .eq('semester', semester);
-      const subjectIds = (subjectRows || []).map((s) => s.id);
+      // Scope to the current section's subjects (syllabus_subjects ids).
+      const subjectIds = subjects.map((s) => s.id);
+      if (subjectIds.length === 0) return [];
 
       const { data } = await supabase
         .from('assignments')
@@ -164,8 +159,8 @@ export default function AssignmentPage() {
 
   const semester = selectedSection?.semester ?? null;
   const access = useMemo(
-    () => createAccess(semester, subjects, students),
-    [semester, subjects, students],
+    () => createAccess(subjects, students),
+    [subjects, students],
   );
 
   useEffect(() => {
@@ -187,12 +182,9 @@ export default function AssignmentPage() {
           setUnits([]);
           return;
         }
-        const unitRes = await supabase
-          .from('units')
-          .select('id, name, subject_id')
-          .in('subject_id', activeSubjectIds)
-          .order('name');
-        setUnits((unitRes.data as AssignmentUnitOption[]) || []);
+        // Units come from the shared master syllabus for those subjects.
+        const activeUnits = await loadUnitsForSubjects(activeSubjectIds);
+        setUnits(activeUnits.map((u) => ({ id: u.id, name: u.name })));
       } catch {
         // View handles empty arrays gracefully.
       }

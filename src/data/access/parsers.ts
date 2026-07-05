@@ -65,6 +65,10 @@ export function parseQuizAccess(value: unknown): QuizAccess {
     case 'already-attempted':
       return { status: 'already-attempted', result: parseAttemptResult(record?.result) };
     case 'denied':
+      return {
+        status: 'denied',
+        reason: record?.reason === 'not-active' ? 'not-active' : 'not-registered',
+      };
     default:
       return { status: 'denied', reason: 'not-registered' };
   }

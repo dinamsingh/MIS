@@ -1,6 +1,6 @@
 /**
  * Generic animated skeleton block with configurable dimensions.
- * Uses Tailwind animate-pulse with bg-border/60 and rounded styling.
+ * Uses the shared shimmer animation with bg-border/60 and rounded styling.
  * Pure presentational — no data, no hooks.
  */
 
@@ -30,7 +30,7 @@ export default function SkeletonPulse({
 
   return (
     <div
-      className={`animate-pulse bg-border/60 ${roundedClass} ${width} ${height} ${className}`}
+      className={`animate-shimmer bg-border/60 ${roundedClass} ${width} ${height} ${className}`}
     />
   );
 }

@@ -28,12 +28,24 @@ export { liveCounts };
 const ATTENDANCE_CONFLICT_TARGET = 'student_id,section_id,subject_id,date,time_slot';
 const ATTENDANCE_STATUS_STORAGE_KEY = 'mis_attendance_status_v1';
 
+export interface AttendanceOverallScope {
+  readonly sectionId: string;
+  readonly subjectId?: string;
+}
+
+export interface AttendanceOverallMark {
+  readonly studentId: string;
+  readonly present: number;
+  readonly total: number;
+}
+
 /** Supabase-backed attendance persistence (mirrors the domain contract). */
 export interface AttendanceAccess {
   loadPeriod(key: PeriodKey): Promise<AttendanceMark[]>;
   savePeriod(key: PeriodKey, marks: AttendanceMark[]): Promise<void>;
   loadStatusPeriod(key: PeriodKey): Promise<AttendanceStatusMark[]>;
   saveStatusPeriod(key: PeriodKey, marks: AttendanceStatusMark[]): Promise<void>;
+  loadStudentOverall(scope: AttendanceOverallScope): Promise<AttendanceOverallMark[]>;
 }
 
 interface LocalStatusStore {
@@ -82,6 +94,29 @@ function loadLocalStatusPeriod(key: PeriodKey): AttendanceStatusMark[] {
   return readStatusStore().periods[statusPeriodKey(key)] ?? [];
 }
 
+interface AttendanceOverallRow {
+  readonly student_id: string;
+  readonly present: boolean;
+}
+
+function aggregateOverallRows(rows: readonly AttendanceOverallRow[]): AttendanceOverallMark[] {
+  const tallies = new Map<string, { present: number; total: number }>();
+  for (const row of rows) {
+    const tally = tallies.get(row.student_id) ?? { present: 0, total: 0 };
+    tally.total += 1;
+    if (row.present) {
+      tally.present += 1;
+    }
+    tallies.set(row.student_id, tally);
+  }
+
+  return Array.from(tallies.entries()).map(([studentId, tally]) => ({
+    studentId,
+    present: tally.present,
+    total: tally.total,
+  }));
+}
+
 /** Create an {@link AttendanceAccess} bound to the given Supabase client. */
 export function createAttendanceAccess(
   client: SupabaseClient = defaultClient,
@@ -111,9 +146,23 @@ export function createAttendanceAccess(
       );
   }
 
+  async function loadStudentOverall(scope: AttendanceOverallScope): Promise<AttendanceOverallMark[]> {
+      let query = client
+        .from('attendance')
+        .select('student_id, present')
+        .eq('section_id', scope.sectionId);
+
+      if (scope.subjectId) {
+        query = query.eq('subject_id', scope.subjectId);
+      }
+
+      return aggregateOverallRows(unwrapList(await query) as AttendanceOverallRow[]);
+  }
+
   return {
     loadPeriod,
     savePeriod,
+    loadStudentOverall,
 
     async loadStatusPeriod(key: PeriodKey): Promise<AttendanceStatusMark[]> {
       const storedStatuses = loadLocalStatusPeriod(key);

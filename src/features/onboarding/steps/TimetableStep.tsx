@@ -12,6 +12,12 @@ interface TimetableStepProps {
   readonly batchesWithSubjects: readonly BatchWithSubjects[];
   readonly selection: SelectionState;
   readonly onChangeSubject: (batchId: string, subjectId: string, sections: Section[]) => void;
+  readonly onChangeSubjectLab: (
+    batchId: string,
+    subjectId: string,
+    section: Section,
+    includeLab: boolean,
+  ) => void;
   readonly onBack: () => void;
   readonly onContinue: () => void;
 }
@@ -20,8 +26,8 @@ interface TimetableStepProps {
 function totalSelected(selection: SelectionState): number {
   let count = 0;
   for (const subjectMap of Object.values(selection)) {
-    for (const sections of Object.values(subjectMap)) {
-      count += sections.length;
+    for (const subjectSelection of Object.values(subjectMap)) {
+      count += subjectSelection.sections.length;
     }
   }
   return count;
@@ -31,6 +37,7 @@ export default function TimetableStep({
   batchesWithSubjects,
   selection,
   onChangeSubject,
+  onChangeSubjectLab,
   onBack,
   onContinue,
 }: TimetableStepProps) {
@@ -64,6 +71,9 @@ export default function TimetableStep({
             expanded={expandedId === batch.id}
             onToggle={() => setExpandedId((prev) => (prev === batch.id ? null : batch.id))}
             onChangeSubject={(subjectId, sections) => onChangeSubject(batch.id, subjectId, sections)}
+            onChangeSubjectLab={(subjectId, section, includeLab) =>
+              onChangeSubjectLab(batch.id, subjectId, section, includeLab)
+            }
           />
         ))}
       </div>

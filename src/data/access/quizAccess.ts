@@ -24,6 +24,10 @@ export interface QuizInput {
   readonly title: string;
   readonly timeLimitMinutes?: number;
   readonly shareToken: string;
+  /** ISO timestamp the quiz becomes available (null = immediately). */
+  readonly activeFrom?: string | null;
+  /** ISO timestamp the quiz closes (null = never). */
+  readonly activeUntil?: string | null;
 }
 
 /** Fields accepted when adding a question to a quiz. */
@@ -76,6 +80,8 @@ export function createQuizAccess(
           ? { time_limit_minutes: input.timeLimitMinutes }
           : {}),
         share_token: input.shareToken,
+        ...(input.activeFrom !== undefined ? { active_from: input.activeFrom } : {}),
+        ...(input.activeUntil !== undefined ? { active_until: input.activeUntil } : {}),
       };
       const inserted = unwrap(
         await client.from('quizzes').insert(row).select('id').single(),

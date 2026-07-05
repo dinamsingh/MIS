@@ -1,4 +1,4 @@
-import type { AttendanceAccess } from '@data/access/attendanceAccess';
+import type { AttendanceAccess, AttendanceOverallMark, AttendanceOverallScope } from '@data/access/attendanceAccess';
 import type { MarksAccess, MarkComponentInput, SaveMarkValuesResult } from '@data/access/marksAccess';
 import type { QuizAccessRepository, QuizInput, QuestionInput, AttemptSummary } from '@data/access/quizAccess';
 import type { SubmitAttemptOutcome } from '@data/access/parsers';
@@ -178,6 +178,44 @@ interface DemoAttendanceStore {
   readonly statusPeriods?: Record<string, AttendanceStatusMark[]>;
 }
 
+function parseDemoPeriodKey(storageKey: string): PeriodKey | null {
+  try {
+    const parts = JSON.parse(storageKey) as unknown;
+    if (!Array.isArray(parts) || parts.length !== 4 || !parts.every((part) => typeof part === 'string')) {
+      return null;
+    }
+    const [sectionId, subjectId, date, timeSlot] = parts as [string, string, string, string];
+    return { sectionId, subjectId, date, timeSlot };
+  } catch {
+    return null;
+  }
+}
+
+function aggregateDemoOverall(store: DemoAttendanceStore, scope: AttendanceOverallScope): AttendanceOverallMark[] {
+  const tallies = new Map<string, { present: number; total: number }>();
+  for (const [storageKey, marks] of Object.entries(store.periods)) {
+    const key = parseDemoPeriodKey(storageKey);
+    if (!key || key.sectionId !== scope.sectionId || (scope.subjectId && key.subjectId !== scope.subjectId)) {
+      continue;
+    }
+
+    for (const mark of marks) {
+      const tally = tallies.get(mark.studentId) ?? { present: 0, total: 0 };
+      tally.total += 1;
+      if (mark.present) {
+        tally.present += 1;
+      }
+      tallies.set(mark.studentId, tally);
+    }
+  }
+
+  return Array.from(tallies.entries()).map(([studentId, tally]) => ({
+    studentId,
+    present: tally.present,
+    total: tally.total,
+  }));
+}
+
 export function createLocalDemoAttendanceAccess(
   loadRoster: (sectionId: string) => Promise<readonly DemoStudent[]>,
 ): AttendanceAccess {
@@ -208,6 +246,11 @@ export function createLocalDemoAttendanceAccess(
           [periodStorageKey(key)]: marks.map((mark) => ({ ...mark })),
         },
       });
+    },
+
+    async loadStudentOverall(scope) {
+      const store = readDemoValue<DemoAttendanceStore>(STORAGE.attendance, { periods: {} });
+      return aggregateDemoOverall(store, scope);
     },
 
     async loadStatusPeriod(key) {

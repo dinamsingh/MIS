@@ -1,15 +1,5 @@
-/**
- * Attendance marking surface.
- *
- * Teachers can mark each student present, absent, on leave, or not applicable
- * for a selected class period. Leave and not-applicable statuses are excluded
- * from the counted attendance denominator.
- *
- * Layout (mockup-style): a compact page head, three summary cards, and one
- * clean roster card where attendance is marked inline.
- */
-
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, memo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   type AttendanceStatus,
   type AttendanceStatusMark,
@@ -17,7 +7,21 @@ import {
 } from '@domain/services/attendanceService';
 import { messages } from '@domain/shared/messages';
 import { applyPresentList, previewPresentList, type PresentListPreview } from '@domain/services/quickAttendance';
-import { Alert } from '@presentation/components/ui';
+import {
+  Alert,
+  Toast,
+  Button,
+  IconButton,
+  SectionHeader,
+  Card,
+  FilterBar,
+  SearchInput,
+  Select,
+  DatePicker,
+  Checkbox,
+  Badge,
+  SkeletonLoader,
+} from '@presentation/components/ui';
 
 export interface AttendanceOption {
   readonly id: string;
@@ -36,11 +40,18 @@ export interface RosterStudent {
   readonly enrollmentNumber?: string;
 }
 
+export interface StudentAttendanceOverall {
+  readonly studentId: string;
+  readonly present: number;
+  readonly total: number;
+}
+
 export type LoadRoster = (sectionId: string) => Promise<RosterStudent[]>;
 
 export interface AttendancePersistence {
   loadStatusPeriod(key: PeriodKey): Promise<AttendanceStatusMark[]>;
   saveStatusPeriod(key: PeriodKey, marks: AttendanceStatusMark[]): Promise<void>;
+  loadStudentOverall(scope: { readonly sectionId: string; readonly subjectId?: string }): Promise<StudentAttendanceOverall[]>;
 }
 
 export interface AttendanceViewProps {
@@ -65,35 +76,12 @@ const STATUS_OPTIONS: Array<{
   readonly value: AttendanceStatus;
   readonly label: string;
   readonly shortLabel: string;
-  readonly activeClass: string;
 }> = [
-  {
-    value: 'present',
-    label: 'Present',
-    shortLabel: 'P',
-    activeClass: 'border-transparent bg-emerald-50 text-emerald-700',
-  },
-  {
-    value: 'absent',
-    label: 'Absent',
-    shortLabel: 'A',
-    activeClass: 'border-transparent bg-red-50 text-red-700',
-  },
-  {
-    value: 'leave',
-    label: 'Leave',
-    shortLabel: 'L',
-    activeClass: 'border-transparent bg-amber-50 text-amber-700',
-  },
-  {
-    value: 'not-applicable',
-    label: 'N/A',
-    shortLabel: 'NA',
-    activeClass: 'border-transparent bg-sky-50 text-sky-700',
-  },
+  { value: 'present', label: 'Present', shortLabel: 'P' },
+  { value: 'absent', label: 'Absent', shortLabel: 'A' },
+  { value: 'leave', label: 'Leave', shortLabel: 'L' },
+  { value: 'not-applicable', label: 'N/A', shortLabel: 'NA' },
 ];
-
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function todayIso(): string {
   const now = new Date();
@@ -102,45 +90,9 @@ function todayIso(): string {
 }
 
 function formatDate(iso: string): string {
-  return new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).format(
+  return new Intl.DateTimeFormat('en-US', { day: '2-digit', month: 'short', year: 'numeric' }).format(
     new Date(`${iso}T00:00:00`),
   );
-}
-
-function formatMonthLabel(monthKey: string): string {
-  return new Intl.DateTimeFormat('en-IN', { month: 'short', year: 'numeric' }).format(
-    new Date(`${monthKey}-01T00:00:00`),
-  );
-}
-
-function buildIsoDate(year: number, monthIndex: number, day: number): string {
-  return `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-}
-
-function calendarCells(monthKey: string): Array<string | null> {
-  const [yearText, monthText] = monthKey.split('-');
-  const year = Number(yearText);
-  const monthIndex = Number(monthText) - 1;
-  const firstDay = new Date(year, monthIndex, 1).getDay();
-  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-  const cells: Array<string | null> = Array.from({ length: firstDay }, () => null);
-
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    cells.push(buildIsoDate(year, monthIndex, day));
-  }
-
-  while (cells.length % 7 !== 0) {
-    cells.push(null);
-  }
-
-  return cells;
-}
-
-function shiftMonthKey(monthKey: string, offset: number, maxMonthKey: string): string {
-  const [yearText, monthText] = monthKey.split('-');
-  const next = new Date(Number(yearText), Number(monthText) - 1 + offset, 1);
-  const nextKey = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
-  return nextKey > maxMonthKey ? maxMonthKey : nextKey;
 }
 
 function summarize(statuses: readonly AttendanceStatus[]): StatusSummary {
@@ -179,195 +131,240 @@ function statusMapFromMarks(
   return next;
 }
 
-function statusButtonClass(isActive: boolean, activeClass: string): string {
-  return [
-    'min-h-8 min-w-8 rounded-button border px-2 text-xs font-bold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-60',
-    isActive ? activeClass : 'border-border bg-white text-muted hover:border-accent/40 hover:bg-background hover:text-text',
-  ].join(' ');
+function savedStatusMapFromMarks(saved: readonly AttendanceStatusMark[]): Record<string, AttendanceStatus> {
+  return Object.fromEntries(saved.map((mark) => [mark.studentId, mark.status]));
 }
 
-function initials(name: string): string {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('');
+function isCountedStatus(status: AttendanceStatus | undefined): status is 'present' | 'absent' {
+  return status === 'present' || status === 'absent';
 }
 
-function todayPercentLabel(status: AttendanceStatus): string {
-  if (status === 'present') return '100%';
-  if (status === 'absent') return '0%';
-  if (status === 'leave') return 'Leave';
-  return 'N/A';
+function percentageFromTally(tally: Pick<StudentAttendanceOverall, 'present' | 'total'> | null): number | null {
+  if (!tally || tally.total <= 0) return null;
+  return Math.round((tally.present / tally.total) * 100);
 }
 
-function todayPercentClass(status: AttendanceStatus): string {
-  if (status === 'present') return 'bg-emerald-50 text-emerald-700';
-  if (status === 'absent') return 'bg-red-50 text-red-700';
-  if (status === 'leave') return 'bg-amber-50 text-amber-700';
-  return 'bg-slate-100 text-slate-600';
+function projectOverallTally(
+  base: StudentAttendanceOverall | undefined,
+  savedStatus: AttendanceStatus | undefined,
+  currentStatus: AttendanceStatus | undefined,
+  includeCurrentPeriod: boolean,
+): Pick<StudentAttendanceOverall, 'present' | 'total'> | null {
+  let present = base?.present ?? 0;
+  let total = base?.total ?? 0;
+
+  if (includeCurrentPeriod) {
+    if (isCountedStatus(savedStatus) && total > 0) {
+      total -= 1;
+      if (savedStatus === 'present' && present > 0) {
+        present -= 1;
+      }
+    }
+    if (isCountedStatus(currentStatus)) {
+      total += 1;
+      if (currentStatus === 'present') {
+        present += 1;
+      }
+    }
+  }
+
+  return total > 0 ? { present, total } : null;
 }
 
-function SummaryCard({
+type SummaryTone = 'present' | 'absent' | 'leave' | 'total';
+
+const summaryToneClass: Record<SummaryTone, { border: string; bar: string; chip: string; fill: string }> = {
+  present: {
+    border: 'border-emerald-200/80',
+    bar: 'bg-emerald-500',
+    chip: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    fill: 'bg-emerald-500',
+  },
+  absent: {
+    border: 'border-red-200/80',
+    bar: 'bg-red-500',
+    chip: 'bg-red-50 text-red-700 ring-red-100',
+    fill: 'bg-red-500',
+  },
+  leave: {
+    border: 'border-amber-200/80',
+    bar: 'bg-amber-500',
+    chip: 'bg-amber-50 text-amber-700 ring-amber-100',
+    fill: 'bg-amber-500',
+  },
+  total: {
+    border: 'border-sky-200/80',
+    bar: 'bg-sky-500',
+    chip: 'bg-sky-50 text-sky-700 ring-sky-100',
+    fill: 'bg-sky-500',
+  },
+};
+
+function SummaryTile({
   label,
   value,
-  icon,
-  chipClass,
+  tone,
+  shortLabel,
+  fillPercent,
 }: {
   readonly label: string;
   readonly value: number;
-  readonly icon: string;
-  readonly chipClass: string;
+  readonly tone: SummaryTone;
+  readonly shortLabel: string;
+  readonly fillPercent: number;
 }) {
-  return (
-    <div className="flex items-center gap-2 rounded-card border border-border bg-surface px-3 py-1.5 shadow-soft">
-      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-button text-[10px] font-bold ${chipClass}`}>
-        {icon}
-      </span>
-      <div className="min-w-0">
-        <p className="text-lg font-extrabold leading-none tracking-tight text-text">{value}</p>
-        <p className="mt-0.5 truncate text-[10px] font-medium text-muted">{label}</p>
-      </div>
-    </div>
-  );
-}
-
-function AttendanceCalendarCard({
-  selectedDate,
-  maxDate,
-  monthKey,
-  onMonthChange,
-  onDateChange,
-  hasSavedAttendance,
-}: {
-  readonly selectedDate: string;
-  readonly maxDate: string;
-  readonly monthKey: string;
-  readonly onMonthChange: (monthKey: string) => void;
-  readonly onDateChange: (date: string) => void;
-  readonly hasSavedAttendance: boolean;
-}) {
-  const maxMonthKey = maxDate.slice(0, 7);
-  const days = calendarCells(monthKey);
-  const canGoNext = monthKey < maxMonthKey;
+  const toneClasses = summaryToneClass[tone];
+  const width = `${Math.max(0, Math.min(100, fillPercent))}%`;
 
   return (
-    <aside className="rounded-card border border-border bg-white p-3 shadow-soft">
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Calendar</p>
-          <h3 className="text-sm font-extrabold text-text">{formatMonthLabel(monthKey)}</h3>
+    <article
+      className={`relative min-h-[5.5rem] overflow-hidden rounded-card border ${toneClasses.border} bg-surface px-4 py-3 shadow-[0_12px_30px_rgba(15,23,42,0.07)]`}
+    >
+      <span className={`absolute inset-y-0 left-0 w-1 ${toneClasses.bar}`} aria-hidden="true" />
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-xs font-semibold text-muted">{label}</p>
+          <p className="mt-1 text-3xl font-semibold leading-none text-text">{value}</p>
         </div>
-        <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-bold text-muted">
-          {hasSavedAttendance ? 'Edit saved' : 'New mark'}
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-button text-xs font-bold ring-1 ${toneClasses.chip}`}>
+          {shortLabel}
         </span>
       </div>
-
-      <div className="mb-2 flex items-center gap-1.5">
-        <button
-          type="button"
-          className="min-h-8 rounded-button border border-border bg-surface px-2.5 text-sm font-bold text-text transition-colors hover:bg-background focus:outline-none focus:ring-2 focus:ring-accent/30"
-          aria-label="Previous month"
-          onClick={() => onMonthChange(shiftMonthKey(monthKey, -1, maxMonthKey))}
-        >
-          &lt;
-        </button>
-        <button
-          type="button"
-          className="min-h-8 flex-1 rounded-button border border-border bg-surface px-2 text-[11px] font-bold uppercase tracking-wide text-text transition-colors hover:bg-background focus:outline-none focus:ring-2 focus:ring-accent/30"
-          onClick={() => onDateChange(maxDate)}
-        >
-          Today
-        </button>
-        <button
-          type="button"
-          className="min-h-8 rounded-button border border-border bg-surface px-2.5 text-sm font-bold text-text transition-colors hover:bg-background focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-40"
-          aria-label="Next month"
-          disabled={!canGoNext}
-          onClick={() => onMonthChange(shiftMonthKey(monthKey, 1, maxMonthKey))}
-        >
-          &gt;
-        </button>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-secondary">
+        <div className={`h-full rounded-full ${toneClasses.fill}`} style={{ width }} />
       </div>
-
-      <div className="grid grid-cols-7 gap-0.5 text-center">
-        {WEEKDAYS.map((day) => (
-          <span key={day} className="py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted">
-            {day}
-          </span>
-        ))}
-        {days.map((day, index) => {
-          if (day === null) {
-            return <span key={`blank-${index}`} className="h-7" />;
-          }
-
-          const isSelected = day === selectedDate;
-          const isToday = day === maxDate;
-          const isFuture = day > maxDate;
-          const dateNumber = Number(day.slice(-2));
-
-          return (
-            <button
-              key={day}
-              type="button"
-              disabled={isFuture}
-              aria-pressed={isSelected}
-              aria-label={`Load attendance for ${formatDate(day)}`}
-              className={[
-                'relative flex h-7 items-center justify-center rounded-button text-[11px] font-bold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-30',
-                isSelected
-                  ? 'bg-text text-white shadow-[0_10px_18px_rgba(15,23,42,0.20)]'
-                  : 'bg-background text-text hover:bg-accent-tint hover:text-accent',
-              ].join(' ')}
-              onClick={() => onDateChange(day)}
-            >
-              {dateNumber}
-              {isToday && !isSelected ? (
-                <span className="absolute bottom-1 h-1 w-1 rounded-full bg-accent" aria-hidden="true" />
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
-
-      <p className="mt-2 rounded-button bg-background px-2.5 py-1 text-[11px] font-medium text-muted">
-        <span className="font-bold text-text">{formatDate(selectedDate)}</span>
-      </p>
-
-      <label className="mt-1.5 flex items-center justify-between gap-2 rounded-button bg-background px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
-        Date
-        <input
-          type="date"
-          value={selectedDate}
-          max={maxDate}
-          onChange={(event) => onDateChange(event.target.value)}
-          aria-label="Jump to attendance date"
-          className="min-h-7 rounded-button border border-border bg-surface px-2 text-[11px] font-medium normal-case tracking-normal text-text focus:outline-none focus:ring-2 focus:ring-accent/30"
-        />
-      </label>
-    </aside>
+    </article>
   );
 }
+
+const overallToneClass = {
+  empty: 'bg-surface-muted text-muted',
+  low: 'bg-red-50 text-red-700',
+  watch: 'bg-amber-50 text-amber-700',
+  healthy: 'bg-emerald-50 text-emerald-700',
+} as const;
+
+function overallBadgeClass(percent: number | null): string {
+  if (percent === null) return overallToneClass.empty;
+  if (percent < 60) return overallToneClass.low;
+  if (percent < 75) return overallToneClass.watch;
+  return overallToneClass.healthy;
+}
+
+const AttendanceTableRow = memo(function AttendanceTableRow({
+  student,
+  status,
+  overallPercent,
+  overallLoading,
+  isSelected,
+  onStatusChange,
+  onToggleSelection,
+  index,
+  disabled
+}: {
+  student: RosterStudent;
+  status: AttendanceStatus;
+  overallPercent: number | null;
+  overallLoading: boolean;
+  isSelected: boolean;
+  onStatusChange: (id: string, status: AttendanceStatus) => void;
+  onToggleSelection: (id: string, index: number, shiftKey: boolean) => void;
+  index: number;
+  disabled: boolean;
+}) {
+  const studentCode = student.enrollmentNumber ?? student.id.slice(0, 8);
+
+  const statusColors: Record<AttendanceStatus, { activeClass: string }> = {
+    'present': { activeClass: 'bg-emerald-100 border-emerald-300 text-emerald-800' },
+    'absent': { activeClass: 'bg-red-100 border-red-300 text-red-800' },
+    'leave': { activeClass: 'bg-amber-100 border-amber-300 text-amber-800' },
+    'not-applicable': { activeClass: 'bg-sky-100 border-sky-300 text-sky-800' },
+  };
+
+  return (
+    <motion.tr
+      initial={{ opacity: 0, y: 5 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.15, delay: Math.min(index * 0.01, 0.3) }}
+      className={`table-row hover:bg-surface-muted transition-colors ${isSelected ? 'bg-accent/5' : ''}`}
+    >
+      <td className="table-cell sticky left-0 z-10 w-12 text-center bg-inherit">
+        <Checkbox
+          checked={isSelected}
+          onChange={(e) => onToggleSelection(student.id, index, (e.nativeEvent as PointerEvent).shiftKey)}
+          label=""
+        />
+      </td>
+      <td className="table-cell sticky left-12 z-10 bg-inherit min-w-[200px]">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-surface-muted text-xs font-semibold text-text">
+            {index + 1}
+          </span>
+          <span className="font-semibold text-text">{student.name}</span>
+        </div>
+      </td>
+      <td className="table-cell text-muted">{studentCode}</td>
+      <td className="table-cell">
+        <Badge className={overallBadgeClass(overallPercent)}>
+          {overallLoading ? '...' : overallPercent === null ? '--' : `${overallPercent}%`}
+        </Badge>
+      </td>
+      <td className="table-cell text-right">
+        <div className="flex items-center justify-end gap-1.5">
+          {STATUS_OPTIONS.map(opt => {
+            const isActive = status === opt.value;
+            return (
+              <button
+                key={opt.value}
+                disabled={disabled}
+                onClick={() => onStatusChange(student.id, opt.value)}
+                className={`min-h-8 min-w-8 rounded-button border px-2 text-xs font-bold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-60 ${
+                  isActive ? statusColors[opt.value].activeClass : 'border-border bg-white text-muted hover:border-accent/40 hover:bg-background hover:text-text'
+                }`}
+              >
+                {opt.shortLabel}
+              </button>
+            )
+          })}
+        </div>
+      </td>
+    </motion.tr>
+  )
+});
+
 
 export default function AttendanceView(props: AttendanceViewProps) {
   const { sections, subjects, timeSlots, loadRoster, attendance, initialDate } = props;
   const maxAttendanceDate = useMemo(() => todayIso(), []);
   const initialAttendanceDate = initialDate && initialDate <= maxAttendanceDate ? initialDate : maxAttendanceDate;
-  const maxAttendanceMonth = maxAttendanceDate.slice(0, 7);
+
   const [sectionId, setSectionId] = useState('');
   const [subjectId, setSubjectId] = useState('');
   const [timeSlot, setTimeSlot] = useState('');
   const [date, setDate] = useState(initialAttendanceDate);
-  const [calendarMonth, setCalendarMonth] = useState(initialAttendanceDate.slice(0, 7));
+
   const [roster, setRoster] = useState<readonly RosterStudent[]>([]);
   const [statusById, setStatusById] = useState<Record<string, AttendanceStatus>>({});
+  const [savedStatusById, setSavedStatusById] = useState<Record<string, AttendanceStatus>>({});
+  const [overallById, setOverallById] = useState<Record<string, StudentAttendanceOverall>>({});
+  const [overallLoading, setOverallLoading] = useState(false);
+  const [overallRefreshVersion, setOverallRefreshVersion] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+
   const [rosterLoading, setRosterLoading] = useState(false);
   const [periodLoading, setPeriodLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+
+  const [hasSavedAttendance, setHasSavedAttendance] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+
+  // Quick mark state
   const [presentInput, setPresentInput] = useState('');
   const [quickResult, setQuickResult] = useState<{
     matchedCount: number;
@@ -376,14 +373,7 @@ export default function AttendanceView(props: AttendanceViewProps) {
   } | null>(null);
   const [preview, setPreview] = useState<PresentListPreview | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [hasSavedAttendance, setHasSavedAttendance] = useState(false);
-  const [dirty, setDirty] = useState(false);
   const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    setCalendarMonth(date.slice(0, 7));
-  }, [date]);
 
   useEffect(() => {
     if (sections.length === 0) {
@@ -419,6 +409,7 @@ export default function AttendanceView(props: AttendanceViewProps) {
     if (!sectionId) {
       setRoster([]);
       setStatusById({});
+      setSavedStatusById({});
       setHasSavedAttendance(false);
       return;
     }
@@ -426,6 +417,7 @@ export default function AttendanceView(props: AttendanceViewProps) {
     let active = true;
     setRosterLoading(true);
     setLoadError(false);
+    setSelectedRows(new Set());
 
     void loadRoster(sectionId)
       .then((students) => {
@@ -437,6 +429,7 @@ export default function AttendanceView(props: AttendanceViewProps) {
         if (!active) return;
         setRoster([]);
         setStatusById({});
+        setSavedStatusById({});
         setHasSavedAttendance(false);
         setRosterLoading(false);
         setLoadError(true);
@@ -454,8 +447,37 @@ export default function AttendanceView(props: AttendanceViewProps) {
   }, [date, maxAttendanceDate, sectionId, subjectId, timeSlot]);
 
   useEffect(() => {
+    if (!sectionId || !subjectId) {
+      setOverallById({});
+      setOverallLoading(false);
+      return;
+    }
+
+    let active = true;
+    setOverallLoading(true);
+
+    void attendance
+      .loadStudentOverall({ sectionId, subjectId })
+      .then((overall) => {
+        if (!active) return;
+        setOverallById(Object.fromEntries(overall.map((item) => [item.studentId, item])));
+        setOverallLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setOverallById({});
+        setOverallLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [attendance, overallRefreshVersion, sectionId, subjectId]);
+
+  useEffect(() => {
     if (!periodKey || roster.length === 0) {
       setStatusById({});
+      setSavedStatusById({});
       setHasSavedAttendance(false);
       setDirty(false);
       return;
@@ -465,18 +487,21 @@ export default function AttendanceView(props: AttendanceViewProps) {
     setPeriodLoading(true);
     setLoadError(false);
     setSavedMessage(null);
+    setSelectedRows(new Set());
 
     void attendance
       .loadStatusPeriod(periodKey)
       .then((saved) => {
         if (!active) return;
         setHasSavedAttendance(saved.length > 0);
+        setSavedStatusById(savedStatusMapFromMarks(saved));
         setStatusById(statusMapFromMarks(roster, saved));
         setDirty(false);
         setPeriodLoading(false);
       })
       .catch(() => {
         if (!active) return;
+        setSavedStatusById({});
         setPeriodLoading(false);
         setLoadError(true);
       });
@@ -486,62 +511,121 @@ export default function AttendanceView(props: AttendanceViewProps) {
     };
   }, [attendance, periodKey, roster]);
 
-  // Auto-dismiss the success alert after a short delay (errors/future stay).
   useEffect(() => {
     if (!savedMessage) return;
     const timer = window.setTimeout(() => setSavedMessage(null), 3500);
     return () => window.clearTimeout(timer);
   }, [savedMessage]);
 
-  // Confirm modal accessibility: focus management + Escape to close.
-  useEffect(() => {
-    if (!showConfirm) return;
-    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
-    confirmButtonRef.current?.focus();
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        setShowConfirm(false);
-      }
-    }
-    document.addEventListener('keydown', onKeyDown);
-
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      previouslyFocusedRef.current?.focus?.();
-    };
-  }, [showConfirm]);
-
   const busy = rosterLoading || periodLoading;
-  const quickMarkMode = hasSavedAttendance ? 'correction' : 'first-time';
-  const isQuickCorrectionMode = quickMarkMode === 'correction';
   const isFutureDate = date > maxAttendanceDate;
   const saveDisabled = !periodKey || roster.length === 0 || saving || isFutureDate;
+  const quickMarkMode = hasSavedAttendance ? 'correction' : 'first-time';
+  const isQuickCorrectionMode = quickMarkMode === 'correction';
 
   const filteredRoster = useMemo(() => {
+    let result = roster;
     const query = searchQuery.trim().toLowerCase();
-    if (!query) {
-      return roster;
+
+    if (query) {
+      result = result.filter(
+        (student) =>
+          student.name.toLowerCase().includes(query) ||
+          (student.enrollmentNumber ?? '').toLowerCase().includes(query),
+      );
     }
-    return roster.filter(
-      (student) =>
-        student.name.toLowerCase().includes(query) ||
-        (student.enrollmentNumber ?? '').toLowerCase().includes(query),
-    );
-  }, [roster, searchQuery]);
+
+    if (statusFilter !== 'all') {
+      result = result.filter((student) => statusById[student.id] === statusFilter);
+    }
+
+    return result;
+  }, [roster, searchQuery, statusFilter, statusById]);
 
   const summary = useMemo(
     () => summarize(roster.map((student) => statusById[student.id] ?? 'present')),
     [roster, statusById],
   );
 
-  function setStudentStatus(studentId: string, status: AttendanceStatus) {
+  const overallPercentById = useMemo(() => {
+    const next: Record<string, number | null> = {};
+    for (const student of roster) {
+      const tally = projectOverallTally(
+        overallById[student.id],
+        savedStatusById[student.id],
+        statusById[student.id],
+        dirty,
+      );
+      next[student.id] = percentageFromTally(tally);
+    }
+    return next;
+  }, [dirty, overallById, roster, savedStatusById, statusById]);
+
+  const setStudentStatus = useCallback((studentId: string, status: AttendanceStatus) => {
     if (isFutureDate) return;
     setSavedMessage(null);
     setDirty(true);
     setStatusById((prev) => ({ ...prev, [studentId]: status }));
-  }
+  }, [isFutureDate]);
+
+  const toggleRowSelection = useCallback((id: string, index: number, shiftKey: boolean) => {
+    setSelectedRows(prev => {
+      const next = new Set(prev);
+      if (shiftKey && lastSelectedIndex !== null) {
+        const start = Math.min(lastSelectedIndex, index);
+        const end = Math.max(lastSelectedIndex, index);
+        for (let i = start; i <= end; i++) {
+          next.add(filteredRoster[i].id);
+        }
+      } else {
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+      }
+      return next;
+    });
+    setLastSelectedIndex(index);
+  }, [filteredRoster, lastSelectedIndex]);
+
+  const toggleAllSelection = useCallback(() => {
+    if (selectedRows.size === filteredRoster.length && filteredRoster.length > 0) {
+      setSelectedRows(new Set());
+    } else {
+      setSelectedRows(new Set(filteredRoster.map(s => s.id)));
+    }
+  }, [filteredRoster, selectedRows.size]);
+
+  const bulkMark = useCallback((status: AttendanceStatus) => {
+    if (selectedRows.size === 0 || isFutureDate) return;
+    setStatusById(prev => {
+      const next = { ...prev };
+      for (const id of selectedRows) {
+        next[id] = status;
+      }
+      return next;
+    });
+    setDirty(true);
+    setSavedMessage(`Marked ${selectedRows.size} students as ${status}.`);
+    setSelectedRows(new Set());
+  }, [selectedRows, isFutureDate]);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.key === 'Escape') {
+        setSelectedRows(new Set());
+      } else if (e.key === 'p' || e.key === 'P') {
+        if (selectedRows.size > 0) bulkMark('present');
+      } else if (e.key === 'a' || e.key === 'A') {
+        if (selectedRows.size > 0) bulkMark('absent');
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedRows.size, bulkMark]);
 
   function openPreview() {
     if (isFutureDate) return;
@@ -572,17 +656,6 @@ export default function AttendanceView(props: AttendanceViewProps) {
     setQuickResult(null);
   }
 
-  function changeAttendanceDate(nextDate: string) {
-    const safeDate = nextDate > maxAttendanceDate ? maxAttendanceDate : nextDate;
-    setDate(safeDate);
-    setQuickResult(null);
-    setShowConfirm(false);
-  }
-
-  function changeCalendarMonth(nextMonth: string) {
-    setCalendarMonth(nextMonth > maxAttendanceMonth ? maxAttendanceMonth : nextMonth);
-  }
-
   async function saveAttendance() {
     if (!periodKey || roster.length === 0 || isFutureDate) {
       return;
@@ -592,16 +665,36 @@ export default function AttendanceView(props: AttendanceViewProps) {
     setLoadError(false);
     setSavedMessage(null);
     try {
+      const nextMarks = roster.map((student) => ({
+        studentId: student.id,
+        status: statusById[student.id] ?? 'present',
+      }));
       await attendance.saveStatusPeriod(
         periodKey,
-        roster.map((student) => ({
-          studentId: student.id,
-          status: statusById[student.id] ?? 'present',
-        })),
+        nextMarks,
       );
+      setOverallById((previous) => {
+        const next = { ...previous };
+        for (const mark of nextMarks) {
+          const tally = projectOverallTally(
+            previous[mark.studentId],
+            savedStatusById[mark.studentId],
+            mark.status,
+            true,
+          );
+          if (tally) {
+            next[mark.studentId] = { studentId: mark.studentId, present: tally.present, total: tally.total };
+          } else {
+            delete next[mark.studentId];
+          }
+        }
+        return next;
+      });
+      setSavedStatusById(savedStatusMapFromMarks(nextMarks));
+      setOverallRefreshVersion((version) => version + 1);
       setHasSavedAttendance(true);
       setDirty(false);
-      setSavedMessage(`Saved ${formatDate(periodKey.date)} attendance.`);
+      setSavedMessage(`Attendance saved for ${formatDate(periodKey.date)}`);
     } catch {
       setLoadError(true);
     } finally {
@@ -609,36 +702,35 @@ export default function AttendanceView(props: AttendanceViewProps) {
     }
   }
 
-  return (
-    <section className="mx-auto flex w-full max-w-6xl flex-col gap-2">
-      <h1 className="sr-only">Attendance</h1>
+  const rosterCountForProgress = Math.max(roster.length, 1);
 
-      <div className="sticky top-16 z-40 -mx-4 bg-secondary px-4 pb-1.5 pt-0 shadow-[0_10px_24px_rgba(15,23,42,0.06)] backdrop-blur lg:-mx-6 lg:px-6">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-1">
-          <div className="grid w-full gap-2 sm:grid-cols-4">
-            <SummaryCard label="Present" value={summary.present} icon="P" chipClass="bg-emerald-50 text-emerald-700" />
-            <SummaryCard label="Absent" value={summary.absent} icon="A" chipClass="bg-red-50 text-red-700" />
-            <SummaryCard label="Leave" value={summary.leave} icon="L" chipClass="bg-amber-50 text-amber-700" />
-            <SummaryCard label="Total students" value={roster.length} icon="#" chipClass="bg-sky-50 text-sky-700" />
-          </div>
-          <div className="flex items-center justify-end gap-1.5">
+  return (
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 pb-20">
+      <SectionHeader
+        eyebrow="Academic Operations"
+        title="Attendance"
+        description="Selected class period attendance."
+        density="compact"
+        actions={
+          <div className="flex items-center gap-2">
             {dirty && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
                 Unsaved
               </span>
             )}
-            <button
-              type="button"
-              className="btn-primary min-h-8"
+            <Button
+              variant="primary"
+              size="sm"
               disabled={saveDisabled}
+              loading={saving}
               onClick={() => void saveAttendance()}
             >
-              {saving ? 'Saving...' : 'Save'}
-            </button>
+              Save Attendance
+            </Button>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {loadError && (
         <Alert tone="danger" title="Unable to load attendance">
@@ -652,273 +744,229 @@ export default function AttendanceView(props: AttendanceViewProps) {
         </Alert>
       )}
 
-      {savedMessage && (
-        <Alert tone="success" title="Attendance saved">
-          {savedMessage}
-        </Alert>
-      )}
+      {/* Floating Bulk Actions Toolbar */}
+      <AnimatePresence>
+        {selectedRows.size > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.2 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 rounded-full border border-border bg-surface px-6 py-3 shadow-elevated"
+          >
+            <span className="text-sm font-semibold text-text">{selectedRows.size} selected</span>
+            <div className="h-6 w-px bg-border" />
+            <Button size="sm" variant="outline" className="text-emerald-700 border-emerald-200 bg-emerald-50 hover:bg-emerald-100" onClick={() => bulkMark('present')}>
+              Mark Present (P)
+            </Button>
+            <Button size="sm" variant="outline" className="text-red-700 border-red-200 bg-red-50 hover:bg-red-100" onClick={() => bulkMark('absent')}>
+              Mark Absent (A)
+            </Button>
+            <IconButton icon={
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M11.7816 4.03157C12.0062 3.80702 12.0062 3.44295 11.7816 3.2184C11.5571 2.99385 11.193 2.99385 10.9685 3.2184L7.50005 6.68682L4.03164 3.2184C3.80708 2.99385 3.44301 2.99385 3.21846 3.2184C2.99391 3.44295 2.99391 3.80702 3.21846 4.03157L6.68688 7.49999L3.21846 10.9684C2.99391 11.193 2.99391 11.557 3.21846 11.7816C3.44301 12.0061 3.80708 12.0061 4.03164 11.7816L7.50005 8.31316L10.9685 11.7816C11.193 12.0061 11.5571 12.0061 11.7816 11.7816C12.0062 11.557 12.0062 11.193 11.7816 10.9684L8.31322 7.49999L11.7816 4.03157Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path></svg>
+            } label="Clear selection (Esc)" onClick={() => setSelectedRows(new Set())} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <div className="overflow-hidden rounded-card border border-border bg-surface shadow-soft">
-        <div className="flex flex-col gap-2 border-b border-border p-3">
-          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-text">Roster</h2>
-              <p className="text-xs text-muted">
-                {searchQuery.trim()
-                  ? `${filteredRoster.length}/${roster.length}`
-                  : `${roster.length} students`}
-              </p>
+      <div className="grid w-full grid-cols-2 gap-3 lg:grid-cols-4">
+        <SummaryTile
+          label="Present"
+          value={summary.present}
+          tone="present"
+          shortLabel="P"
+          fillPercent={(summary.present / rosterCountForProgress) * 100}
+        />
+        <SummaryTile
+          label="Absent"
+          value={summary.absent}
+          tone="absent"
+          shortLabel="A"
+          fillPercent={(summary.absent / rosterCountForProgress) * 100}
+        />
+        <SummaryTile
+          label="Leave"
+          value={summary.leave}
+          tone="leave"
+          shortLabel="L"
+          fillPercent={(summary.leave / rosterCountForProgress) * 100}
+        />
+        <SummaryTile
+          label="Total Students"
+          value={roster.length}
+          tone="total"
+          shortLabel="#"
+          fillPercent={roster.length > 0 ? 100 : 0}
+        />
+      </div>
+
+      <Card className="relative overflow-hidden border-emerald-200/70 bg-[linear-gradient(135deg,rgba(236,253,245,0.9),rgba(240,253,250,0.76)_52%,rgba(255,255,255,0.96))] p-0 shadow-[0_10px_24px_rgba(15,118,110,0.08)]">
+        <span className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500" aria-hidden="true" />
+        <div className="p-4">
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center">
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold leading-6 text-emerald-950">Quick Mark</h3>
+                <p className="text-xs font-medium text-emerald-800/75">Fast roll entry</p>
+              </div>
             </div>
-            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search roll/name"
-                aria-label="Search student or roll"
-                className="min-h-9 w-full rounded-button border border-border bg-surface px-3 text-xs font-medium normal-case tracking-normal text-text placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/30 sm:w-60"
-              />
-              <span className="w-fit rounded-full bg-background px-3 py-1 text-xs font-semibold text-muted">
-                {summary.counted === 0 ? 'No marks' : `${summary.percent}%`}
-              </span>
-            </div>
+            <Badge tone={isQuickCorrectionMode ? 'info' : 'success'} size="sm" className="self-start bg-white sm:self-center">
+              {isQuickCorrectionMode ? 'Correction Mode' : 'First Save Mode'}
+            </Badge>
           </div>
-
-          <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1fr)_15.5rem]">
-            <div className="flex min-w-0 flex-col gap-2">
-              <div className="grid gap-2 md:grid-cols-2">
-                <label className="m-0 flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
-                  Subject
-                  <select
-                    value={subjectId}
-                    onChange={(event) => setSubjectId(event.target.value)}
-                    className="min-h-10 rounded-button border border-border bg-surface px-3 text-sm font-medium normal-case tracking-normal text-text focus:outline-none focus:ring-2 focus:ring-accent/30"
-                  >
-                    {subjects.map((subject) => (
-                      <option key={subject.id} value={subject.id}>
-                        {subject.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="m-0 flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
-                  Period
-                  <select
-                    value={timeSlot}
-                    onChange={(event) => setTimeSlot(event.target.value)}
-                    className="min-h-10 rounded-button border border-border bg-surface px-3 text-sm font-medium normal-case tracking-normal text-text focus:outline-none focus:ring-2 focus:ring-accent/30"
-                  >
-                    {timeSlots.map((slot) => (
-                      <option key={slot} value={slot}>
-                        {slot}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <div className="flex flex-1 flex-col rounded-card border border-emerald-200 bg-emerald-50/70 p-2.5 shadow-[0_10px_30px_rgba(16,185,129,0.12)]">
-                <div className="mb-1.5 flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-sm font-extrabold text-emerald-900">Quick mark</h3>
-                      <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                        Time saver
-                      </span>
-                    </div>
-                  </div>
-                  <span
-                    className="w-fit rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[10px] font-bold text-emerald-700"
-                    title={
-                      isQuickCorrectionMode
-                        ? 'Edit mode: pasted rolls become Present. Everyone else stays unchanged.'
-                        : 'First-time mode: pasted rolls become Present. Everyone else becomes Absent.'
-                    }
-                  >
-                    {isQuickCorrectionMode ? 'Edit' : 'New'}
-                  </span>
-                </div>
-
-                <label className="m-0 flex flex-1 flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
-                  Present rolls
-                  <textarea
-                    value={presentInput}
-                    onChange={(event) => setPresentInput(event.target.value)}
-                    rows={2}
-                    placeholder="e.g. 001, 004, 067, D01"
-                    className="min-h-[2.75rem] flex-1 resize-y rounded-button border border-emerald-200 bg-white px-3 py-1.5 text-sm font-semibold normal-case tracking-normal text-text shadow-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  />
-                </label>
-                <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    className="btn-primary min-h-8 bg-emerald-600 hover:bg-emerald-700"
-                    disabled={roster.length === 0 || saving || isFutureDate}
-                    onClick={openPreview}
-                  >
-                    {isQuickCorrectionMode ? 'Mark matched Present' : 'Apply Present List'}
-                  </button>
-                  <button type="button" className="btn-secondary min-h-8" disabled={saving} onClick={clearQuick}>
-                    Clear
-                  </button>
-                  {quickResult && (
-                    <span className="text-xs font-semibold text-emerald-600">
-                      {isQuickCorrectionMode
-                        ? `${quickResult.matchedCount} updated, rest unchanged`
-                        : `${quickResult.matchedCount} present, rest absent`}
-                    </span>
-                  )}
-                </div>
-                {quickResult && (quickResult.notFound.length > 0 || quickResult.ambiguous.length > 0) && (
-                  <div className="mt-2 space-y-1">
-                    {quickResult.notFound.length > 0 && (
-                      <p className="text-xs font-medium text-status-red">
-                        Not found: {quickResult.notFound.join(', ')}
-                      </p>
-                    )}
-                    {quickResult.ambiguous.length > 0 && (
-                      <p className="text-xs font-medium text-amber-600">
-                        Matched more than one (please check): {quickResult.ambiguous.join(', ')}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <AttendanceCalendarCard
-              selectedDate={date}
-              maxDate={maxAttendanceDate}
-              monthKey={calendarMonth}
-              onMonthChange={changeCalendarMonth}
-              onDateChange={changeAttendanceDate}
-              hasSavedAttendance={hasSavedAttendance}
+          <div className="flex flex-col gap-2 rounded-control border border-emerald-200 bg-white/90 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] sm:flex-row sm:items-center">
+            <input
+              value={presentInput}
+              onChange={(event) => setPresentInput(event.target.value)}
+              placeholder="e.g. 001, 004, 067, D01"
+              className="min-h-10 flex-1 rounded-button border border-transparent bg-transparent px-2 text-sm font-medium text-text placeholder:text-muted focus:border-emerald-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
             />
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="min-w-32 bg-emerald-700 text-white shadow-[0_6px_14px_rgba(4,120,87,0.16)] hover:bg-emerald-800"
+                disabled={roster.length === 0 || saving || isFutureDate}
+                onClick={openPreview}
+              >
+                Mark Present
+              </Button>
+              <Button type="button" size="sm" variant="secondary" className="bg-white/80 text-emerald-900 hover:bg-emerald-50" disabled={saving} onClick={clearQuick}>
+                Clear
+              </Button>
+            </div>
           </div>
+          {quickResult && (
+            <div className="mt-3 rounded-control border border-emerald-200 bg-white/80 px-3 py-2 text-xs">
+              <span className="font-semibold text-emerald-700">
+                {isQuickCorrectionMode
+                  ? `${quickResult.matchedCount} updated, rest unchanged`
+                  : `${quickResult.matchedCount} present, rest absent`}
+              </span>
+              {quickResult.notFound.length > 0 && (
+                <p className="mt-1 font-medium text-status-red">
+                  Not found: {quickResult.notFound.join(', ')}
+                </p>
+              )}
+              {quickResult.ambiguous.length > 0 && (
+                <p className="mt-1 font-medium text-amber-600">
+                  Matched multiple: {quickResult.ambiguous.join(', ')}
+                </p>
+              )}
+            </div>
+          )}
         </div>
+      </Card>
+
+      <Card padded={false} className="overflow-hidden flex flex-col">
+        <FilterBar className="border-b border-border rounded-none bg-surface-muted/30">
+          <SearchInput
+            placeholder="Search student or roll..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="min-w-[250px]"
+          />
+          <Select
+            options={[
+              { label: 'All Subjects', value: '' },
+              ...subjects.map(s => ({ label: s.name, value: s.id }))
+            ]}
+            value={subjectId}
+            onChange={e => setSubjectId(e.target.value)}
+            className="min-w-[150px]"
+          />
+          <Select
+            options={timeSlots.map(s => ({ label: s, value: s }))}
+            value={timeSlot}
+            onChange={e => setTimeSlot(e.target.value)}
+            className="min-w-[150px]"
+          />
+          <DatePicker
+            value={date}
+            max={maxAttendanceDate}
+            onChange={e => setDate(e.target.value)}
+            className="min-w-[150px]"
+          />
+          <Select
+            options={[
+              { label: 'All Statuses', value: 'all' },
+              { label: 'Present', value: 'present' },
+              { label: 'Absent', value: 'absent' },
+              { label: 'Leave', value: 'leave' }
+            ]}
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="min-w-[150px]"
+          />
+          <div className="flex-1" />
+          <Button variant="ghost" onClick={() => { setSearchQuery(''); setStatusFilter('all'); }}>
+            Reset Filters
+          </Button>
+        </FilterBar>
 
         {busy ? (
-          <div className="space-y-3 p-4">
-            {Array.from({ length: 8 }).map((_, index) => (
-              <div key={index} className="h-11 animate-pulse rounded-button bg-border/50" />
-            ))}
+          <div className="p-6 space-y-4">
+            <SkeletonLoader variant="block" className="h-12 w-full" />
+            <SkeletonLoader variant="block" className="h-12 w-full" />
+            <SkeletonLoader variant="block" className="h-12 w-full" />
+            <SkeletonLoader variant="block" className="h-12 w-full" />
           </div>
         ) : roster.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-muted">{messages.emptyState.noStudents}</p>
+          <div className="py-20 text-center">
+            <p className="text-muted">{messages.emptyState.noStudents}</p>
+          </div>
+        ) : filteredRoster.length === 0 ? (
+          <div className="py-20 text-center">
+            <p className="text-muted">No students match your filters.</p>
+          </div>
         ) : (
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[820px] border-collapse text-left">
-              <thead className="bg-surface">
+          <div className="overflow-x-auto max-h-[600px]">
+            <table className="table-base w-full min-w-[800px] border-collapse relative text-left">
+              <thead className="table-head sticky top-0 z-20 bg-surface shadow-sm">
                 <tr>
-                  <th className="border-b border-border px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide text-muted">Student</th>
-                  <th className="border-b border-border px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide text-muted">Roll</th>
-                  <th className="border-b border-border px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide text-muted">Status</th>
-                  <th className="border-b border-border px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide text-muted">Today</th>
+                  <th className="table-header-cell sticky left-0 z-30 w-12 text-center bg-surface border-b border-border py-2.5 px-4 text-[11px] font-bold uppercase text-muted">
+                    <Checkbox
+                      checked={selectedRows.size > 0 && selectedRows.size === filteredRoster.length}
+                      onChange={toggleAllSelection}
+                      label=""
+                    />
+                  </th>
+                  <th className="table-header-cell sticky left-12 z-30 bg-surface border-b border-border py-2.5 px-4 text-[11px] font-bold uppercase text-muted">Student</th>
+                  <th className="table-header-cell bg-surface border-b border-border py-2.5 px-4 text-[11px] font-bold uppercase text-muted">Roll Number</th>
+                  <th className="table-header-cell bg-surface border-b border-border py-2.5 px-4 text-[11px] font-bold uppercase text-muted">Attendance</th>
+                  <th className="table-header-cell text-right bg-surface pr-6 border-b border-border py-2.5 px-4 text-[11px] font-bold uppercase text-muted">Mark</th>
                 </tr>
               </thead>
-              <tbody>
-                {filteredRoster.map((student) => {
-                  const activeStatus = statusById[student.id] ?? 'present';
-                  const studentCode = student.enrollmentNumber ?? student.id.slice(0, 8);
-                  return (
-                    <tr key={student.id} className="transition-colors hover:bg-background">
-                      <td className="border-b border-border px-4 py-2">
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-tint text-[11px] font-bold text-accent">
-                            {initials(student.name)}
-                          </span>
-                          <span className="font-semibold text-text">{student.name}</span>
-                        </div>
-                      </td>
-                      <td className="border-b border-border px-4 py-2 text-sm font-medium text-muted">{studentCode}</td>
-                      <td className="border-b border-border px-4 py-2">
-                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${todayPercentClass(activeStatus)}`}>
-                          {todayPercentLabel(activeStatus)}
-                        </span>
-                      </td>
-                      <td className="border-b border-border px-4 py-2">
-                        <div className="flex flex-wrap gap-1.5">
-                          {STATUS_OPTIONS.map((option) => {
-                            const isActive = activeStatus === option.value;
-                            return (
-                              <button
-                                key={option.value}
-                                type="button"
-                                aria-pressed={isActive}
-                                aria-label={`${option.label} for ${student.name}`}
-                                className={statusButtonClass(isActive, option.activeClass)}
-                                disabled={saving || busy || isFutureDate}
-                                onClick={() => setStudentStatus(student.id, option.value)}
-                              >
-                                {option.shortLabel}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+              <tbody className="divide-y divide-border">
+                <AnimatePresence>
+                  {filteredRoster.map((student, index) => (
+                    <AttendanceTableRow
+                      key={student.id}
+                      student={student}
+                      status={statusById[student.id] ?? 'present'}
+                      overallPercent={overallPercentById[student.id] ?? null}
+                      overallLoading={overallLoading}
+                      isSelected={selectedRows.has(student.id)}
+                      onStatusChange={setStudentStatus}
+                      onToggleSelection={toggleRowSelection}
+                      index={index}
+                      disabled={saving || busy || isFutureDate}
+                    />
+                  ))}
+                </AnimatePresence>
               </tbody>
             </table>
           </div>
         )}
-
-        {!busy && roster.length > 0 && (
-          <ul className="divide-y divide-border md:hidden">
-            {filteredRoster.map((student) => {
-              const activeStatus = statusById[student.id] ?? 'present';
-              const studentCode = student.enrollmentNumber ?? student.id.slice(0, 8);
-              return (
-                <li key={student.id} className="flex flex-col gap-3 px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-bold text-accent">
-                        {initials(student.name)}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-text">{student.name}</p>
-                        <p className="text-xs font-medium text-muted">{studentCode}</p>
-                      </div>
-                    </div>
-                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${todayPercentClass(activeStatus)}`}>
-                      {todayPercentLabel(activeStatus)}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {STATUS_OPTIONS.map((option) => {
-                      const isActive = activeStatus === option.value;
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          aria-pressed={isActive}
-                          aria-label={`${option.label} for ${student.name}`}
-                          className={statusButtonClass(isActive, option.activeClass)}
-                          disabled={saving || busy || isFutureDate}
-                          onClick={() => setStudentStatus(student.id, option.value)}
-                        >
-                          {option.shortLabel}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+      </Card>
 
       {showConfirm && preview && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setShowConfirm(false)}
-        >
-          <div
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" onClick={() => setShowConfirm(false)}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.15 }}
             className="flex max-h-[85vh] w-full max-w-md flex-col rounded-card border border-border bg-surface shadow-xl"
             onClick={(event) => event.stopPropagation()}
           >
@@ -934,22 +982,15 @@ export default function AttendanceView(props: AttendanceViewProps) {
 
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
               {preview.matched.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted">
-                  No students matched the pasted roll numbers.
-                </p>
+                <p className="py-6 text-center text-sm text-muted">No students matched the pasted roll numbers.</p>
               ) : (
                 <ul className="space-y-1.5">
                   {preview.matched.map((match) => {
                     const student = roster.find((item) => item.id === match.id);
                     return (
-                      <li
-                        key={match.id}
-                        className="flex items-center justify-between gap-3 rounded-button bg-background px-3 py-2 text-sm"
-                      >
+                      <li key={match.id} className="flex items-center justify-between gap-3 rounded-button bg-background px-3 py-2 text-sm">
                         <span className="font-semibold text-text">{student?.name ?? match.id}</span>
-                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                          ({match.token})
-                        </span>
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">({match.token})</span>
                       </li>
                     );
                   })}
@@ -958,36 +999,34 @@ export default function AttendanceView(props: AttendanceViewProps) {
 
               {(preview.notFound.length > 0 || preview.ambiguous.length > 0) && (
                 <div className="mt-3 space-y-1">
-                  {preview.notFound.length > 0 && (
-                    <p className="text-xs font-medium text-status-red">
-                      Not found: {preview.notFound.join(', ')}
-                    </p>
-                  )}
-                  {preview.ambiguous.length > 0 && (
-                    <p className="text-xs font-medium text-amber-600">
-                      Matched more than one (please check): {preview.ambiguous.join(', ')}
-                    </p>
-                  )}
+                  {preview.notFound.length > 0 && <p className="text-xs font-medium text-status-red">Not found: {preview.notFound.join(', ')}</p>}
+                  {preview.ambiguous.length > 0 && <p className="text-xs font-medium text-amber-600">Matched more than one (please check): {preview.ambiguous.join(', ')}</p>}
                 </div>
               )}
             </div>
 
             <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
-              <button type="button" className="btn-secondary min-h-10" onClick={() => setShowConfirm(false)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                ref={confirmButtonRef}
-                className="btn-primary min-h-10 bg-emerald-500 hover:bg-emerald-600"
-                onClick={confirmApply}
-              >
-                Confirm &amp; Mark
-              </button>
+              <Button variant="secondary" onClick={() => setShowConfirm(false)}>Cancel</Button>
+              <Button ref={confirmButtonRef as any} variant="primary" className="bg-emerald-500 hover:bg-emerald-600 text-white" onClick={confirmApply}>Confirm &amp; Mark</Button>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
-    </section>
+
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+        <AnimatePresence>
+          {savedMessage && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, x: 20 }}
+              animate={{ opacity: 1, scale: 1, x: 0 }}
+              exit={{ opacity: 0, scale: 0.9, x: 20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Toast title="Success" message={savedMessage} tone="success" onClose={() => setSavedMessage(null)} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
   );
 }

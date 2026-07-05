@@ -81,6 +81,8 @@ export interface QuizCreationViewProps {
   generateShareToken?: () => string;
   /** Builds the shareable link shown after publishing from a share token. */
   buildShareLink?: (shareToken: string) => string;
+  /** Invoked when the "AI Generate" button is clicked (e.g. navigate to the AI page). */
+  onAiGenerate?: () => void;
 }
 
 /** Editable state for a single question in the form. */
@@ -143,14 +145,10 @@ const inputClass =
  * questions or the first English validation message to surface.
  */
 function validateDraft(
-  title: string,
   unitId: string,
   timeLimitMinutes: number,
   questions: QuestionDraft[],
 ): { ok: true; questions: QuestionInput[] } | { ok: false; error: string } {
-  if (title.trim() === '') {
-    return { ok: false, error: 'Enter a quiz title.' };
-  }
   if (unitId === '') {
     return { ok: false, error: 'Select the unit this quiz is linked to.' };
   }
@@ -211,8 +209,8 @@ export default function QuizCreationView({
   students = [],
   generateShareToken = defaultGenerateShareToken,
   buildShareLink = defaultBuildShareLink,
+  onAiGenerate,
 }: QuizCreationViewProps) {
-  const [title, setTitle] = useState('');
   const [unitId, setUnitId] = useState('');
   const [timeLimit, setTimeLimit] = useState<number>(DEFAULT_TIME_LIMIT_MINUTES);
   const [questions, setQuestions] = useState<QuestionDraft[]>(() => [emptyQuestion()]);
@@ -229,6 +227,7 @@ export default function QuizCreationView({
   // A quiz is shared across every section that studies the subject, so attempts
   // span all those sections (Shared-materials model, Req 1).
   const studentById = new Map(students.map((s) => [s.id, s] as const));
+  const selectedUnit = units.find((unit) => unit.id === unitId) ?? null;
 
   const updateQuestion = useCallback(
     (key: string, patch: Partial<QuestionDraft>) => {
@@ -287,7 +286,6 @@ export default function QuizCreationView({
   }
 
   function resetForm() {
-    setTitle('');
     setUnitId('');
     setTimeLimit(DEFAULT_TIME_LIMIT_MINUTES);
     setQuestions([emptyQuestion()]);
@@ -310,18 +308,19 @@ export default function QuizCreationView({
     event.preventDefault();
     setError(null);
 
-    const validation = validateDraft(title, unitId, timeLimit, questions);
+    const validation = validateDraft(unitId, timeLimit, questions);
     if (!validation.ok) {
       setError(validation.error);
       return;
     }
+    const quizTitle = selectedUnit?.name ?? 'Unit quiz';
 
     setIsSaving(true);
     try {
       const shareToken = generateShareToken();
       const quizId = await quizAccess.createQuiz({
         unitId,
-        title: title.trim(),
+        title: quizTitle,
         timeLimitMinutes: timeLimit,
         shareToken,
       });
@@ -330,7 +329,7 @@ export default function QuizCreationView({
         await quizAccess.addQuestion(quizId, question);
       }
       const shareLink = buildShareLink(shareToken);
-      setPublished({ quizId, title: title.trim(), shareToken, shareLink });
+      setPublished({ quizId, title: quizTitle, shareToken, shareLink });
       setAttempts(null);
       setAttemptsError(null);
       resetForm();
@@ -352,7 +351,7 @@ export default function QuizCreationView({
         <button
           type="button"
           className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-purple-500 to-indigo-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:from-purple-600 hover:to-indigo-600 transition-colors"
-          onClick={() => {/* placeholder – AI Generate */}}
+          onClick={() => onAiGenerate?.()}
         >
           ✨ AI Generate
         </button>
@@ -473,21 +472,7 @@ export default function QuizCreationView({
       >
         <h3 className="text-base font-semibold text-text">New Quiz</h3>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="quiz-title" className="text-xs font-medium text-muted">
-              Quiz title
-            </label>
-            <input
-              id="quiz-title"
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className={inputClass}
-              placeholder="Unit 1 — HTTP basics"
-            />
-          </div>
-
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="quiz-unit" className="text-xs font-medium text-muted">
               Linked unit

@@ -1,17 +1,29 @@
 import { useMemo } from 'react';
 import SyllabusTrackerView, { type SyllabusSubject } from '@presentation/views/SyllabusTrackerView';
-import { createSyllabusAccess } from '@data/access/syllabusAccess';
-import { createLocalDemoSyllabusAccess, isLocalDemoMode } from '@data/demo/localDemoMode';
+import {
+  createSyllabusTrackerAccess,
+  type SyllabusTrackerAccess,
+} from '@data/access/syllabusTrackerAccess';
+import { isLocalDemoMode } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 
-const supabaseAccess = createSyllabusAccess(supabase);
+// Demo mode has no Supabase-backed master curriculum; show an empty tracker.
+const demoTrackerAccess: SyllabusTrackerAccess = {
+  async listUnits() {
+    return [];
+  },
+  async setTopicComplete() {
+    /* no-op in demo */
+  },
+};
 
 export default function SyllabusTrackerPage() {
-  // Subject comes from the global top-bar selector.
+  // Subject comes from the global top-bar selector (a syllabus_subjects id).
   const { subjects, selectedSubjectId } = useSelectedSection();
-  const access = useMemo(
-    () => (isLocalDemoMode() ? createLocalDemoSyllabusAccess() : supabaseAccess),
+
+  const access = useMemo<SyllabusTrackerAccess>(
+    () => (isLocalDemoMode() ? demoTrackerAccess : createSyllabusTrackerAccess(supabase)),
     [],
   );
 

@@ -98,3 +98,8 @@ export {
   default as LockedFeatureView,
   type LockedFeatureViewProps,
 } from './LockedFeatureView';
+export {
+  default as TeacherManagementView,
+  type TeacherManagementViewProps,
+  type Teacher,
+} from './TeacherManagementView';

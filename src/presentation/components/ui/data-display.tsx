@@ -51,7 +51,7 @@ export function Avatar({ name = 'User', src, size = 'md', status, className, ...
   return (
     <span className={cx('relative inline-flex shrink-0', className)} {...props}>
       {src ? (
-        <img src={src} alt={name} className={cx('rounded-full object-cover', sizeClass[size])} />
+        <img src={src} alt={name} loading="lazy" decoding="async" className={cx('rounded-full object-cover', sizeClass[size])} />
       ) : (
         <span className={cx('inline-flex items-center justify-center rounded-full bg-accent text-surface font-semibold', sizeClass[size])}>
           {initials}
@@ -86,20 +86,88 @@ export interface EmptyStateProps extends Omit<HTMLAttributes<HTMLDivElement>, 't
 export function EmptyState({ icon, title, message, actionLabel, onAction, className, ...props }: EmptyStateProps) {
   return (
     <div
-      className={cx('flex min-h-44 flex-col items-center justify-center rounded-card border border-dashed border-border bg-surface-muted/60 p-6 text-center', className)}
+      className={cx('motion-border relative flex min-h-52 flex-col items-center justify-center overflow-hidden rounded-card border border-dashed border-border bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(247,247,247,0.88))] p-6 text-center shadow-soft motion-page-enter', className)}
       {...props}
     >
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent-tint text-accent">
-        {icon ?? <span aria-hidden="true">--</span>}
+      <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-border to-transparent" aria-hidden="true" />
+      <div className="relative flex h-16 w-16 animate-empty-float items-center justify-center rounded-full border border-border bg-surface shadow-soft">
+        {icon ?? (
+          <span className="relative flex h-8 w-8 items-center justify-center rounded-button bg-accent-tint text-sm font-bold text-accent" aria-hidden="true">
+            --
+          </span>
+        )}
       </div>
-      <p className="mt-3 text-sm font-semibold text-text">{title}</p>
-      {message && <p className="mt-1 max-w-sm text-xs leading-5 text-muted">{message}</p>}
+      <p className="mt-4 text-sm font-semibold text-text">{title}</p>
+      {message && <p className="mt-1 max-w-md text-xs leading-5 text-muted">{message}</p>}
       {actionLabel && onAction && (
         <Button variant="secondary" size="sm" className="mt-4" onClick={onAction}>
           {actionLabel}
         </Button>
       )}
     </div>
+  );
+}
+
+export type ErrorStateKind = 'not-found' | 'server' | 'network' | 'permission';
+
+export interface ErrorStateProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
+  readonly kind?: ErrorStateKind;
+  readonly title?: ReactNode;
+  readonly message?: ReactNode;
+  readonly actionLabel?: string;
+  readonly onAction?: () => void;
+}
+
+const errorStateCopy: Record<ErrorStateKind, { title: string; message: string; code: string; tone: ComponentTone }> = {
+  'not-found': {
+    title: 'Page not found',
+    message: 'The workspace page you are looking for is unavailable or has moved.',
+    code: '404',
+    tone: 'info',
+  },
+  server: {
+    title: 'Something went wrong',
+    message: 'The app could not complete this request. Try again in a moment.',
+    code: '500',
+    tone: 'danger',
+  },
+  network: {
+    title: 'Network connection issue',
+    message: 'Check your connection and retry the latest action.',
+    code: 'NET',
+    tone: 'warning',
+  },
+  permission: {
+    title: 'Permission denied',
+    message: 'Your account does not have access to this workspace area.',
+    code: '403',
+    tone: 'danger',
+  },
+};
+
+export function ErrorState({ kind = 'server', title, message, actionLabel = 'Try again', onAction, className, ...props }: ErrorStateProps) {
+  const preset = errorStateCopy[kind];
+  const styles = toneClass[preset.tone];
+
+  return (
+    <section
+      className={cx('flex min-h-[22rem] items-center justify-center rounded-card border border-border bg-surface p-6 shadow-soft motion-page-enter', className)}
+      aria-labelledby="error-state-title"
+      {...props}
+    >
+      <div className="max-w-md text-center">
+        <div className={cx('mx-auto flex h-20 w-20 items-center justify-center rounded-full border text-lg font-bold', styles.bg, styles.border, styles.text)}>
+          {preset.code}
+        </div>
+        <h1 id="error-state-title" className="mt-5 text-xl font-semibold text-text">{title ?? preset.title}</h1>
+        <p className="mt-2 text-sm leading-6 text-muted">{message ?? preset.message}</p>
+        {onAction && (
+          <Button className="mt-5" variant={preset.tone === 'danger' ? 'danger' : 'primary'} onClick={onAction}>
+            {actionLabel}
+          </Button>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -111,7 +179,7 @@ export function SkeletonLoader({ variant = 'block', className, ...props }: Skele
   return (
     <div
       className={cx(
-        'animate-pulse bg-border/60',
+        'animate-shimmer bg-border/60',
         variant === 'circle' ? 'rounded-full' : variant === 'text' ? 'h-3 rounded-button' : 'rounded-card',
         className,
       )}
@@ -134,7 +202,7 @@ export function LoadingSpinner({ size = 'md', label = 'Loading', className, ...p
 
   return (
     <span className={cx('inline-flex items-center gap-2 text-sm text-muted', className)} {...props}>
-      <span className={cx('animate-spin rounded-full border-current border-t-transparent', sizeClass[size])} aria-hidden="true" />
+      <span className={cx('animate-spin rounded-full border-current border-t-transparent motion-reduce:animate-none', sizeClass[size])} aria-hidden="true" />
       <span className="sr-only">{label}</span>
     </span>
   );
@@ -159,7 +227,25 @@ export function ProgressBar({ value, max = 100, tone = 'info', label, className,
         </div>
       )}
       <div className="h-2 overflow-hidden rounded-full bg-secondary" role="progressbar" aria-valuenow={value} aria-valuemin={0} aria-valuemax={max}>
-        <div className={cx('h-full rounded-full transition-all duration-standard ease-standard', toneClass[tone].dot)} style={{ width: `${percent}%` }} />
+        <div className={cx('h-full rounded-full transition-all duration-200 ease-standard motion-reduce:transition-none', toneClass[tone].dot)} style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
+}
+
+export interface ProgressIndicatorProps extends HTMLAttributes<HTMLDivElement> {
+  readonly label?: ReactNode;
+}
+
+export function ProgressIndicator({ label = 'Loading workspace', className, ...props }: ProgressIndicatorProps) {
+  return (
+    <div className={cx('w-full space-y-2', className)} {...props}>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="font-medium text-text">{label}</span>
+        <span className="text-muted">Please wait</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+        <div className="h-full w-1/3 animate-progress-indeterminate rounded-full bg-accent" />
       </div>
     </div>
   );

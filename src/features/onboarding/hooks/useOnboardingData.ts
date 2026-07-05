@@ -1,14 +1,14 @@
 /**
  * Loads the data the wizard needs: the live batches plus the syllabus subjects
- * that apply to each batch's current semester.
+ * that apply to the selected odd/even academic session.
  *
  * The derived rule: for each live batch, show subjects where
  * `syllabus_subjects.sem === batch.current_sem`.
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { fetchLiveBatches, fetchSubjectsForSems } from '../api/onboarding';
-import type { Batch, BatchWithSubjects, SyllabusSubject } from '../types';
+import { deriveBatchesForSession, fetchLiveBatches, fetchSubjectsForSems } from '../api/onboarding';
+import type { AcademicSession, Batch, BatchWithSubjects, SyllabusSubject } from '../types';
 
 export interface OnboardingData {
   readonly loading: boolean;
@@ -20,7 +20,7 @@ export interface OnboardingData {
   readonly batchesWithSubjects: readonly BatchWithSubjects[];
 }
 
-export function useOnboardingData(): OnboardingData {
+export function useOnboardingData(currentSession: AcademicSession | null): OnboardingData {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [batches, setBatches] = useState<readonly Batch[]>([]);
@@ -33,10 +33,13 @@ export function useOnboardingData(): OnboardingData {
 
     (async () => {
       const liveBatches = await fetchLiveBatches();
-      const sems = liveBatches.map((b) => b.currentSem);
+      const sessionBatches = currentSession === null
+        ? liveBatches
+        : deriveBatchesForSession(liveBatches, currentSession);
+      const sems = currentSession === null ? [] : sessionBatches.map((b) => b.currentSem);
       const loadedSubjects = await fetchSubjectsForSems(sems);
       if (active) {
-        setBatches(liveBatches);
+        setBatches(sessionBatches);
         setSubjects(loadedSubjects);
         setLoading(false);
       }
@@ -50,7 +53,7 @@ export function useOnboardingData(): OnboardingData {
     return () => {
       active = false;
     };
-  }, []);
+  }, [currentSession]);
 
   const batchesWithSubjects = useMemo<BatchWithSubjects[]>(
     () =>

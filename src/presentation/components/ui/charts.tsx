@@ -22,7 +22,7 @@ export function GenericChartContainer({
   ...props
 }: GenericChartContainerProps) {
   return (
-    <div className={cx('relative w-full rounded-card border border-border bg-background p-4', minHeightClass, className)} {...props}>
+    <div className={cx('motion-border relative w-full rounded-card border border-border bg-background p-4 animate-chart-fade', minHeightClass, className)} {...props}>
       {loading ? (
         <div className="space-y-3">
           <SkeletonLoader className="h-4 w-32" variant="text" />
@@ -60,7 +60,7 @@ export function ChartCard({
   ...props
 }: ChartCardProps) {
   return (
-    <Card as="section" className={className} {...props}>
+    <Card as="section" interactive className={className} {...props}>
       <CardHeader>
         <div>
           <CardTitle>{title}</CardTitle>

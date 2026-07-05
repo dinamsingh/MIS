@@ -45,7 +45,7 @@ export function Toast({
   const styles = toneClass[tone];
 
   return (
-    <div className={cx('flex w-full max-w-sm animate-foundation-slide-up items-start gap-3 rounded-dialog border border-border bg-surface p-4 shadow-overlay', className)} role="status" {...props}>
+    <div className={cx('flex w-full max-w-sm items-start gap-3 rounded-dialog border border-border bg-surface p-4 shadow-overlay', className)} role="status" {...props}>
       <span className={cx('mt-1 h-2 w-2 shrink-0 rounded-full', styles.dot)} aria-hidden="true" />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-text">{title}</p>

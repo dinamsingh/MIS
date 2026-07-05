@@ -12,6 +12,7 @@ import { supabase } from '@data/supabase';
 import { isLocalDemoMode, readDemoValue, writeDemoValue } from '@data/demo/localDemoMode';
 import type { Section } from '@data/access/rows';
 import type {
+  AcademicSession,
   AssignmentInput,
   Batch,
   OnboardingProfile,
@@ -151,6 +152,11 @@ interface SubjectRow {
   lab_name: string | null;
 }
 
+interface TeacherProfileRow {
+  name: string | null;
+  email: string | null;
+}
+
 const toBatch = (row: BatchRow): Batch => ({
   id: row.id,
   startYear: row.start_year,
@@ -167,6 +173,20 @@ const toSubject = (row: SubjectRow): SyllabusSubject => ({
   labName: row.lab_name,
 });
 
+function dedupeSubjects(subjects: readonly SyllabusSubject[]): SyllabusSubject[] {
+  const seen = new Set<string>();
+  const deduped: SyllabusSubject[] = [];
+  for (const subject of subjects) {
+    const key = `${subject.sem}:${subject.code.trim().toLowerCase()}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(subject);
+  }
+  return deduped;
+}
+
 /** Resolve the current teacher's id from the Supabase session (live mode). */
 async function requireTeacherId(): Promise<string> {
   const { data } = await supabase.auth.getSession();
@@ -177,9 +197,72 @@ async function requireTeacherId(): Promise<string> {
   return userId;
 }
 
+function profileFromUserMetadata(metadata: Record<string, unknown>, fallbackEmail: string): OnboardingProfile {
+  const fullName = metadata.full_name;
+  const name = metadata.name;
+  return {
+    name:
+      typeof fullName === 'string' && fullName.trim().length > 0
+        ? fullName
+        : typeof name === 'string' && name.trim().length > 0
+          ? name
+          : '',
+    email: fallbackEmail,
+  };
+}
+
+export function deriveBatchesForSession(
+  batches: readonly Batch[],
+  session: AcademicSession,
+): Batch[] {
+  return [...batches]
+    .sort((a, b) => b.startYear - a.startYear)
+    .map((batch, index) => ({
+      ...batch,
+      currentSem: session === 'odd' ? index * 2 + 1 : index * 2 + 2,
+    }))
+    .filter((batch) => batch.currentSem <= 8);
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+/** Load the logged-in teacher's profile for the locked onboarding identity step. */
+export async function fetchTeacherProfile(): Promise<OnboardingProfile> {
+  if (isLocalDemoMode()) {
+    const record = readDemoRecord();
+    return record.profile.email.length > 0
+      ? record.profile
+      : { name: 'Demo Teacher', email: 'teacher@example.com' };
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const user = sessionData.session?.user;
+  if (!user?.id || !user.email) {
+    throw new Error('No authenticated teacher session.');
+  }
+
+  const metadataProfile = profileFromUserMetadata(
+    (user.user_metadata ?? {}) as Record<string, unknown>,
+    user.email,
+  );
+
+  const { data, error } = await supabase
+    .from('teachers')
+    .select('name, email')
+    .eq('id', user.id)
+    .maybeSingle();
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const row = data as TeacherProfileRow | null;
+  return {
+    name: row?.name?.trim() || metadataProfile.name,
+    email: row?.email?.trim() || metadataProfile.email,
+  };
+}
 
 /** Load the live batches (status !== 'graduated'). */
 export async function fetchLiveBatches(): Promise<Batch[]> {
@@ -204,7 +287,7 @@ export async function fetchSubjectsForSems(sems: readonly number[]): Promise<Syl
     return [];
   }
   if (isLocalDemoMode()) {
-    return MOCK_SUBJECTS.filter((s) => unique.includes(s.sem));
+    return dedupeSubjects(MOCK_SUBJECTS.filter((s) => unique.includes(s.sem)));
   }
   const { data, error } = await supabase
     .from('syllabus_subjects')
@@ -215,7 +298,7 @@ export async function fetchSubjectsForSems(sems: readonly number[]): Promise<Syl
   if (error) {
     throw new Error(error.message);
   }
-  return (data as SubjectRow[]).map(toSubject);
+  return dedupeSubjects((data as SubjectRow[]).map(toSubject));
 }
 
 /** Return whether the current teacher has completed onboarding. */
@@ -265,6 +348,11 @@ export async function saveOnboarding(
     throw new Error(teacherError.message);
   }
 
+  const deleteRes = await supabase.from('teacher_assignments').delete().eq('teacher_id', teacherId);
+  if (deleteRes.error) {
+    throw new Error(deleteRes.error.message);
+  }
+
   if (assignments.length > 0) {
     const rows = assignments.map((a) => ({
       teacher_id: teacherId,
@@ -273,9 +361,7 @@ export async function saveOnboarding(
       section: a.section,
       is_lab: a.isLab,
     }));
-    const { error: assignError } = await supabase
-      .from('teacher_assignments')
-      .upsert(rows, { onConflict: 'teacher_id,subject_id,batch_id,section,is_lab' });
+    const { error: assignError } = await supabase.from('teacher_assignments').insert(rows);
     if (assignError) {
       throw new Error(assignError.message);
     }
@@ -307,7 +393,7 @@ function deriveSections(
     if (seen.has(key)) {
       continue;
     }
-    const sem = batchById.get(a.batchId)?.currentSem ?? 0;
+    const sem = a.semester ?? batchById.get(a.batchId)?.currentSem ?? 0;
     seen.set(key, {
       id: key,
       name: `CSE-${sem}${a.section}`,
@@ -394,15 +480,38 @@ export async function fetchOnboardedSections(): Promise<Section[]> {
   }
   const teacherId = await requireTeacherId();
   const [assignmentRes, batches] = await Promise.all([
-    supabase.from('teacher_assignments').select('batch_id, section').eq('teacher_id', teacherId),
+    supabase.from('teacher_assignments').select('batch_id, section, subject_id').eq('teacher_id', teacherId),
     fetchAllBatches(),
   ]);
   if (assignmentRes.error) {
     throw new Error(assignmentRes.error.message);
   }
-  const assignments: AssignmentInput[] = (assignmentRes.data as Array<{ batch_id: string; section: AssignmentInput['section'] }>).map(
-    (row) => ({ subjectId: '', batchId: row.batch_id, section: row.section, isLab: false }),
-  );
+  const assignmentRows = assignmentRes.data as Array<{
+    batch_id: string;
+    section: AssignmentInput['section'];
+    subject_id: string;
+  }>;
+  const subjectIds = Array.from(new Set(assignmentRows.map((row) => row.subject_id)));
+  const subjectSemById = new Map<string, number>();
+  if (subjectIds.length > 0) {
+    const subjectRes = await supabase
+      .from('syllabus_subjects')
+      .select('id, sem')
+      .in('id', subjectIds);
+    if (subjectRes.error) {
+      throw new Error(subjectRes.error.message);
+    }
+    for (const row of subjectRes.data as Array<{ id: string; sem: number }>) {
+      subjectSemById.set(row.id, row.sem);
+    }
+  }
+  const assignments: AssignmentInput[] = assignmentRows.map((row) => ({
+    subjectId: row.subject_id,
+    batchId: row.batch_id,
+    section: row.section,
+    isLab: false,
+    semester: subjectSemById.get(row.subject_id),
+  }));
   const derived = deriveSections(assignments, batches);
   return Promise.all(derived.map(getOrCreateRealSection));
 }
@@ -415,8 +524,8 @@ export async function fetchOnboardedSections(): Promise<Section[]> {
  * Flatten the wizard's selection state into concrete assignment rows.
  *
  * Each selected (subject, section) yields one row. When the subject is a
- * `theory` subject that carries a `labName`, an additional `is_lab = true` row
- * is auto-attached for the same subject+section.
+ * lab-backed `theory` subject and that section's lab toggle is enabled, an
+ * additional `is_lab = true` row is attached for the same subject+section.
  */
 export function buildAssignments(
   selection: import('../types').SelectionState,
@@ -426,12 +535,17 @@ export function buildAssignments(
   const rows: AssignmentInput[] = [];
 
   for (const [batchId, subjectMap] of Object.entries(selection)) {
-    for (const [subjectId, sections] of Object.entries(subjectMap)) {
+    for (const [subjectId, subjectSelection] of Object.entries(subjectMap)) {
       const subject = byId.get(subjectId);
-      for (const section of sections) {
-        rows.push({ subjectId, batchId, section, isLab: false });
-        if (subject && subject.kind === 'theory' && subject.labName) {
-          rows.push({ subjectId, batchId, section, isLab: true });
+      for (const section of subjectSelection.sections) {
+        rows.push({ subjectId, batchId, section, isLab: false, semester: subject?.sem });
+        if (
+          subjectSelection.labSections.includes(section) &&
+          subject &&
+          subject.kind === 'theory' &&
+          subject.labName
+        ) {
+          rows.push({ subjectId, batchId, section, isLab: true, semester: subject.sem });
         }
       }
     }
