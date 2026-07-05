@@ -38,6 +38,12 @@ export interface SyllabusSubject {
   readonly kind: SubjectKind;
   /** When set on a `theory` subject, selecting it auto-attaches a lab. */
   readonly labName: string | null;
+  /**
+   * When set, this subject is one variant of an elective choice (e.g. all three
+   * Departmental Electives share the group "Departmental Elective"). Onboarding
+   * groups variants and lets the teacher pick exactly one per group.
+   */
+  readonly electiveGroup: string | null;
 }
 
 /** The teacher's editable profile captured in step 1. */

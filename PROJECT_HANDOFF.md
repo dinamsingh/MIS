@@ -11,11 +11,11 @@
 
 ## 0. Quick Status (READ THIS FIRST)
 
-- **Last updated:** 2026-07-05
+- **Last updated:** 2026-07-06
 - **Active branch:** `feature/onboarding` (multi-teacher + onboarding + syllabus work; pushed to origin up to the agentation commit). NOT yet merged to `main`.
 - **Latest commit (pushed):** `133d38e` — "feat(dev): wire dev-only Agentation annotation tool at app root".
-  **Uncommitted (working tree):** Syllabus Tracker feature — migration `0018`, `syllabusTrackerAccess.ts`, reworked `SyllabusTrackerView.tsx`/`SyllabusTrackerPage.tsx`, seeds `sem4_syllabus_seed.sql` + `sem4_java_lab_seed.sql`. (Pending commit — user to confirm.)
-- **Build/tests:** ✅ green — `npx tsc --noEmit` clean, `npx vitest run` 197 tests pass, `npx vite build` succeeds.
+  **Uncommitted (working tree):** Syllabus Tracker + unification + AI Quiz + **sem-5 syllabus & electives** — migrations `0018`–`0021`, `syllabusTrackerAccess.ts`, reworked syllabus views, `functions/api/generate-quiz.ts`, `AiQuizGeneratorPage.tsx`, seeds `sem4_syllabus_seed.sql`, `sem4_java_lab_seed.sql`, `sem5_syllabus_seed.sql`; onboarding elective grouping (`ElectiveGroupRow.tsx`, `SemAccordion.tsx`, `types.ts`, `onboarding.ts`). (Pending commit — user to confirm.)
+- **Build/tests:** ✅ green — `npx tsc --noEmit` clean, `npx vitest run` 206 tests pass, `npx vite build` succeeds.
 - **Model shift this session:** moved from single-teacher to **MULTI-TEACHER**. Identity is now membership-based
   (`is_teacher()` = has a row in `teachers`), NOT the hardcoded `VITE_TEACHER_EMAIL`. See §11.
 - **Where work stopped / resume point:** Syllabus Tracker is code-complete; user is uploading remaining
@@ -35,6 +35,8 @@ Migrations from this session that must be applied:
 9. ⏳ (optional) `seeds/sem4_java_lab_seed.sql` — adds CS-406 Java lab programs as a unit.
 10. ⏳ `0019_unify_subjects_units.sql` — repoint operational FKs (quizzes/assignments/attendance/marks/timetable) from legacy `subjects`/`units` to `syllabus_subjects`/`syllabus_units`. **DELETES orphan operational rows** that don't match the master (clean start). RUN after 0018 + seed.
 11. ⏳ `0020_quiz_active_window.sql` — add `quizzes.active_from`/`active_until` + enforce window in `request_quiz_access`. RUN for the AI quiz feature.
+12. ⏳ `0021_sem5_electives_and_subjects.sql` — add `syllabus_subjects.elective_group` + correct the sem-5 (V-SEM) subject list (CS-503A/B/C, CS-504A/B/C, CS-505 Linux Lab, CS-506 Python Lab; keeps CS-501/CS-502). RUN before the sem-5 seed.
+13. ⏳ `seeds/sem5_syllabus_seed.sql` — sem-5 curriculum (units + topics for CS-501, CS-502, all elective variants, and both labs). Idempotent + progress-safe. RUN after `0021`.
 
 ### AI Quiz Generator setup (Gemini) — human action
 - Get a free **Google Gemini API key** (aistudio.google.com).
@@ -106,6 +108,8 @@ Migrations live in `src/data/migrations/` (applied manually via Supabase SQL edi
 | `0017_merge_legacy_section_a.sql` | Move 12 real students from legacy `CS-5A` (batch NULL) into `CSE-5A`; CSE-5A now 66 | ✅ ran |
 | `0018_syllabus_master_and_progress.sql` | Syllabus Tracker: `syllabus_units` + `syllabus_topics` (shared master) + `teacher_topic_progress` (per-teacher, RLS owner) | ⏳ RUN |
 | `0019_unify_subjects_units.sql` | Repoint operational FKs (quizzes.unit_id, assignments.subject_id/unit_id, assignment_submissions.unit_id, lab_manual_submissions.unit_id, attendance.subject_id, mark_components.subject_id, timetable_entries.subject_id) → `syllabus_subjects`/`syllabus_units`. Deletes orphan rows first. Legacy `subjects`/`units`/`topics` retired | ⏳ RUN |
+| `0020_quiz_active_window.sql` | Add `quizzes.active_from`/`active_until` + enforce window in `request_quiz_access` (new `not-active` denied reason) | ⏳ RUN |
+| `0021_sem5_electives_and_subjects.sql` | Add `syllabus_subjects.elective_group`; correct sem-5 subjects → CS-503A/B/C (Departmental Elective), CS-504A/B/C (Open Elective), CS-505 Linux Lab, CS-506 Python Lab. Removes old sem-5 placeholders; keeps CS-501/CS-502 | ⏳ RUN |
 
 Seeds in `src/data/seeds/`:
 - `seed.sql` — original 12 demo students (IWT 5th Sem). 
@@ -114,6 +118,7 @@ Seeds in `src/data/seeds/`:
 - `onboarding_seed.sql` — RGPV CSE Sem 1-8 `syllabus_subjects` + live `batches`. ✅ ran.
 - `sem4_syllabus_seed.sql` — **sem-4 master syllabus**: 6 subjects (BT-401, CS-402/403/404/405, CS-406 Java), **30 units, 312 topics**. Idempotent + progress-safe. ⏳ RUN after 0018.
 - `sem4_java_lab_seed.sql` — optional one-click: adds CS-406 Java 20 lab programs as an extra unit. ⏳ optional.
+- `sem5_syllabus_seed.sql` — **sem-5 master syllabus**: CS-501 (Theory of Computation), CS-502 (DBMS), elective variants CS-503A/B/C & CS-504A/B/C, and labs CS-505 (Linux) & CS-506 (Python) — units + topics. Idempotent + progress-safe (seeds a subject only if it has no units). ⏳ RUN after `0021`.
 
 > **Note:** `.gitignore` previously had a blanket `*.sql` rule (added by collaborator) that hid migrations.
 > Fixed by adding `!src/data/migrations/*.sql` and `!src/data/seeds/*.sql` exceptions.
@@ -261,6 +266,8 @@ When you finish a task or before ending a session, update:
 3. **Work Log** below — add a dated entry at the TOP (newest first) describing what changed and why.
 
 ### Work Log (newest first)
+- **2026-07-06** — **Sem-5 seed rewritten to match official RGPV V-SEM PDF**: reworked every subject in `sem5_syllabus_seed.sql` unit-by-unit to the AICTE Flexible Curricula scheme the user supplied. Corrected CS-503A (Descriptive Statistics wording + added Big Data Technologies topics), fully rewrote CS-503B Pattern Recognition (Introduction / Classification / Clustering / Feature Extraction / Recent Advances) and CS-503C Cyber Security (5 units per PDF ordering incl. Indian Evidence Act vs IT Act), aligned CS-504A/B/C to PDF wording, CS-505 Linux now 6 topic blocks (Overview / Shell / File System / Process Control / System Security / DHCP), CS-506 Python = the 15 official experiments grouped into 5 units. CS-501/CS-502 kept (already matched). Idempotent + progress-safe; apostrophes escaped. Pending user review before running in Supabase.
+- **2026-07-06** — **Sem-5 syllabus + elective support**: migration `0021` adds `syllabus_subjects.elective_group` and corrects the V-SEM subject list (CS-503A/B/C Departmental Elective, CS-504A/B/C Open Elective, CS-505 Linux Lab, CS-506 Python Lab; keeps CS-501/CS-502). New seed `sem5_syllabus_seed.sql` (units + topics for all sem-5 subjects incl. both labs; idempotent + progress-safe). Onboarding now groups elective variants and enforces exactly one per group: new `ElectiveGroupRow.tsx` (radio + section chips), `SemAccordion.tsx` partitions non-elective vs grouped electives, `types.ts`/`onboarding.ts` carry `electiveGroup`. Also fixed a pre-existing test-harness gap: `AppLayout.test.tsx` now wraps in `AuthProvider` (with a stub service) since `GlobalCommandCenter` calls `useAuth`. tsc + 206 tests + build green. (Uncommitted — pending user confirm.)
 - **2026-07-05** — **AI Quiz Generator** (Gemini): Phase 1 migration `0020` (quiz `active_from`/`active_until` + window check in `request_quiz_access`; new `not-active` denied reason threaded through parser + domain type + student view). Phase 2 Cloudflare Pages Function `functions/api/generate-quiz.ts` (server-side Gemini, `GEMINI_API_KEY` secret). Phase 3 pure `quizGenerationService.ts` (prompt builder + response validator + tests, 9 new). Phase 4 `quizAccess.createQuiz` active-window fields + `unitOptions.loadTopicNamesForUnit` + `aiQuizClient.ts`. Phase 5 `AiQuizGeneratorPage.tsx` (unit/#q/difficulty/time/active-window → generate → editable preview → save + share link) wired at `/ai/quiz-generator` behind `VITE_FEATURE_AI`. tsc + 206 tests + build green. (Uncommitted — pending user confirm + Gemini key/flag setup.)
 - **2026-07-05** — **Subject/unit UNIFICATION** (migration `0019`): repointed operational FKs (quizzes, assignments, assignment_submissions, lab_manual_submissions, attendance, mark_components, timetable_entries) from legacy `subjects`/`units` to `syllabus_subjects`/`syllabus_units`; deletes orphan rows first (clean start). New `unitOptions.ts` loader; Quiz + Assignment pages now load units from `syllabus_units` by the selected subject. Root cause fixed: Quiz/Assignment showed empty units (and attendance/marks writes would FK-fail) because they were on the legacy id space. tsc + 197 tests + build green. (Uncommitted — pending user confirm.)
 - **2026-07-05** — **Syllabus Tracker (multi-teacher)**: migration `0018` (syllabus_units + syllabus_topics master, teacher_topic_progress per-teacher). New `syllabusTrackerAccess.ts` (master + progress merge, toggle taught). Reworked `SyllabusTrackerView` to tracking-only (checkboxes + progress bars, unit heading shows "Unit N: Title"). `SyllabusTrackerPage` uses global subject. Seeds `sem4_syllabus_seed.sql` (30 units/312 topics) + optional `sem4_java_lab_seed.sql`. tsc + 197 tests + build green. (Uncommitted — pending user confirm.)
@@ -335,6 +342,18 @@ When you finish a task or before ending a session, update:
   used the global subject (they just needed the FK repoint).
 - Net effect: pick a subject in the top bar → its units/topics appear and work in Syllabus, Quiz, Assignment;
   attendance/marks/timetable save against that same subject.
+
+### Electives in onboarding (2026-07-06, migration 0021)
+- `syllabus_subjects.elective_group` (nullable text) groups variants of one choice. Sem-5 uses two groups:
+  **"Departmental Elective"** (CS-503A Data Analytics / CS-503B Pattern Recognition / CS-503C Cyber Security)
+  and **"Open Elective"** (CS-504A Internet & Web Technology / CS-504B OOP / CS-504C Intro to DBMS).
+- Onboarding UI: `SemAccordion.groupElectives()` partitions a semester's subjects into non-elective
+  (rendered via `SubjectRow`) and elective groups (rendered via new `ElectiveGroupRow`, a radio that enforces
+  **exactly one variant per group**; picking a variant then shows its section chips).
+- Labs **CS-505 (Linux)** and **CS-506 (Python)** are real trackable subjects (kind `lab`), NOT skipped — they
+  have full units/topics in `sem5_syllabus_seed.sql`.
+- `SyllabusSubject.electiveGroup` (in `types.ts`) + `onboarding.ts` (`SubjectSeed`, `MOCK_SUBJECTS`,
+  `SubjectRow`, `toSubject`, `fetchSubjectsForSems`) all carry the new column. CS ≡ CSE kept consistent.
 
 ### Known follow-ups
 - Dashboard "syllabus progress %" still uses the legacy topics model; wire it to

@@ -5,6 +5,7 @@
  */
 
 import SubjectRow from './SubjectRow';
+import ElectiveGroupRow from './ElectiveGroupRow';
 import type { Batch, Section, SubjectSelection, SyllabusSubject } from '../types';
 
 interface SemAccordionProps {
@@ -23,6 +24,23 @@ const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'] as const;
 /** Convert a semester number (1..8) to a Roman numeral. */
 export function toRoman(sem: number): string {
   return ROMAN[sem - 1] ?? String(sem);
+}
+
+/** Group elective subjects by their electiveGroup, preserving first-seen order. */
+export function groupElectives(
+  subjects: readonly SyllabusSubject[],
+): Array<[string, SyllabusSubject[]]> {
+  const groups = new Map<string, SyllabusSubject[]>();
+  for (const s of subjects) {
+    if (!s.electiveGroup) continue;
+    const list = groups.get(s.electiveGroup);
+    if (list) {
+      list.push(s);
+    } else {
+      groups.set(s.electiveGroup, [s]);
+    }
+  }
+  return Array.from(groups.entries());
 }
 
 export default function SemAccordion({
@@ -78,16 +96,32 @@ export default function SemAccordion({
           {subjects.length === 0 ? (
             <p className="px-1 py-2 text-sm text-[#969cad]">No subjects for this semester.</p>
           ) : (
-            subjects.map((subject) => (
-              <SubjectRow
-                key={subject.id}
-                subject={subject}
-                selected={selection[subject.id]?.sections ?? []}
-                labSections={selection[subject.id]?.labSections ?? []}
-                onChange={(next) => onChangeSubject(subject.id, next)}
-                onChangeLab={(section, includeLab) => onChangeSubjectLab(subject.id, section, includeLab)}
-              />
-            ))
+            <>
+              {/* Non-elective subjects render as normal rows. */}
+              {subjects
+                .filter((s) => !s.electiveGroup)
+                .map((subject) => (
+                  <SubjectRow
+                    key={subject.id}
+                    subject={subject}
+                    selected={selection[subject.id]?.sections ?? []}
+                    labSections={selection[subject.id]?.labSections ?? []}
+                    onChange={(next) => onChangeSubject(subject.id, next)}
+                    onChangeLab={(section, includeLab) => onChangeSubjectLab(subject.id, section, includeLab)}
+                  />
+                ))}
+
+              {/* Elective variants grouped; pick exactly one per group. */}
+              {groupElectives(subjects).map(([groupName, variants]) => (
+                <ElectiveGroupRow
+                  key={groupName}
+                  groupName={groupName}
+                  variants={variants}
+                  selection={selection}
+                  onChangeSubject={onChangeSubject}
+                />
+              ))}
+            </>
           )}
         </div>
       )}

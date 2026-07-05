@@ -40,7 +40,9 @@ export const MOCK_BATCHES: readonly Batch[] = [
   { id: '2021-25', startYear: 2021, currentSem: 8, status: 'graduated' },
 ];
 
-type SubjectSeed = Omit<SyllabusSubject, 'id'>;
+type SubjectSeed = Omit<SyllabusSubject, 'id' | 'electiveGroup'> & {
+  readonly electiveGroup?: string | null;
+};
 
 /** Demo syllabus subjects (mirrors the RGPV CSE Sem 1–8 seed rows). */
 const SUBJECT_SEEDS: readonly SubjectSeed[] = [
@@ -84,10 +86,14 @@ const SUBJECT_SEEDS: readonly SubjectSeed[] = [
   // Sem 5 (V)
   { sem: 5, code: 'CS-501', name: 'Theory of Computation', kind: 'theory', labName: 'TOC Lab' },
   { sem: 5, code: 'CS-502', name: 'Database Management Systems', kind: 'theory', labName: 'DBMS Lab' },
-  { sem: 5, code: 'CS-503', name: 'Departmental Elective-I', kind: 'elective', labName: null },
-  { sem: 5, code: 'CS-504', name: 'Open Elective-I', kind: 'elective', labName: null },
-  { sem: 5, code: 'CS-505', name: 'Mini Project', kind: 'project', labName: null },
-  { sem: 5, code: 'CS-506', name: 'Skill Development / Practical', kind: 'lab', labName: null },
+  { sem: 5, code: 'CS-503A', name: 'Data Analytics', kind: 'elective', labName: null, electiveGroup: 'Departmental Elective' },
+  { sem: 5, code: 'CS-503B', name: 'Pattern Recognition', kind: 'elective', labName: null, electiveGroup: 'Departmental Elective' },
+  { sem: 5, code: 'CS-503C', name: 'Cyber Security', kind: 'elective', labName: null, electiveGroup: 'Departmental Elective' },
+  { sem: 5, code: 'CS-504A', name: 'Internet and Web Technology', kind: 'elective', labName: null, electiveGroup: 'Open Elective' },
+  { sem: 5, code: 'CS-504B', name: 'Object Oriented Programming', kind: 'elective', labName: null, electiveGroup: 'Open Elective' },
+  { sem: 5, code: 'CS-504C', name: 'Introduction to Database Management Systems', kind: 'elective', labName: null, electiveGroup: 'Open Elective' },
+  { sem: 5, code: 'CS-505', name: 'Lab (Linux)', kind: 'lab', labName: null },
+  { sem: 5, code: 'CS-506', name: 'Lab (Python)', kind: 'lab', labName: null },
 
   // Sem 6 (VI)
   { sem: 6, code: 'CS-601', name: 'Machine Learning', kind: 'theory', labName: 'Machine Learning Lab' },
@@ -116,6 +122,7 @@ const SUBJECT_SEEDS: readonly SubjectSeed[] = [
 export const MOCK_SUBJECTS: readonly SyllabusSubject[] = SUBJECT_SEEDS.map((seed) => ({
   id: demoSubjectId(seed.code),
   ...seed,
+  electiveGroup: seed.electiveGroup ?? null,
 }));
 
 // ---------------------------------------------------------------------------
@@ -150,6 +157,7 @@ interface SubjectRow {
   name: string;
   kind: SyllabusSubject['kind'];
   lab_name: string | null;
+  elective_group: string | null;
 }
 
 interface TeacherProfileRow {
@@ -171,6 +179,7 @@ const toSubject = (row: SubjectRow): SyllabusSubject => ({
   name: row.name,
   kind: row.kind,
   labName: row.lab_name,
+  electiveGroup: row.elective_group ?? null,
 });
 
 function dedupeSubjects(subjects: readonly SyllabusSubject[]): SyllabusSubject[] {
@@ -291,7 +300,7 @@ export async function fetchSubjectsForSems(sems: readonly number[]): Promise<Syl
   }
   const { data, error } = await supabase
     .from('syllabus_subjects')
-    .select('id, sem, code, name, kind, lab_name')
+    .select('id, sem, code, name, kind, lab_name, elective_group')
     .in('sem', unique)
     .order('sem', { ascending: true })
     .order('code', { ascending: true });
