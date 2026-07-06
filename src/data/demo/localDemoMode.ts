@@ -1,6 +1,15 @@
 import type { AttendanceAccess, AttendanceOverallMark, AttendanceOverallScope } from '@data/access/attendanceAccess';
 import type { MarksAccess, MarkComponentInput, SaveMarkValuesResult } from '@data/access/marksAccess';
-import type { QuizAccessRepository, QuizInput, QuestionInput, AttemptSummary } from '@data/access/quizAccess';
+import {
+  deriveQuizStatus,
+  type QuizAccessRepository,
+  type QuizInput,
+  type QuestionInput,
+  type AttemptSummary,
+  type SavedQuizSummary,
+  type QuizResultRow,
+  type QuizRosterOption,
+} from '@data/access/quizAccess';
 import type { SubmitAttemptOutcome } from '@data/access/parsers';
 import type { SyllabusAccess, UnitInput, TopicInput } from '@data/access/syllabusAccess';
 import type { TimetableAccess, TimetableEntryInput } from '@data/access/timetableAccess';
@@ -429,14 +438,22 @@ interface DemoQuizRecord {
   readonly id: string;
   readonly unitId: string;
   readonly title: string;
+  readonly sectionId?: string | null;
   readonly timeLimitMinutes: number;
   readonly shareToken: string;
+  readonly activeFrom?: string | null;
+  readonly activeUntil?: string | null;
+  readonly createdAt?: string;
   readonly questions: DemoQuizQuestion[];
+}
+
+interface DemoQuizAttempt extends AttemptSummary {
+  readonly submittedAt?: string;
 }
 
 interface DemoQuizStore {
   readonly quizzes: Record<string, DemoQuizRecord>;
-  readonly attemptsByQuiz: Record<string, AttemptSummary[]>;
+  readonly attemptsByQuiz: Record<string, DemoQuizAttempt[]>;
 }
 
 function defaultQuizStore(): DemoQuizStore {
@@ -477,6 +494,39 @@ function totalQuizMarks(quiz: DemoQuizRecord): number {
   return quiz.questions.reduce((sum, question) => sum + (question.marks ?? 1), 0);
 }
 
+function demoAttemptSubmittedAt(quizId: string, studentId: string): string {
+  const date = new Date();
+  date.setDate(date.getDate() - demoInt(`${quizId}:${studentId}:submitted-day`, 0, 12));
+  date.setHours(demoInt(`${quizId}:${studentId}:submitted-hour`, 9, 18), demoInt(`${quizId}:${studentId}:submitted-minute`, 0, 59), 0, 0);
+  return date.toISOString();
+}
+
+function averageScore(attempts: readonly DemoQuizAttempt[]): number | null {
+  if (attempts.length === 0) {
+    return null;
+  }
+  return attempts.reduce((sum, attempt) => sum + attempt.score, 0) / attempts.length;
+}
+
+function toDemoSavedQuiz(quiz: DemoQuizRecord, attempts: readonly DemoQuizAttempt[]): SavedQuizSummary {
+  return {
+    id: quiz.id,
+    title: quiz.title,
+    unitId: quiz.unitId,
+    sectionId: quiz.sectionId ?? null,
+    unitName: quiz.title,
+    timeLimitMinutes: quiz.timeLimitMinutes,
+    shareToken: quiz.shareToken,
+    activeFrom: quiz.activeFrom ?? null,
+    activeUntil: quiz.activeUntil ?? null,
+    questionCount: quiz.questions.length,
+    responseCount: attempts.length,
+    totalMarks: totalQuizMarks(quiz),
+    averageScore: averageScore(attempts),
+    status: deriveQuizStatus(quiz.activeFrom ?? null, quiz.activeUntil ?? null),
+  };
+}
+
 export function createLocalDemoQuizAccess(
   getStudents: () => readonly DemoStudent[] = () => [],
 ): QuizAccessRepository {
@@ -488,8 +538,12 @@ export function createLocalDemoQuizAccess(
         id,
         unitId: input.unitId,
         title: input.title,
+        sectionId: input.sectionId ?? null,
         timeLimitMinutes: input.timeLimitMinutes ?? 15,
         shareToken: input.shareToken,
+        activeFrom: input.activeFrom ?? null,
+        activeUntil: input.activeUntil ?? null,
+        createdAt: new Date().toISOString(),
         questions: [],
       };
       writeQuizStore({ ...store, quizzes: { ...store.quizzes, [id]: quiz } });
@@ -522,7 +576,45 @@ export function createLocalDemoQuizAccess(
       if (!isValidEnrollmentNumber(providedEnrollment.trim().toUpperCase())) {
         return { status: 'denied', reason: 'not-registered' };
       }
+      const students = getStudents();
+      if (
+        quiz.sectionId &&
+        students.length > 0 &&
+        !students.some(
+          (student) =>
+            student.sectionId === quiz.sectionId &&
+            student.enrollmentNumber === providedEnrollment.trim().toUpperCase(),
+        )
+      ) {
+        return { status: 'denied', reason: 'not-registered' };
+      }
+      if (deriveQuizStatus(quiz.activeFrom ?? null, quiz.activeUntil ?? null) !== 'active') {
+        return { status: 'denied', reason: 'not-active' };
+      }
       return { status: 'granted', quiz: quizPayload(quiz) };
+    },
+
+    async listRosterOptions(quizId: string): Promise<QuizRosterOption[]> {
+      const quiz = findQuiz(readQuizStore(), quizId);
+      if (!quiz) {
+        return [];
+      }
+      return getStudents()
+        .filter((student) => !quiz.sectionId || student.sectionId === quiz.sectionId)
+        .filter((student) => student.enrollmentNumber !== undefined)
+        .map((student) => ({
+          enrollmentNumber: student.enrollmentNumber ?? '',
+          name: student.name,
+          section: student.sectionId || student.sectionName
+            ? {
+                id: student.sectionId ?? student.sectionName ?? 'demo-section',
+                name: student.sectionName ?? student.sectionId ?? 'Demo section',
+                batch: null,
+                semester: null,
+                department: null,
+              }
+            : null,
+        }));
     },
 
     async submitAttempt(quizId: string, answers: Record<string, number>): Promise<SubmitAttemptOutcome> {
@@ -536,7 +628,11 @@ export function createLocalDemoQuizAccess(
       const score = quiz.questions.reduce((sum, question) => {
         return answers[question.id] === question.correctIndex ? sum + (question.marks ?? 1) : sum;
       }, 0);
-      const attempt = { studentId: 'demo-student', score };
+      const attempt: DemoQuizAttempt = {
+        studentId: 'demo-student',
+        score,
+        submittedAt: new Date().toISOString(),
+      };
       writeQuizStore({
         ...store,
         attemptsByQuiz: {
@@ -547,6 +643,44 @@ export function createLocalDemoQuizAccess(
       return { status: 'recorded', result: { score, totalMarks } };
     },
 
+    async listQuizzes() {
+      const store = readQuizStore();
+      return Object.values(store.quizzes)
+        .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
+        .map((quiz) => toDemoSavedQuiz(quiz, demoAttemptsForQuiz(store, quiz, getStudents())));
+    },
+
+    async listQuizResults(quizId: string): Promise<QuizResultRow[]> {
+      const store = readQuizStore();
+      const quiz = findQuiz(store, quizId);
+      if (!quiz) {
+        return [];
+      }
+      const students = getStudents();
+      const studentById = new Map(students.map((student) => [student.id, student] as const));
+      const totalMarks = totalQuizMarks(quiz);
+      return demoAttemptsForQuiz(store, quiz, students).map((attempt) => {
+        const student = studentById.get(attempt.studentId);
+        return {
+          studentId: attempt.studentId,
+          studentName: student?.name ?? attempt.studentId,
+          enrollmentNumber: student?.enrollmentNumber ?? null,
+          section: student?.sectionId || student?.sectionName
+            ? {
+                id: student.sectionId ?? student.sectionName ?? 'demo-section',
+                name: student.sectionName ?? student.sectionId ?? 'Demo section',
+                batch: null,
+                semester: null,
+                department: null,
+              }
+            : null,
+          score: attempt.score,
+          totalMarks,
+          submittedAt: attempt.submittedAt ?? demoAttemptSubmittedAt(quiz.id, attempt.studentId),
+        };
+      });
+    },
+
     async listAttempts(quizId: string) {
       const store = readQuizStore();
       const quiz = findQuiz(store, quizId);
@@ -554,20 +688,60 @@ export function createLocalDemoQuizAccess(
         return [];
       }
 
-      const saved = store.attemptsByQuiz[quiz.id];
-      if (saved && saved.length > 0) {
-        return saved;
-      }
+      return demoAttemptsForQuiz(readQuizStore(), quiz, getStudents()).map((attempt) => ({
+        studentId: attempt.studentId,
+        score: attempt.score,
+      }));
+    },
 
-      const maxScore = Math.max(totalQuizMarks(quiz), quiz.questions.length || 10);
-      return getStudents()
-        .filter((student) => demoNumber(`${quiz.id}:${student.id}:attempted`, 0, 1) > 0.22)
-        .map((student) => ({
-          studentId: student.id,
-          score: demoInt(`${quiz.id}:${student.id}:score`, Math.ceil(maxScore * 0.45), maxScore),
-        }));
+    async deleteQuiz(quizId: string) {
+      const store = readQuizStore();
+      const quiz = findQuiz(store, quizId);
+      if (!quiz) {
+        return;
+      }
+      const quizzes = { ...store.quizzes };
+      const attemptsByQuiz = { ...store.attemptsByQuiz };
+      delete quizzes[quiz.id];
+      delete attemptsByQuiz[quiz.id];
+      writeQuizStore({ quizzes, attemptsByQuiz });
+    },
+
+    async resetAttempt(quizId: string, studentId: string) {
+      const store = readQuizStore();
+      const existing = store.attemptsByQuiz[quizId];
+      if (!existing || existing.length === 0) {
+        return;
+      }
+      writeQuizStore({
+        ...store,
+        attemptsByQuiz: {
+          ...store.attemptsByQuiz,
+          [quizId]: existing.filter((row) => row.studentId !== studentId),
+        },
+      });
     },
   };
+}
+
+function demoAttemptsForQuiz(
+  store: DemoQuizStore,
+  quiz: DemoQuizRecord,
+  students: readonly DemoStudent[],
+): DemoQuizAttempt[] {
+  const saved = store.attemptsByQuiz[quiz.id];
+  if (saved && saved.length > 0) {
+    return saved;
+  }
+
+  const maxScore = Math.max(totalQuizMarks(quiz), quiz.questions.length || 10);
+  return students
+    .filter((student) => demoNumber(`${quiz.id}:${student.id}:attempted`, 0, 1) > 0.22)
+    .map((student) => ({
+      studentId: student.id,
+      score: demoInt(`${quiz.id}:${student.id}:score`, Math.ceil(maxScore * 0.45), maxScore),
+      submittedAt: demoAttemptSubmittedAt(quiz.id, student.id),
+    }));
 }
 
 interface DemoSyllabusStore {

@@ -59,7 +59,13 @@ export function parseQuizAccess(value: unknown): QuizAccess {
 
   switch (status) {
     case 'granted':
-      return { status: 'granted', quiz: parseQuizPayload(record?.quiz) };
+      return {
+        status: 'granted',
+        quiz: parseQuizPayload(record?.quiz),
+        // Only include `preview` when the server explicitly set it, so a normal
+        // student grant still deep-equals `{ status, quiz }` (parser tests).
+        ...(record?.preview === true ? { preview: true } : {}),
+      };
     case 'enrollment-required':
       return { status: 'enrollment-required' };
     case 'already-attempted':

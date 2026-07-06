@@ -83,12 +83,14 @@ export default function Sidebar({
     <nav
       aria-label="Primary"
       className={[
-        'flex h-full max-h-screen flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-soft transition-[width] duration-slow ease-entrance motion-reduce:transition-none',
+        'relative flex h-full max-h-screen flex-col overflow-hidden border-r border-sidebar-border/80 bg-[linear-gradient(180deg,rgb(var(--color-surface))_0%,rgb(var(--color-sidebar))_46%,rgb(var(--color-secondary))_100%)] text-sidebar-foreground shadow-[6px_0_32px_rgba(15,23,42,0.07)] transition-[width] duration-slow ease-entrance motion-reduce:transition-none',
         isCollapsed ? 'w-20' : 'w-72',
       ].join(' ')}
     >
-      <div className="flex h-16 shrink-0 items-center gap-3 border-b border-sidebar-border px-4">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-accent text-sm font-bold text-surface shadow-soft">
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-border to-transparent" aria-hidden="true" />
+
+      <div className="relative flex h-[4.25rem] shrink-0 items-center gap-3 border-b border-sidebar-border/70 bg-surface/70 px-4 backdrop-blur-xl">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-[linear-gradient(135deg,rgb(var(--color-accent))_0%,rgb(var(--color-text-soft))_100%)] text-sm font-black text-surface shadow-[0_10px_28px_rgba(15,23,42,0.18)] ring-1 ring-white/60">
           A
         </span>
         <AnimatePresence initial={false}>
@@ -100,8 +102,8 @@ export default function Sidebar({
               exit={{ opacity: 0, x: -4 }}
               transition={{ duration: motionDurations.fast, ease: motionEase }}
             >
-              <p className="truncate text-sm font-bold text-text">Academic MIS</p>
-              <p className="truncate text-[11px] font-medium text-muted">Teacher Workspace</p>
+              <p className="truncate text-sm font-black tracking-tight text-text">Academic MIS</p>
+              <p className="truncate text-[11px] font-semibold text-muted">Teacher Workspace</p>
             </motion.div>
           )}
         </AnimatePresence>
@@ -109,7 +111,7 @@ export default function Sidebar({
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="icon-btn h-8 w-8 shrink-0"
+            className="icon-btn h-8 w-8 shrink-0 border border-border/70 bg-surface/80 shadow-soft hover:border-border hover:bg-secondary"
             aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             aria-pressed={isCollapsed}
           >
@@ -126,20 +128,21 @@ export default function Sidebar({
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overflow-x-hidden px-3 py-4">
+      <div className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden px-3 py-4">
         {navGroups.map((group) => (
-          <div key={group.id} className="flex flex-col gap-1">
+          <div key={group.id} className="flex flex-col gap-1.5">
             {!isCollapsed ? (
               <motion.p
-                className="px-3 text-[10px] font-semibold uppercase tracking-wider text-muted"
+                className="flex items-center gap-2 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted"
                 initial={{ opacity: 0, y: -3 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: motionDurations.fast, ease: motionEase }}
               >
-                {group.label}
+                <span>{group.label}</span>
+                <span className="h-px flex-1 bg-gradient-to-r from-border to-transparent" aria-hidden="true" />
               </motion.p>
             ) : (
-              <div className="mx-auto my-1 h-px w-8 bg-sidebar-border" aria-hidden="true" />
+              <div className="mx-auto my-1 h-px w-8 bg-gradient-to-r from-transparent via-sidebar-border to-transparent" aria-hidden="true" />
             )}
 
             <ul className="flex flex-col gap-1">
@@ -156,13 +159,13 @@ export default function Sidebar({
                       aria-disabled={effectivelyLocked || undefined}
                       onClick={() => !effectivelyLocked && onNavigate?.(item.path)}
                       className={[
-                        'motion-interactive group relative flex min-h-touch w-full items-center rounded-control text-left text-[13px] font-medium transition-colors duration-fast ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar',
+                        'motion-interactive group relative flex min-h-touch w-full items-center rounded-control border text-left text-[13px] font-semibold transition-[transform,border-color,background-color,color,box-shadow] duration-fast ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar',
                         isCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
                         effectivelyLocked
-                          ? 'cursor-not-allowed text-muted/60'
+                          ? 'cursor-not-allowed border-transparent text-muted/60'
                           : isActive
-                            ? 'bg-accent text-surface shadow-soft'
-                            : 'text-soft hover:bg-sidebar-accent hover:text-text',
+                            ? 'border-teal-200/20 bg-[linear-gradient(140deg,rgb(6,78,75)_0%,rgb(13,116,106)_52%,rgb(20,184,166)_100%)] text-white shadow-[0_14px_32px_rgba(13,116,106,0.28)] ring-1 ring-teal-100/20'
+                            : 'border-transparent text-soft hover:border-accent/20 hover:bg-[linear-gradient(135deg,rgb(var(--color-accent-tint))_0%,rgb(var(--color-surface))_58%,rgb(var(--color-secondary))_100%)] hover:text-text hover:shadow-[0_10px_24px_rgba(15,23,42,0.10)]',
                       ].join(' ')}
                     >
                       {isActive && (
@@ -178,8 +181,10 @@ export default function Sidebar({
                       )}
                       <span
                         className={[
-                          'flex h-7 w-7 shrink-0 items-center justify-center rounded-button text-sm transition-transform duration-fast ease-standard group-hover:scale-105 motion-reduce:transition-none',
-                          isActive ? 'bg-surface/15' : 'bg-background/70',
+                          'flex h-7 w-7 shrink-0 items-center justify-center rounded-button border text-sm transition-[transform,background-color,border-color,color,box-shadow] duration-fast ease-standard group-hover:scale-105 motion-reduce:transition-none',
+                          isActive
+                            ? 'border-white/25 bg-white/20 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]'
+                            : 'border-border/70 bg-surface text-soft shadow-[0_2px_8px_rgba(15,23,42,0.04)] group-hover:border-border group-hover:text-text',
                         ].join(' ')}
                         aria-hidden="true"
                       >
@@ -199,12 +204,12 @@ export default function Sidebar({
                           {item.badge && (
                             <motion.span
                               className={[
-                                'rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none',
+                                'rounded-sm border px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none',
                                 item.badge === 'AI'
-                                  ? 'bg-accent-tint text-accent'
+                                  ? 'border-accent/10 bg-accent-tint text-accent'
                                   : item.badge === 'NEW'
-                                    ? 'bg-status-green/10 text-status-green'
-                                    : 'bg-accent-tint text-accent',
+                                    ? 'border-status-green/10 bg-status-green/10 text-status-green'
+                                    : 'border-accent/10 bg-accent-tint text-accent',
                               ].join(' ')}
                               initial={{ opacity: 0, scale: 0.96 }}
                               animate={{ opacity: 1, scale: 1 }}
@@ -225,10 +230,10 @@ export default function Sidebar({
         ))}
       </div>
 
-      <div className="shrink-0 border-t border-sidebar-border p-3">
+      <div className="relative shrink-0 border-t border-sidebar-border/70 bg-surface/65 p-3 backdrop-blur-xl">
         <div
           className={[
-            'flex items-center rounded-control border border-border bg-surface p-2 shadow-soft',
+            'motion-border flex items-center rounded-control border border-border/80 bg-[linear-gradient(135deg,rgb(var(--color-surface))_0%,rgb(var(--color-secondary))_100%)] p-2 shadow-[0_12px_30px_rgba(15,23,42,0.09)]',
             isCollapsed ? 'justify-center' : 'gap-2',
           ].join(' ')}
         >
@@ -238,17 +243,19 @@ export default function Sidebar({
             aria-current={activePath === '/profile' ? 'page' : undefined}
             title="Profile"
             className={[
-              'flex min-w-0 items-center rounded-button text-left transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              activePath === '/profile' ? 'bg-sidebar-accent' : 'hover:bg-sidebar-accent',
+              'motion-interactive flex min-w-0 items-center rounded-button border text-left transition-[border-color,background-color,box-shadow,transform] duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              activePath === '/profile'
+                ? 'border-border bg-surface shadow-soft'
+                : 'border-transparent hover:border-border/80 hover:bg-surface/90 hover:shadow-soft',
               isCollapsed ? 'justify-center p-1' : 'flex-1 gap-3 p-1',
             ].join(' ')}
           >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/10 text-sm font-bold text-accent">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-accent/10 bg-accent/10 text-sm font-black text-accent shadow-soft">
               {teacherInitial}
             </span>
             {!isCollapsed && (
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-semibold text-text">{displayTeacherName}</span>
+                <span className="block truncate text-xs font-bold text-text">{displayTeacherName}</span>
                 <span className="block truncate text-[10px] text-muted">View profile</span>
               </span>
             )}

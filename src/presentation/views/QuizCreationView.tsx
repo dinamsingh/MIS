@@ -1,91 +1,71 @@
 /**
- * Teacher quiz creation view (task 21.1).
+ * Teacher quiz surface (authoring + saved quizzes + submissions).
  *
- * The teacher-facing surface of the Quiz_Module. It composes a single screen
- * that lets the teacher author a multiple-choice quiz, publish it, and review
- * who has attempted it:
- *
- *  - **Author** an MCQ quiz linked to a syllabus unit. Every question carries
- *    its options, exactly one correct option, and a marks value defaulting to 1
- *    (Req 8.1). The quiz is linked to a specific unit and given a configurable
- *    time limit that defaults to 15 minutes (Req 8.2, 8.3).
- *  - **Publish** the quiz: on save a unique share token is generated and the
- *    resulting shareable link is shown for the teacher to distribute (Req 8.2).
- *  - **Review attempts**: once a quiz exists, the teacher can load the list of
- *    student attempts with their scores (Req 8.12).
- *
- * All persistence is delegated to an injected {@link QuizCreationDeps.quizAccess}
- * wrapper (the Supabase-backed `quizAccess` repository in production), so this
- * view performs no I/O of its own. Token generation and link building are also
- * injectable for deterministic testing.
+ * Scoped to the globally-selected SUBJECT: it lists the saved quizzes for that
+ * subject (persisted, so AI-generated quizzes appear too), lets the teacher
+ * publish new ones, review who submitted each quiz (name, enrollment, section,
+ * score, time), copy the share link, delete a quiz, and remove a single
+ * student's attempt so they can re-attempt THAT quiz.
  *
  * Grading, the answer key, and single-attempt enforcement live server-side
- * (`quizService` / the `submit_attempt` DB function); this view never sees or
- * needs them.
+ * (`submit_attempt` / `request_quiz_access`); this view never sees them. All
+ * persistence is delegated to an injected {@link QuizCreationRepository} so the
+ * view does no I/O of its own and stays unit-testable.
  *
  * _Requirements: 8.1, 8.2, 8.3, 8.12_
  */
 
-import { useCallback, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import type {
-  AttemptSummary,
   QuestionInput,
   QuizAccessRepository,
+  QuizResultRow,
+  SavedQuizSummary,
 } from '@data/access/quizAccess';
 import { messages } from '@domain/shared/messages';
-import SharedAcrossSectionsNotice from '@presentation/components/SharedAcrossSectionsNotice';
+import { formatSectionLabel } from '@presentation/format/sectionLabel';
+import {
+  SectionHeader,
+  Card,
+  Button,
+  Badge,
+  Alert,
+  SkeletonLoader,
+} from '@presentation/components/ui';
 
-/** The default quiz time limit in minutes (Req 8.3). */
 export const DEFAULT_TIME_LIMIT_MINUTES = 15;
-/** The default marks awarded for a correct answer (Req 8.1). */
 export const DEFAULT_QUESTION_MARKS = 1;
-/** The number of option fields a fresh question starts with. */
 const DEFAULT_OPTION_COUNT = 4;
 
-/** A unit the quiz can be linked to (Req 8.2). */
+/** A unit the quiz can be linked to. */
 export interface QuizUnitOption {
   readonly id: string;
   readonly name: string;
 }
 
-/**
- * A student who may attempt the quiz, used to label the attempts list by
- * section. A quiz is shared across every section that studies its subject, so
- * the attempts span all those sections; `sectionLabel` (from
- * `formatSectionLabel`) lets the teacher see which section each attempt is from.
- */
-export interface QuizAttemptStudent {
-  readonly id: string;
-  readonly name: string;
-  readonly sectionLabel?: string;
-}
-
 /** Operations this view needs from the quiz data-access wrapper. */
 export type QuizCreationRepository = Pick<
   QuizAccessRepository,
-  'createQuiz' | 'addQuestion' | 'listAttempts'
+  'createQuiz' | 'addQuestion' | 'listQuizzes' | 'listQuizResults' | 'deleteQuiz' | 'resetAttempt'
 >;
 
 export interface QuizCreationViewProps {
-  /** Persists quizzes/questions and reads attempts (defaults to the Supabase wrapper). */
   quizAccess: QuizCreationRepository;
-  /** The syllabus units a quiz may be linked to (Req 8.2). */
+  /** Units of the currently-selected subject (used to scope the saved list). */
   units: ReadonlyArray<QuizUnitOption>;
-  /**
-   * Students who may attempt the quiz, across every section that studies the
-   * subject. Used only to label the attempts list with names + section labels;
-   * optional so callers/tests may omit it (attempts then show the raw id).
-   */
-  students?: ReadonlyArray<QuizAttemptStudent>;
-  /** Generates a unique share token (defaults to a crypto-based generator). */
+  /** The currently-selected subject id (reload trigger + scoping). */
+  subjectId?: string | null;
+  /** The currently-selected subject name (header display). */
+  subjectName?: string | null;
+  /** The currently-selected section id saved on new quizzes. */
+  sectionId?: string | null;
+  /** The currently-selected section name for display only. */
+  sectionName?: string | null;
   generateShareToken?: () => string;
-  /** Builds the shareable link shown after publishing from a share token. */
   buildShareLink?: (shareToken: string) => string;
-  /** Invoked when the "AI Generate" button is clicked (e.g. navigate to the AI page). */
   onAiGenerate?: () => void;
 }
 
-/** Editable state for a single question in the form. */
 interface QuestionDraft {
   readonly key: string;
   text: string;
@@ -94,15 +74,6 @@ interface QuestionDraft {
   marks: number;
 }
 
-/** Outcome of a successful publish, used to render the link + attempts panel. */
-interface PublishedQuiz {
-  readonly quizId: string;
-  readonly title: string;
-  readonly shareToken: string;
-  readonly shareLink: string;
-}
-
-/** Default share-token generator, preferring the platform crypto UUID. */
 function defaultGenerateShareToken(): string {
   const g = globalThis as { crypto?: { randomUUID?: () => string } };
   if (g.crypto?.randomUUID) {
@@ -111,21 +82,17 @@ function defaultGenerateShareToken(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-/** Default link builder: an absolute `/quiz/{token}` URL when an origin exists. */
 function defaultBuildShareLink(shareToken: string): string {
-  const origin =
-    typeof window !== 'undefined' && window.location ? window.location.origin : '';
+  const origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
   return `${origin}/quiz/${shareToken}`;
 }
 
-/** A monotonic key source so React list items stay stable across edits. */
 let questionKeySeq = 0;
 function nextQuestionKey(): string {
   questionKeySeq += 1;
   return `q-${questionKeySeq}`;
 }
 
-/** Build a fresh, empty question draft with the default marks and option count. */
 function emptyQuestion(): QuestionDraft {
   return {
     key: nextQuestionKey(),
@@ -140,491 +107,549 @@ const inputClass =
   'w-full rounded-button border border-border bg-surface px-3 py-2 text-sm text-text ' +
   'placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30';
 
-/**
- * Validate the draft into a persistable shape, returning either the cleaned
- * questions or the first English validation message to surface.
- */
+const STATUS_TONE: Record<SavedQuizSummary['status'], 'success' | 'warning' | 'neutral'> = {
+  active: 'success',
+  scheduled: 'warning',
+  closed: 'neutral',
+};
+const STATUS_LABEL: Record<SavedQuizSummary['status'], string> = {
+  active: 'Active',
+  scheduled: 'Scheduled',
+  closed: 'Closed',
+};
+
+function formatDateTime(value: string | null): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+}
+
+function formatWindow(from: string | null, until: string | null): string {
+  if (!from && !until) return 'Always open';
+  const f = from ? formatDateTime(from) : 'Now';
+  const u = until ? formatDateTime(until) : 'No end';
+  return `${f} → ${u}`;
+}
+
 function validateDraft(
   unitId: string,
   timeLimitMinutes: number,
   questions: QuestionDraft[],
 ): { ok: true; questions: QuestionInput[] } | { ok: false; error: string } {
-  if (unitId === '') {
-    return { ok: false, error: 'Select the unit this quiz is linked to.' };
-  }
+  if (unitId === '') return { ok: false, error: 'Select the unit this quiz is linked to.' };
   if (!Number.isFinite(timeLimitMinutes) || timeLimitMinutes <= 0) {
     return { ok: false, error: 'Enter a time limit greater than zero minutes.' };
   }
-  if (questions.length === 0) {
-    return { ok: false, error: 'Add at least one question.' };
-  }
+  if (questions.length === 0) return { ok: false, error: 'Add at least one question.' };
 
   const cleaned: QuestionInput[] = [];
   for (let i = 0; i < questions.length; i += 1) {
     const q = questions[i];
     const position = i + 1;
-    if (q.text.trim() === '') {
-      return { ok: false, error: `Enter the text for question ${position}.` };
-    }
+    if (q.text.trim() === '') return { ok: false, error: `Enter the text for question ${position}.` };
     const options = q.options.map((o) => o.trim());
     const filled = options.filter((o) => o !== '');
-    if (filled.length < 2) {
-      return {
-        ok: false,
-        error: `Question ${position} needs at least two options.`,
-      };
-    }
+    if (filled.length < 2) return { ok: false, error: `Question ${position} needs at least two options.` };
     if (options.some((o) => o === '')) {
-      return {
-        ok: false,
-        error: `Remove the empty option in question ${position} or fill it in.`,
-      };
+      return { ok: false, error: `Remove the empty option in question ${position} or fill it in.` };
     }
     if (q.correctIndex < 0 || q.correctIndex >= options.length) {
-      return {
-        ok: false,
-        error: `Select the correct option for question ${position}.`,
-      };
+      return { ok: false, error: `Select the correct option for question ${position}.` };
     }
     if (!Number.isFinite(q.marks) || q.marks <= 0) {
-      return {
-        ok: false,
-        error: `Enter marks greater than zero for question ${position}.`,
-      };
+      return { ok: false, error: `Enter marks greater than zero for question ${position}.` };
     }
-    cleaned.push({
-      text: q.text.trim(),
-      options,
-      correctIndex: q.correctIndex,
-      marks: q.marks,
-    });
+    cleaned.push({ text: q.text.trim(), options, correctIndex: q.correctIndex, marks: q.marks });
   }
   return { ok: true, questions: cleaned };
 }
 
-/** Teacher quiz authoring + attempts review. */
 export default function QuizCreationView({
   quizAccess,
   units,
-  students = [],
+  subjectId,
+  subjectName,
+  sectionId,
+  sectionName,
   generateShareToken = defaultGenerateShareToken,
   buildShareLink = defaultBuildShareLink,
   onAiGenerate,
 }: QuizCreationViewProps) {
+  // Authoring form state.
   const [unitId, setUnitId] = useState('');
   const [timeLimit, setTimeLimit] = useState<number>(DEFAULT_TIME_LIMIT_MINUTES);
   const [questions, setQuestions] = useState<QuestionDraft[]>(() => [emptyQuestion()]);
-  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [published, setPublished] = useState<PublishedQuiz | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  // Attempts panel state for the published quiz (Req 8.12).
-  const [attempts, setAttempts] = useState<AttemptSummary[] | null>(null);
-  const [isLoadingAttempts, setIsLoadingAttempts] = useState(false);
-  const [attemptsError, setAttemptsError] = useState<string | null>(null);
+  // Saved quizzes (subject-scoped).
+  const [savedQuizzes, setSavedQuizzes] = useState<SavedQuizSummary[]>([]);
+  const [loadingQuizzes, setLoadingQuizzes] = useState(true);
+  const [quizzesError, setQuizzesError] = useState<string | null>(null);
 
-  // Lookup so each attempt row can show the student's name + section label.
-  // A quiz is shared across every section that studies the subject, so attempts
-  // span all those sections (Shared-materials model, Req 1).
-  const studentById = new Map(students.map((s) => [s.id, s] as const));
+  // Per-quiz results panel.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [resultsByQuiz, setResultsByQuiz] = useState<Record<string, QuizResultRow[]>>({});
+  const [loadingResults, setLoadingResults] = useState(false);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const unitIds = useMemo(() => new Set(units.map((u) => u.id)), [units]);
   const selectedUnit = units.find((unit) => unit.id === unitId) ?? null;
 
-  const updateQuestion = useCallback(
-    (key: string, patch: Partial<QuestionDraft>) => {
-      setQuestions((prev) =>
-        prev.map((q) => (q.key === key ? { ...q, ...patch } : q)),
-      );
-    },
-    [],
-  );
+  const loadQuizzes = useCallback(async () => {
+    setLoadingQuizzes(true);
+    setQuizzesError(null);
+    try {
+      const all = await quizAccess.listQuizzes();
+      // Scope to the currently-selected subject via its unit ids.
+      setSavedQuizzes(all.filter((q) => unitIds.has(q.unitId)));
+    } catch {
+      setQuizzesError(messages.error.generic);
+    } finally {
+      setLoadingQuizzes(false);
+    }
+  }, [quizAccess, unitIds]);
 
-  function addQuestion() {
-    setQuestions((prev) => [...prev, emptyQuestion()]);
-  }
+  useEffect(() => {
+    void loadQuizzes();
+  }, [loadQuizzes, subjectId]);
 
-  function removeQuestion(key: string) {
-    setQuestions((prev) =>
-      prev.length <= 1 ? prev : prev.filter((q) => q.key !== key),
-    );
-  }
+  const updateQuestion = useCallback((key: string, patch: Partial<QuestionDraft>) => {
+    setQuestions((prev) => prev.map((q) => (q.key === key ? { ...q, ...patch } : q)));
+  }, []);
 
-  function addOption(key: string) {
-    setQuestions((prev) =>
-      prev.map((q) => (q.key === key ? { ...q, options: [...q.options, ''] } : q)),
-    );
-  }
-
-  function removeOption(key: string, optionIndex: number) {
-    setQuestions((prev) =>
-      prev.map((q) => {
-        if (q.key !== key || q.options.length <= 2) {
-          return q;
-        }
-        const options = q.options.filter((_, i) => i !== optionIndex);
-        // Keep the correct-option pointer valid after removal.
-        let correctIndex = q.correctIndex;
-        if (optionIndex === q.correctIndex) {
-          correctIndex = 0;
-        } else if (optionIndex < q.correctIndex) {
-          correctIndex -= 1;
-        }
-        return { ...q, options, correctIndex };
-      }),
-    );
-  }
-
-  function updateOption(key: string, optionIndex: number, value: string) {
-    setQuestions((prev) =>
-      prev.map((q) => {
-        if (q.key !== key) {
-          return q;
-        }
-        const options = q.options.map((o, i) => (i === optionIndex ? value : o));
-        return { ...q, options };
-      }),
-    );
-  }
-
-  function resetForm() {
+  const resetForm = () => {
     setUnitId('');
     setTimeLimit(DEFAULT_TIME_LIMIT_MINUTES);
     setQuestions([emptyQuestion()]);
-  }
-
-  async function loadAttempts(quizId: string) {
-    setIsLoadingAttempts(true);
-    setAttemptsError(null);
-    try {
-      const rows = await quizAccess.listAttempts(quizId);
-      setAttempts(rows);
-    } catch {
-      setAttemptsError(messages.error.generic);
-    } finally {
-      setIsLoadingAttempts(false);
-    }
-  }
+  };
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError(null);
-
+    setFormError(null);
     const validation = validateDraft(unitId, timeLimit, questions);
     if (!validation.ok) {
-      setError(validation.error);
+      setFormError(validation.error);
       return;
     }
     const quizTitle = selectedUnit?.name ?? 'Unit quiz';
-
     setIsSaving(true);
     try {
       const shareToken = generateShareToken();
       const quizId = await quizAccess.createQuiz({
         unitId,
         title: quizTitle,
+        sectionId: sectionId ?? null,
         timeLimitMinutes: timeLimit,
         shareToken,
       });
-      // Persist each question against the created quiz (Req 8.1).
       for (const question of validation.questions) {
         await quizAccess.addQuestion(quizId, question);
       }
-      const shareLink = buildShareLink(shareToken);
-      setPublished({ quizId, title: quizTitle, shareToken, shareLink });
-      setAttempts(null);
-      setAttemptsError(null);
       resetForm();
+      setShowForm(false);
+      setNotice('Quiz publish ho gaya ✓');
+      await loadQuizzes();
     } catch {
-      setError(messages.error.saveFailed);
+      setFormError(messages.error.saveFailed);
     } finally {
       setIsSaving(false);
     }
   }
 
+  async function toggleResults(quizId: string) {
+    if (expandedId === quizId) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(quizId);
+    if (!resultsByQuiz[quizId]) {
+      setLoadingResults(true);
+      try {
+        const rows = await quizAccess.listQuizResults(quizId);
+        setResultsByQuiz((prev) => ({ ...prev, [quizId]: rows }));
+      } catch {
+        setResultsByQuiz((prev) => ({ ...prev, [quizId]: [] }));
+      } finally {
+        setLoadingResults(false);
+      }
+    }
+  }
+
+  async function handleCopyLink(shareToken: string) {
+    try {
+      await navigator.clipboard?.writeText(buildShareLink(shareToken));
+      setNotice('Share link copy ho gaya ✓');
+    } catch {
+      setNotice(null);
+    }
+  }
+
+  async function handleDeleteQuiz(quiz: SavedQuizSummary) {
+    const ok = window.confirm(
+      `Delete "${quiz.unitName}"?\n\nIska quiz, uske questions aur saare submissions delete ho jaayenge. Ye wapas nahi aayega.`,
+    );
+    if (!ok) return;
+    setBusyKey(`del-${quiz.id}`);
+    try {
+      await quizAccess.deleteQuiz(quiz.id);
+      if (expandedId === quiz.id) setExpandedId(null);
+      await loadQuizzes();
+    } catch {
+      setQuizzesError(messages.error.generic);
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleRemoveAttempt(quizId: string, row: QuizResultRow) {
+    const ok = window.confirm(
+      `Remove ${row.studentName}'s attempt?\n\nSirf iss quiz ka unka attempt hatega, taaki wo dobara de sakein. Baaki subjects/quizzes pe koi asar nahi.`,
+    );
+    if (!ok) return;
+    setBusyKey(`att-${quizId}-${row.studentId}`);
+    try {
+      await quizAccess.resetAttempt(quizId, row.studentId);
+      const rows = await quizAccess.listQuizResults(quizId);
+      setResultsByQuiz((prev) => ({ ...prev, [quizId]: rows }));
+      await loadQuizzes();
+    } catch {
+      setQuizzesError(messages.error.generic);
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  const hasSubject = (subjectId ?? '') !== '' && units.length > 0;
+
   return (
-    <div className="flex flex-col gap-8">
-      {/* ── Header ── */}
-      <header className="flex items-start justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-text">Quizzes</h2>
-          <p className="mt-1 text-sm text-muted">Create and share via link</p>
-        </div>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-purple-500 to-indigo-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:from-purple-600 hover:to-indigo-600 transition-colors"
-          onClick={() => onAiGenerate?.()}
-        >
-          ✨ AI Generate
-        </button>
-      </header>
-
-      {/* Shared-materials notice: a quiz is identical across every section that
-          studies the subject; only attendance/marks are tracked per section. */}
-      <SharedAcrossSectionsNotice itemNoun="quiz" />
-
-      {/* ── Published Quizzes Table ── */}
-      {published !== null && (
-        <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-border bg-gray-50 dark:bg-white/5">
-                <th className="px-4 py-3 font-medium text-muted">Quiz name</th>
-                <th className="px-4 py-3 font-medium text-muted">Q</th>
-                <th className="px-4 py-3 font-medium text-muted">Responses</th>
-                <th className="px-4 py-3 font-medium text-muted">Avg</th>
-                <th className="px-4 py-3 font-medium text-muted">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {/* Published quiz row */}
-              <tr className="border-b border-border bg-white dark:bg-transparent">
-                <td className="px-4 py-3 font-medium text-text">{published.title}</td>
-                <td className="px-4 py-3 text-text">{questions.length}</td>
-                <td className="px-4 py-3 text-text">{attempts?.length ?? '—'}</td>
-                <td className="px-4 py-3 text-text">
-                  {attempts && attempts.length > 0
-                    ? (attempts.reduce((sum, a) => sum + a.score, 0) / attempts.length).toFixed(1)
-                    : '—'}
-                </td>
-                <td className="px-4 py-3">
-                  <span className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-accent hover:underline"
-                      onClick={() => {
-                        void navigator.clipboard?.writeText(published.shareLink);
-                      }}
-                    >
-                      Copy link
-                    </button>
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-accent hover:underline"
-                      onClick={() => void loadAttempts(published.quizId)}
-                      disabled={isLoadingAttempts}
-                    >
-                      {isLoadingAttempts ? 'Loading…' : 'Results'}
-                    </button>
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
-          {/* Attempts detail (expanded below table) */}
-          {attemptsError !== null && (
-            <p role="alert" className="px-4 py-3 text-sm font-medium text-status-red">
-              {attemptsError}
-            </p>
-          )}
-
-          {attempts !== null && attempts.length === 0 && (
-            <p className="px-4 py-3 text-sm text-muted">{messages.emptyState.noQuizAttempts}</p>
-          )}
-
-          {attempts !== null && attempts.length > 0 && (
-            <div className="border-t border-border">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="bg-gray-50 dark:bg-white/5">
-                    <th className="px-4 py-2 font-medium text-muted">Student</th>
-                    <th className="px-4 py-2 font-medium text-muted">Section</th>
-                    <th className="px-4 py-2 font-medium text-muted">Score</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {attempts.map((attempt, idx) => {
-                    const student = studentById.get(attempt.studentId);
-                    return (
-                      <tr
-                        key={attempt.studentId}
-                        className={idx % 2 === 0 ? 'bg-white dark:bg-transparent' : 'bg-gray-50 dark:bg-white/5'}
-                      >
-                        <td className="px-4 py-2 text-text">{student?.name ?? attempt.studentId}</td>
-                        <td className="px-4 py-2 text-muted">{student?.sectionLabel ?? '—'}</td>
-                        <td className="px-4 py-2 text-text">{attempt.score}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Shareable link row */}
-          <div className="flex items-center gap-3 border-t border-border px-4 py-3">
-            <span className="text-xs font-medium text-muted">Share link:</span>
-            <input
-              readOnly
-              aria-label="Shareable quiz link"
-              value={published.shareLink}
-              className="flex-1 rounded-md border border-border bg-gray-50 px-3 py-1.5 text-xs text-text dark:bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/30"
-              onFocus={(e) => e.currentTarget.select()}
-            />
-          </div>
-        </section>
-      )}
-
-      {/* ── Quiz Creation Form Card ── */}
-      <form
-        className="rounded-xl border border-border bg-surface p-6 shadow-sm flex flex-col gap-6"
-        onSubmit={handleSubmit}
-        noValidate
-      >
-        <h3 className="text-base font-semibold text-text">New Quiz</h3>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="quiz-unit" className="text-xs font-medium text-muted">
-              Linked unit
-            </label>
-            <select
-              id="quiz-unit"
-              value={unitId}
-              onChange={(e) => setUnitId(e.target.value)}
-              className={inputClass}
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 pb-16">
+      <SectionHeader
+        eyebrow="Assessments"
+        title="Quizzes"
+        description={
+          subjectName
+            ? `Saved quizzes and submissions for ${subjectName}.`
+            : 'Select a subject from the top bar to manage its quizzes.'
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={() => onAiGenerate?.()}>
+              ✨ AI Generate
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setShowForm((v) => !v);
+                setNotice(null);
+              }}
+              disabled={!hasSubject}
             >
-              <option value="">Select a unit</option>
-              {units.map((unit) => (
-                <option key={unit.id} value={unit.id}>
-                  {unit.name}
-                </option>
-              ))}
-            </select>
+              {showForm ? 'Close form' : 'New quiz'}
+            </Button>
           </div>
+        }
+      />
 
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="quiz-time-limit" className="text-xs font-medium text-muted">
-              Time limit (min)
-            </label>
-            <input
-              id="quiz-time-limit"
-              type="number"
-              min={1}
-              value={timeLimit}
-              onChange={(e) => setTimeLimit(e.target.valueAsNumber)}
-              className={inputClass}
-            />
-          </div>
+      {notice && <Alert tone="success" title="Done">{notice}</Alert>}
+
+      {/* ── Saved Quizzes ── */}
+      <Card padded={false} className="overflow-hidden">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
+          <h3 className="text-sm font-semibold text-text">Saved quizzes</h3>
+          <Badge tone="info" size="sm">{savedQuizzes.length} total</Badge>
         </div>
 
-        {/* Questions */}
-        <div className="flex flex-col gap-4">
-          {questions.map((question, qIndex) => (
-            <fieldset
-              key={question.key}
-              className="rounded-lg border border-border bg-gray-50/50 p-4 dark:bg-white/[0.02]"
-            >
-              <legend className="flex items-center gap-3 px-1 text-sm font-semibold text-text">
-                <span>Q{qIndex + 1}</span>
-                {questions.length > 1 && (
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-status-red hover:underline"
-                    onClick={() => removeQuestion(question.key)}
-                  >
-                    Remove
-                  </button>
-                )}
-              </legend>
-
-              <div className="mt-3 flex flex-col gap-3">
-                <input
-                  type="text"
-                  aria-label={`Question ${qIndex + 1} text`}
-                  value={question.text}
-                  onChange={(e) => updateQuestion(question.key, { text: e.target.value })}
-                  className={inputClass}
-                  placeholder="Question text"
-                />
-
-                <div className="flex flex-col gap-2">
-                  <span className="text-xs font-medium text-muted">
-                    Options (select correct)
-                  </span>
-                  {question.options.map((option, oIndex) => (
-                    <div key={oIndex} className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name={`correct-${question.key}`}
-                        aria-label={`Mark option ${oIndex + 1} of question ${qIndex + 1} correct`}
-                        checked={question.correctIndex === oIndex}
-                        onChange={() => updateQuestion(question.key, { correctIndex: oIndex })}
-                        className="h-4 w-4 accent-accent"
-                      />
-                      <input
-                        type="text"
-                        aria-label={`Option ${oIndex + 1} of question ${qIndex + 1}`}
-                        value={option}
-                        onChange={(e) => updateOption(question.key, oIndex, e.target.value)}
-                        className={inputClass}
-                        placeholder={`Option ${oIndex + 1}`}
-                      />
-                      {question.options.length > 2 && (
-                        <button
-                          type="button"
-                          aria-label={`Remove option ${oIndex + 1} of question ${qIndex + 1}`}
-                          className="text-sm text-muted hover:text-status-red"
-                          onClick={() => removeOption(question.key, oIndex)}
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    className="self-start text-xs font-medium text-accent hover:underline"
-                    onClick={() => addOption(question.key)}
-                  >
-                    + Add option
-                  </button>
-                </div>
-
-                <div className="flex w-28 flex-col gap-1">
-                  <label
-                    htmlFor={`marks-${question.key}`}
-                    className="text-xs font-medium text-muted"
-                  >
-                    Marks
-                  </label>
-                  <input
-                    id={`marks-${question.key}`}
-                    type="number"
-                    min={1}
-                    value={question.marks}
-                    onChange={(e) =>
-                      updateQuestion(question.key, { marks: e.target.valueAsNumber })
-                    }
-                    className={inputClass}
-                  />
-                </div>
-              </div>
-            </fieldset>
-          ))}
-
-          <button
-            type="button"
-            className="self-start rounded-md border border-dashed border-border px-3 py-1.5 text-xs font-medium text-muted hover:border-accent hover:text-accent transition-colors"
-            onClick={addQuestion}
-          >
-            + Add question
-          </button>
-        </div>
-
-        {error !== null && (
-          <p role="alert" className="text-sm font-medium text-status-red">
-            {error}
-          </p>
+        {quizzesError && (
+          <div className="px-5 py-3">
+            <Alert tone="danger" title="Error">{quizzesError}</Alert>
+          </div>
         )}
 
-        <button
-          type="submit"
-          className="self-start rounded-lg bg-accent px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent/90 disabled:opacity-50 transition-colors"
-          disabled={isSaving}
-        >
-          {isSaving ? 'Publishing…' : 'Publish quiz'}
-        </button>
-      </form>
+        {loadingQuizzes ? (
+          <div className="space-y-3 p-5">
+            <SkeletonLoader variant="block" className="h-10 w-full" />
+            <SkeletonLoader variant="block" className="h-10 w-full" />
+            <SkeletonLoader variant="block" className="h-10 w-full" />
+          </div>
+        ) : !hasSubject ? (
+          <p className="px-5 py-10 text-center text-sm text-muted">
+            Top bar se ek subject select karo — us subject ke quizzes yahan dikhenge.
+          </p>
+        ) : savedQuizzes.length === 0 ? (
+          <p className="px-5 py-10 text-center text-sm text-muted">
+            Is subject me abhi koi quiz nahi. "New quiz" ya "AI Generate" se banao.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-border bg-surface-muted/40">
+                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Quiz</th>
+                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Status</th>
+                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Questions</th>
+                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Responses</th>
+                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Avg</th>
+                  <th className="px-4 py-2.5 text-right text-[11px] font-bold uppercase text-muted">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {savedQuizzes.map((quiz) => {
+                  const isOpen = expandedId === quiz.id;
+                  const results = resultsByQuiz[quiz.id] ?? [];
+                  return (
+                    <>
+                      <tr key={quiz.id} className="align-top">
+                        <td className="px-4 py-3">
+                          <p className="font-semibold text-text">{quiz.unitName}</p>
+                          <p className="mt-0.5 text-xs text-muted">
+                            {formatWindow(quiz.activeFrom, quiz.activeUntil)} · {quiz.timeLimitMinutes} min
+                          </p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge tone={STATUS_TONE[quiz.status]} size="sm">
+                            {STATUS_LABEL[quiz.status]}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-text">{quiz.questionCount}</td>
+                        <td className="px-4 py-3 text-text">{quiz.responseCount}</td>
+                        <td className="px-4 py-3 text-text">
+                          {quiz.averageScore !== null
+                            ? `${quiz.averageScore.toFixed(1)} / ${quiz.totalMarks}`
+                            : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button size="sm" variant="ghost" onClick={() => void handleCopyLink(quiz.shareToken)}>
+                              Copy link
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => void toggleResults(quiz.id)}>
+                              {isOpen ? 'Hide' : 'Results'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              loading={busyKey === `del-${quiz.id}`}
+                              onClick={() => void handleDeleteQuiz(quiz)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isOpen && (
+                        <tr key={`${quiz.id}-results`}>
+                          <td colSpan={6} className="bg-surface-muted/30 px-4 py-4">
+                            {loadingResults && !resultsByQuiz[quiz.id] ? (
+                              <p className="text-sm text-muted">Loading submissions…</p>
+                            ) : results.length === 0 ? (
+                              <p className="text-sm text-muted">{messages.emptyState.noQuizAttempts}</p>
+                            ) : (
+                              <div className="overflow-hidden rounded-control border border-border bg-surface">
+                                <table className="w-full text-left text-sm">
+                                  <thead>
+                                    <tr className="border-b border-border bg-surface-muted/40">
+                                      <th className="px-3 py-2 text-[11px] font-bold uppercase text-muted">Student</th>
+                                      <th className="px-3 py-2 text-[11px] font-bold uppercase text-muted">Enrollment</th>
+                                      <th className="px-3 py-2 text-[11px] font-bold uppercase text-muted">Section</th>
+                                      <th className="px-3 py-2 text-[11px] font-bold uppercase text-muted">Score</th>
+                                      <th className="px-3 py-2 text-[11px] font-bold uppercase text-muted">Submitted</th>
+                                      <th className="px-3 py-2 text-right text-[11px] font-bold uppercase text-muted">Action</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border">
+                                    {results.map((r) => (
+                                      <tr key={r.studentId}>
+                                        <td className="px-3 py-2 font-medium text-text">{r.studentName}</td>
+                                        <td className="px-3 py-2 font-mono text-xs text-muted">
+                                          {r.enrollmentNumber ?? '—'}
+                                        </td>
+                                        <td className="px-3 py-2 text-muted">
+                                          {r.section ? formatSectionLabel(r.section) : '—'}
+                                        </td>
+                                        <td className="px-3 py-2 text-text">
+                                          {r.score} / {r.totalMarks}
+                                        </td>
+                                        <td className="px-3 py-2 text-xs text-muted">
+                                          {formatDateTime(r.submittedAt)}
+                                        </td>
+                                        <td className="px-3 py-2 text-right">
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            loading={busyKey === `att-${quiz.id}-${r.studentId}`}
+                                            onClick={() => void handleRemoveAttempt(quiz.id, r)}
+                                          >
+                                            Remove attempt
+                                          </Button>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* ── Authoring form (toggled) ── */}
+      {showForm && (
+        <Card className="flex flex-col gap-6">
+          <h3 className="text-base font-semibold text-text">
+            New quiz{subjectName ? ` · ${subjectName}` : ''}{sectionName ? ` · ${sectionName}` : ''}
+          </h3>
+
+          <form className="flex flex-col gap-6" onSubmit={handleSubmit} noValidate>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="quiz-unit" className="text-xs font-medium text-muted">Linked unit</label>
+                <select id="quiz-unit" value={unitId} onChange={(e) => setUnitId(e.target.value)} className={inputClass}>
+                  <option value="">Select a unit</option>
+                  {units.map((unit) => (
+                    <option key={unit.id} value={unit.id}>{unit.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="quiz-time-limit" className="text-xs font-medium text-muted">Time limit (min)</label>
+                <input
+                  id="quiz-time-limit"
+                  type="number"
+                  min={1}
+                  value={timeLimit}
+                  onChange={(e) => setTimeLimit(e.target.valueAsNumber)}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              {questions.map((question, qIndex) => (
+                <fieldset key={question.key} className="rounded-control border border-border bg-surface-muted/30 p-4">
+                  <legend className="flex items-center gap-3 px-1 text-sm font-semibold text-text">
+                    <span>Q{qIndex + 1}</span>
+                    {questions.length > 1 && (
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-status-red hover:underline"
+                        onClick={() => setQuestions((prev) => prev.filter((q) => q.key !== question.key))}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </legend>
+
+                  <div className="mt-3 flex flex-col gap-3">
+                    <input
+                      type="text"
+                      aria-label={`Question ${qIndex + 1} text`}
+                      value={question.text}
+                      onChange={(e) => updateQuestion(question.key, { text: e.target.value })}
+                      className={inputClass}
+                      placeholder="Question text"
+                    />
+                    <div className="flex flex-col gap-2">
+                      <span className="text-xs font-medium text-muted">Options (select correct)</span>
+                      {question.options.map((option, oIndex) => (
+                        <div key={oIndex} className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name={`correct-${question.key}`}
+                            aria-label={`Mark option ${oIndex + 1} of question ${qIndex + 1} correct`}
+                            checked={question.correctIndex === oIndex}
+                            onChange={() => updateQuestion(question.key, { correctIndex: oIndex })}
+                            className="h-4 w-4 accent-accent"
+                          />
+                          <input
+                            type="text"
+                            aria-label={`Option ${oIndex + 1} of question ${qIndex + 1}`}
+                            value={option}
+                            onChange={(e) =>
+                              updateQuestion(question.key, {
+                                options: question.options.map((o, i) => (i === oIndex ? e.target.value : o)),
+                              })
+                            }
+                            className={inputClass}
+                            placeholder={`Option ${oIndex + 1}`}
+                          />
+                          {question.options.length > 2 && (
+                            <button
+                              type="button"
+                              aria-label={`Remove option ${oIndex + 1} of question ${qIndex + 1}`}
+                              className="text-sm text-muted hover:text-status-red"
+                              onClick={() =>
+                                updateQuestion(question.key, {
+                                  options: question.options.filter((_, i) => i !== oIndex),
+                                  correctIndex:
+                                    oIndex === question.correctIndex
+                                      ? 0
+                                      : oIndex < question.correctIndex
+                                        ? question.correctIndex - 1
+                                        : question.correctIndex,
+                                })
+                              }
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        className="self-start text-xs font-medium text-accent hover:underline"
+                        onClick={() =>
+                          updateQuestion(question.key, { options: [...question.options, ''] })
+                        }
+                      >
+                        + Add option
+                      </button>
+                    </div>
+
+                    <div className="flex w-28 flex-col gap-1">
+                      <label htmlFor={`marks-${question.key}`} className="text-xs font-medium text-muted">Marks</label>
+                      <input
+                        id={`marks-${question.key}`}
+                        type="number"
+                        min={1}
+                        value={question.marks}
+                        onChange={(e) => updateQuestion(question.key, { marks: e.target.valueAsNumber })}
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+                </fieldset>
+              ))}
+
+              <button
+                type="button"
+                className="self-start rounded-control border border-dashed border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-accent hover:text-accent"
+                onClick={() => setQuestions((prev) => [...prev, emptyQuestion()])}
+              >
+                + Add question
+              </button>
+            </div>
+
+            {formError && (
+              <p role="alert" className="text-sm font-medium text-status-red">{formError}</p>
+            )}
+
+            <Button type="submit" variant="primary" loading={isSaving} className="self-start">
+              Publish quiz
+            </Button>
+          </form>
+        </Card>
+      )}
     </div>
   );
 }

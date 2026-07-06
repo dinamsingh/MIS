@@ -148,9 +148,12 @@ export interface QuizPayloadNoAnswers {
  *    existing result is returned instead of a new attempt (Requirement 8.10).
  */
 export type QuizAccess =
-  | { status: 'granted'; quiz: QuizPayloadNoAnswers }
+  // `preview` (optional) is true when the caller is the quiz's owning teacher
+  // opening their own quiz to preview it (roster gate bypassed, no attempt).
+  | { status: 'granted'; quiz: QuizPayloadNoAnswers; preview?: boolean }
   | { status: 'enrollment-required' }
-  // `not-registered`: email not on roster / enrollment mismatch.
+  // `not-registered`: email not on roster / enrollment mismatch / enrollment
+  //   already bound to a different Google account.
   // `not-active`: the quiz is outside its active window (not yet live or expired).
   | { status: 'denied'; reason: 'not-registered' | 'not-active' }
   | { status: 'already-attempted'; result: AttemptResult };

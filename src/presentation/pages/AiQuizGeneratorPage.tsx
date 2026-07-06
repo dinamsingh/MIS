@@ -41,7 +41,7 @@ type Phase =
   | { kind: 'saved'; shareLink: string; count: number };
 
 export default function AiQuizGeneratorPage() {
-  const { selectedSubject, selectedSubjectId } = useSelectedSection();
+  const { selectedSectionId, selectedSubject, selectedSubjectId } = useSelectedSection();
 
   const [units, setUnits] = useState<UnitOption[]>([]);
   const [unitId, setUnitId] = useState('');
@@ -115,6 +115,7 @@ export default function AiQuizGeneratorPage() {
       const quizId = await quizAccess.createQuiz({
         unitId,
         title: quizTitle,
+        sectionId: selectedSectionId,
         timeLimitMinutes: timeLimit,
         shareToken,
         activeFrom: toIso(activeFrom),

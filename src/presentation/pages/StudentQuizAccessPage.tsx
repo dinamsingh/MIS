@@ -11,7 +11,7 @@ import { createQuizAccess } from '@data/access/quizAccess';
 import { createLocalDemoQuizAccess, isLocalDemoMode } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import type { QuizPayloadNoAnswers } from '@domain/services/rosterService';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
 const supabaseQuizAccess = createQuizAccess(supabase);
 
@@ -20,6 +20,15 @@ export default function StudentQuizAccessPage() {
   const quizAccess = useMemo(
     () => (isLocalDemoMode() ? createLocalDemoQuizAccess() : supabaseQuizAccess),
     [],
+  );
+  const resolveAccess = useCallback(
+    (quizId: string, providedEnrollment: string | null) =>
+      quizAccess.resolveAccess(quizId, providedEnrollment),
+    [quizAccess],
+  );
+  const loadRosterOptions = useCallback(
+    (quizId: string) => quizAccess.listRosterOptions(quizId),
+    [quizAccess],
   );
 
   if (!token) {
@@ -36,9 +45,8 @@ export default function StudentQuizAccessPage() {
   return (
     <StudentQuizAccessView
       quizId={token}
-      resolveAccess={(quizId, providedEnrollment) =>
-        quizAccess.resolveAccess(quizId, providedEnrollment)
-      }
+      resolveAccess={resolveAccess}
+      loadRosterOptions={loadRosterOptions}
       onGranted={(quiz: QuizPayloadNoAnswers) => (
         <QuizAttemptView
           quiz={quiz}

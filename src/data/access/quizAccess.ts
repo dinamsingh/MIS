@@ -14,7 +14,7 @@ import { supabase as defaultClient } from '../supabase';
 import type { QuizAccess } from '../../domain/services/rosterService';
 import { totalAvailableMarks } from '../../domain/services/quizService';
 import { parseQuizAccess, parseSubmitOutcome, type SubmitAttemptOutcome } from './parsers';
-import { unwrap, unwrapList } from './support';
+import { expectOk, unwrap, unwrapList } from './support';
 
 export { totalAvailableMarks };
 
@@ -22,6 +22,8 @@ export { totalAvailableMarks };
 export interface QuizInput {
   readonly unitId: string;
   readonly title: string;
+  /** Section this quiz is published for (null/omitted = legacy subject-wide quiz). */
+  readonly sectionId?: string | null;
   readonly timeLimitMinutes?: number;
   readonly shareToken: string;
   /** ISO timestamp the quiz becomes available (null = immediately). */
@@ -44,6 +46,49 @@ export interface AttemptSummary {
   readonly score: number;
 }
 
+export type QuizStatus = 'scheduled' | 'active' | 'closed';
+
+export interface SavedQuizSummary {
+  readonly id: string;
+  readonly title: string;
+  readonly unitId: string;
+  readonly sectionId: string | null;
+  readonly unitName: string;
+  readonly timeLimitMinutes: number;
+  readonly shareToken: string;
+  readonly activeFrom: string | null;
+  readonly activeUntil: string | null;
+  readonly questionCount: number;
+  readonly responseCount: number;
+  readonly totalMarks: number;
+  readonly averageScore: number | null;
+  readonly status: QuizStatus;
+}
+
+export interface QuizResultSection {
+  readonly id: string;
+  readonly name: string;
+  readonly batch: string | null;
+  readonly semester: string | null;
+  readonly department: string | null;
+}
+
+export interface QuizResultRow {
+  readonly studentId: string;
+  readonly studentName: string;
+  readonly enrollmentNumber: string | null;
+  readonly section: QuizResultSection | null;
+  readonly score: number;
+  readonly totalMarks: number;
+  readonly submittedAt: string;
+}
+
+export interface QuizRosterOption {
+  readonly enrollmentNumber: string;
+  readonly name: string;
+  readonly section: QuizResultSection | null;
+}
+
 /** Supabase-backed quiz operations. */
 export interface QuizAccessRepository {
   /** Create a quiz and return its id (Requirements 8.1, 8.2, 8.3). */
@@ -52,10 +97,24 @@ export interface QuizAccessRepository {
   addQuestion(quizId: string, question: QuestionInput): Promise<string>;
   /** Resolve student quiz access server-side (Requirements 2.5, 8.5, 8.6). */
   resolveAccess(quizId: string, providedEnrollment: string | null): Promise<QuizAccess>;
+  /** List safe roster choices for the quiz's assigned section(s). */
+  listRosterOptions(quizId: string): Promise<QuizRosterOption[]>;
   /** Submit and server-grade an attempt (Requirements 8.4, 8.8, 8.10, 8.11). */
   submitAttempt(quizId: string, answers: Record<string, number>): Promise<SubmitAttemptOutcome>;
+  /** List saved quizzes owned by the current teacher. */
+  listQuizzes(): Promise<SavedQuizSummary[]>;
+  /** List student submissions for one quiz without exposing answer keys. */
+  listQuizResults(quizId: string): Promise<QuizResultRow[]>;
   /** List the attempts for a quiz with their scores (Requirement 8.12). */
   listAttempts(quizId: string): Promise<AttemptSummary[]>;
+  /** Delete a teacher-owned quiz. Child questions/attempts cascade in the DB. */
+  deleteQuiz(quizId: string): Promise<void>;
+  /**
+   * Remove one student's attempt on one owned quiz so they can re-attempt it.
+   * Subject-scoped by nature (the quiz belongs to a subject's unit); does not
+   * touch the student's attempts in other quizzes/subjects.
+   */
+  resetAttempt(quizId: string, studentId: string): Promise<void>;
 }
 
 interface InsertedId {
@@ -67,6 +126,172 @@ interface QuizAttemptRow {
   readonly score: number | null;
 }
 
+interface SyllabusUnitJoinRow {
+  readonly id: string;
+  readonly name: string;
+  readonly unit_no: number | null;
+}
+
+interface QuizQuestionCountRow {
+  readonly id?: string;
+  readonly marks: number | string | null;
+}
+
+interface QuizAttemptCountRow {
+  readonly id?: string;
+  readonly score: number | string | null;
+}
+
+interface SavedQuizRow {
+  readonly id: string;
+  readonly title: string;
+  readonly unit_id: string;
+  readonly section_id: string | null;
+  readonly time_limit_minutes: number | null;
+  readonly share_token: string;
+  readonly active_from: string | null;
+  readonly active_until: string | null;
+  readonly created_at: string | null;
+  readonly syllabus_units: SyllabusUnitJoinRow | SyllabusUnitJoinRow[] | null;
+  readonly questions: QuizQuestionCountRow[] | null;
+  readonly quiz_attempts: QuizAttemptCountRow[] | null;
+}
+
+interface ResultQuestionRow {
+  readonly marks: number | string | null;
+}
+
+interface StudentSectionRow {
+  readonly id: string;
+  readonly name: string;
+  readonly batch: string | null;
+  readonly semester: string | null;
+  readonly department: string | null;
+}
+
+interface ResultStudentRow {
+  readonly id: string;
+  readonly name: string | null;
+  readonly enrollment_number: string | null;
+  readonly sections: StudentSectionRow | StudentSectionRow[] | null;
+}
+
+interface QuizResultAttemptRow {
+  readonly student_id: string;
+  readonly score: number | string | null;
+  readonly submitted_at: string | null;
+  readonly students: ResultStudentRow | ResultStudentRow[] | null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+export function deriveQuizStatus(
+  activeFrom: string | null,
+  activeUntil: string | null,
+  now: Date = new Date(),
+): QuizStatus {
+  const current = now.getTime();
+  const startsAt = timestampOrNull(activeFrom);
+  const endsAt = timestampOrNull(activeUntil);
+
+  if (startsAt !== null && current < startsAt) {
+    return 'scheduled';
+  }
+  if (endsAt !== null && current > endsAt) {
+    return 'closed';
+  }
+  return 'active';
+}
+
+function timestampOrNull(value: string | null): number | null {
+  if (value === null) {
+    return null;
+  }
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? null : time;
+}
+
+function numericValue(value: number | string | null | undefined): number {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function firstJoin<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+  return value ?? null;
+}
+
+function quizTotalMarks(questions: readonly ResultQuestionRow[]): number {
+  return questions.reduce((sum, question) => sum + (numericValue(question.marks) || 1), 0);
+}
+
+function unitDisplayName(unit: SyllabusUnitJoinRow | null, fallback: string): string {
+  if (!unit) {
+    return fallback;
+  }
+  const name = unit.name.trim();
+  if (name.length === 0) {
+    return fallback;
+  }
+  return unit.unit_no !== null ? `Unit ${unit.unit_no}: ${name}` : name;
+}
+
+function toSavedQuiz(row: SavedQuizRow): SavedQuizSummary {
+  const questions = row.questions ?? [];
+  const attempts = row.quiz_attempts ?? [];
+  const totalScore = attempts.reduce((sum, attempt) => sum + numericValue(attempt.score), 0);
+  const responseCount = attempts.length;
+  return {
+    id: row.id,
+    title: row.title,
+    unitId: row.unit_id,
+    sectionId: row.section_id,
+    unitName: unitDisplayName(firstJoin(row.syllabus_units), row.title),
+    timeLimitMinutes: row.time_limit_minutes ?? 15,
+    shareToken: row.share_token,
+    activeFrom: row.active_from,
+    activeUntil: row.active_until,
+    questionCount: questions.length,
+    responseCount,
+    totalMarks: quizTotalMarks(questions),
+    averageScore: responseCount > 0 ? totalScore / responseCount : null,
+    status: deriveQuizStatus(row.active_from, row.active_until),
+  };
+}
+
+function toRosterOption(value: unknown): QuizRosterOption | null {
+  const record = asRecord(value);
+  const enrollmentNumber = stringOrNull(record?.enrollmentNumber);
+  if (enrollmentNumber === null) {
+    return null;
+  }
+  const sectionId = stringOrNull(record?.sectionId);
+  return {
+    enrollmentNumber,
+    name: stringOrNull(record?.name) ?? enrollmentNumber,
+    section: sectionId
+      ? {
+          id: sectionId,
+          name: stringOrNull(record?.sectionName) ?? sectionId,
+          batch: stringOrNull(record?.batch),
+          semester: stringOrNull(record?.semester),
+          department: stringOrNull(record?.department),
+        }
+      : null,
+  };
+}
+
 /** Create a {@link QuizAccessRepository} bound to the given Supabase client. */
 export function createQuizAccess(
   client: SupabaseClient = defaultClient,
@@ -76,6 +301,7 @@ export function createQuizAccess(
       const row = {
         unit_id: input.unitId,
         title: input.title,
+        ...(input.sectionId !== undefined ? { section_id: input.sectionId } : {}),
         ...(input.timeLimitMinutes !== undefined
           ? { time_limit_minutes: input.timeLimitMinutes }
           : {}),
@@ -116,6 +342,17 @@ export function createQuizAccess(
       return parseQuizAccess(payload);
     },
 
+    async listRosterOptions(quizId: string): Promise<QuizRosterOption[]> {
+      const payload = unwrap(
+        await client.rpc('list_quiz_roster_options', {
+          p_quiz_id: quizId,
+        }),
+      );
+      return (Array.isArray(payload) ? payload : [])
+        .map(toRosterOption)
+        .filter((option): option is QuizRosterOption => option !== null);
+    },
+
     async submitAttempt(
       quizId: string,
       answers: Record<string, number>,
@@ -129,6 +366,53 @@ export function createQuizAccess(
       return parseSubmitOutcome(payload);
     },
 
+    async listQuizzes(): Promise<SavedQuizSummary[]> {
+      const rows = unwrapList(
+        await client
+          .from('quizzes')
+          .select(
+            'id, title, unit_id, section_id, time_limit_minutes, share_token, active_from, active_until, created_at, syllabus_units(id, name, unit_no), questions(id, marks), quiz_attempts(id, score)',
+          )
+          .order('created_at', { ascending: false }),
+      ) as SavedQuizRow[];
+      return rows.map(toSavedQuiz);
+    },
+
+    async listQuizResults(quizId: string): Promise<QuizResultRow[]> {
+      const [questionRows, attemptRows] = await Promise.all([
+        unwrapList(
+          await client
+            .from('questions')
+            .select('marks')
+            .eq('quiz_id', quizId),
+        ) as ResultQuestionRow[],
+        unwrapList(
+          await client
+            .from('quiz_attempts')
+            .select(
+              'student_id, score, submitted_at, students(id, name, enrollment_number, sections(id, name, batch, semester, department))',
+            )
+            .eq('quiz_id', quizId)
+            .order('submitted_at', { ascending: false }),
+        ) as QuizResultAttemptRow[],
+      ]);
+
+      const totalMarks = quizTotalMarks(questionRows);
+      return attemptRows.map((row) => {
+        const student = firstJoin(row.students);
+        const section = firstJoin(student?.sections);
+        return {
+          studentId: row.student_id,
+          studentName: student?.name?.trim() || row.student_id,
+          enrollmentNumber: student?.enrollment_number ?? null,
+          section,
+          score: numericValue(row.score),
+          totalMarks,
+          submittedAt: row.submitted_at ?? '',
+        };
+      });
+    },
+
     async listAttempts(quizId: string): Promise<AttemptSummary[]> {
       const rows = unwrapList(
         await client
@@ -137,6 +421,19 @@ export function createQuizAccess(
           .eq('quiz_id', quizId),
       ) as QuizAttemptRow[];
       return rows.map((row) => ({ studentId: row.student_id, score: row.score ?? 0 }));
+    },
+
+    async deleteQuiz(quizId: string): Promise<void> {
+      expectOk(await client.from('quizzes').delete().eq('id', quizId));
+    },
+
+    async resetAttempt(quizId: string, studentId: string): Promise<void> {
+      unwrap(
+        await client.rpc('reset_quiz_attempt', {
+          p_quiz_id: quizId,
+          p_student_id: studentId,
+        }),
+      );
     },
   };
 }

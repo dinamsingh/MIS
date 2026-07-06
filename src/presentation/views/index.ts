@@ -11,6 +11,7 @@ export {
   default as StudentQuizAccessView,
   type StudentQuizAccessViewProps,
   type ResolveQuizAccess,
+  type LoadQuizRosterOptions,
 } from './StudentQuizAccessView';
 export {
   default as TimetableView,
@@ -36,7 +37,6 @@ export {
 export {
   default as QuizCreationView,
   type QuizCreationViewProps,
-  type QuizCreationRepository,
   type QuizUnitOption,
   DEFAULT_TIME_LIMIT_MINUTES,
   DEFAULT_QUESTION_MARKS,
