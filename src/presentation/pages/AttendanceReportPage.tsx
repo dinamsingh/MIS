@@ -93,7 +93,7 @@ function exportCsv(rows: readonly ReportRow[], filename: string): void {
       row.notApplicable,
       row.counted,
       row.percent === null ? '' : row.percent.toFixed(2),
-    ].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')),
+    ].map((value) => `"${String(value).split('"').join('""')}"`).join(',')),
   ].join('\n');
 
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });

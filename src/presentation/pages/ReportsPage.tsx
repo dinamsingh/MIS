@@ -501,7 +501,7 @@ export default function ReportsPage() {
 
     const csvContent = [
       headers.join(','),
-      ...rows.map(r => r.map(val => `"${val.replaceAll('"', '""')}"`).join(','))
+      ...rows.map(r => r.map(val => `"${val.split('"').join('""')}"`).join(','))
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });

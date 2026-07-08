@@ -64,9 +64,9 @@ interface AssignmentShareRow {
   readonly assignment_date: string | null;
   readonly submission_date: string | null;
   readonly created_at: string;
-  readonly syllabus_subjects?: { readonly code: string | null; readonly name: string } | null;
-  readonly syllabus_units?: { readonly unit_no: number | null; readonly name: string } | null;
-  readonly sections?: { readonly name: string } | null;
+  readonly syllabus_subjects?: { readonly code: string | null; readonly name: string } | ReadonlyArray<{ readonly code: string | null; readonly name: string }> | null;
+  readonly syllabus_units?: { readonly unit_no: number | null; readonly name: string } | ReadonlyArray<{ readonly unit_no: number | null; readonly name: string }> | null;
+  readonly sections?: { readonly name: string } | ReadonlyArray<{ readonly name: string }> | null;
 }
 
 function fileSizeLabel(sizeBytes: number): string {
@@ -100,11 +100,15 @@ function saveShareHistory(records: ShareRecord[]) {
 }
 
 function shareRecordFromRow(row: AssignmentShareRow): ShareRecord {
-  const subjectName = row.syllabus_subjects
-    ? [row.syllabus_subjects.code, row.syllabus_subjects.name].filter(Boolean).join(' - ')
+  const sub = Array.isArray(row.syllabus_subjects) ? row.syllabus_subjects[0] : row.syllabus_subjects;
+  const uni = Array.isArray(row.syllabus_units) ? row.syllabus_units[0] : row.syllabus_units;
+  const sec = Array.isArray(row.sections) ? row.sections[0] : row.sections;
+
+  const subjectName = sub
+    ? [sub.code, sub.name].filter(Boolean).join(' - ')
     : 'Subject';
-  const unitName = row.syllabus_units
-    ? `Unit ${row.syllabus_units.unit_no ?? ''}: ${row.syllabus_units.name}`.replace('Unit :', 'Unit').trim()
+  const unitName = uni
+    ? `Unit ${uni.unit_no ?? ''}: ${uni.name}`.replace('Unit :', 'Unit').trim()
     : 'Unit';
   return {
     id: row.id,
@@ -121,7 +125,7 @@ function shareRecordFromRow(row: AssignmentShareRow): ShareRecord {
     subjectName,
     unitId: row.unit_id,
     unitName,
-    sectionName: row.sections?.name ?? '',
+    sectionName: sec?.name ?? '',
     createdAt: row.created_at,
   };
 }

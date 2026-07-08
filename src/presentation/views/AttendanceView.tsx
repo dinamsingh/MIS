@@ -276,9 +276,6 @@ function shiftMonth(iso: string, offset: number): string {
   return toIsoDate(new Date(dateValue.getFullYear(), dateValue.getMonth() + offset, 1));
 }
 
-function formatMonthLabel(iso: string): string {
-  return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(parseLocalDate(iso));
-}
 
 function formatWeekdayShort(iso: string): string {
   return new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(parseLocalDate(iso));
