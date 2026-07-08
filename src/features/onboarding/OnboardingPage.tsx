@@ -11,7 +11,7 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import PageLoader from '@presentation/components/PageLoader';
+import { ProgressIndicator } from '@presentation/components/ui';
 import { useOnboardingData } from './hooks/useOnboardingData';
 import { buildAssignments, fetchTeacherProfile, saveOnboarding } from './api/onboarding';
 import ProfileStep from './steps/ProfileStep';
@@ -127,15 +127,24 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#f4f5f9] font-[Inter,system-ui,sans-serif]">
+    <div className="min-h-screen w-full bg-secondary font-sans text-text">
       <div className="mx-auto flex min-h-screen max-w-3xl items-center justify-center px-4 py-10">
-        <div className="w-full max-w-[720px] rounded-2xl border border-[#ecedf4] bg-[#fff] p-6 shadow-[0_10px_40px_-12px_rgba(29,32,48,0.18)] sm:p-8">
+        <div className="motion-border w-full max-w-[720px] rounded-dialog border border-border bg-surface p-6 shadow-elevated sm:p-8">
           {profileLoading || loading ? (
-            <PageLoader />
+            <div className="flex min-h-[18rem] flex-col items-center justify-center gap-4 text-center">
+              <div className="flex h-11 w-11 items-center justify-center rounded-button bg-accent text-sm font-semibold text-surface shadow-soft">
+                MIS
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-text">Preparing onboarding</p>
+                <p className="mt-1 text-xs text-muted">Loading your teacher profile and session data.</p>
+              </div>
+              <ProgressIndicator className="w-full max-w-sm" />
+            </div>
           ) : profileError || error ? (
             <div className="flex flex-col gap-2 text-center">
-              <p className="text-sm font-semibold text-[#f0506e]">Data load nahi ho paaya.</p>
-              <p className="text-xs text-[#969cad]">{profileError ?? error}</p>
+              <p className="text-sm font-semibold text-status-red">Data load nahi ho paaya.</p>
+              <p className="text-xs text-muted">{profileError ?? error}</p>
             </div>
           ) : (
             <>
@@ -174,7 +183,7 @@ export default function OnboardingPage() {
               )}
 
               {saveError && (
-                <p className="mt-4 rounded-xl bg-[#f0506e]/10 px-4 py-2 text-center text-sm font-medium text-[#f0506e]">
+                <p className="mt-4 rounded-control bg-status-red/10 px-4 py-2 text-center text-sm font-medium text-status-red">
                   {saveError}
                 </p>
               )}
@@ -186,7 +195,7 @@ export default function OnboardingPage() {
       {done && (
         <div
           role="status"
-          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-[#12b886] px-5 py-3 text-sm font-semibold text-white shadow-lg"
+          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-control bg-status-green px-5 py-3 text-sm font-semibold text-surface shadow-elevated"
         >
           Setup complete ✓ Dashboard khul raha hai…
         </div>

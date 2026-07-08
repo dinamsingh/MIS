@@ -15,13 +15,13 @@ interface SubjectRowProps {
   readonly onChangeLab: (section: Section, includeLab: boolean) => void;
 }
 
-/** Exact token styles for the kind tag, per the design spec. */
-const KIND_TAG: Record<SubjectKind, { bg: string; text: string; label: string }> = {
-  theory: { bg: '#eaf1ff', text: '#2f6bd6', label: 'Theory' },
-  lab: { bg: '#e7f8f1', text: '#0e9d6e', label: 'Lab' },
-  project: { bg: '#fff3e0', text: '#c77700', label: 'Project' },
-  elective: { bg: '#eef0fe', text: '#4a42d4', label: 'Elective' },
-  special: { bg: '#f0f1f5', text: '#6b7280', label: 'Special' },
+/** Theme-aware token styles for subject kind tags. */
+const KIND_TAG: Record<SubjectKind, { className: string; label: string }> = {
+  theory: { className: 'bg-status-blue/10 text-status-blue', label: 'Theory' },
+  lab: { className: 'bg-status-green/10 text-status-green', label: 'Lab' },
+  project: { className: 'bg-status-amber/10 text-status-amber', label: 'Project' },
+  elective: { className: 'bg-accent-tint text-accent', label: 'Elective' },
+  special: { className: 'bg-secondary text-soft', label: 'Special' },
 };
 
 export default function SubjectRow({ subject, selected, labSections, onChange, onChangeLab }: SubjectRowProps) {
@@ -29,21 +29,18 @@ export default function SubjectRow({ subject, selected, labSections, onChange, o
   const showLab = subject.kind === 'theory' && !!subject.labName && selected.length > 0;
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-[#ecedf4] bg-[#fff] p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 rounded-control border border-border bg-surface p-4 shadow-[0_1px_0_rgb(var(--color-border)/0.45)] sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <span
-            className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
-            style={{ backgroundColor: tag.bg, color: tag.text }}
-          >
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${tag.className}`}>
             {tag.label}
           </span>
-          <span className="text-xs font-medium text-[#969cad]">{subject.code}</span>
+          <span className="text-xs font-medium text-muted">{subject.code}</span>
         </div>
-        <p className="mt-1 truncate text-sm font-medium text-[#1d2030]">{subject.name}</p>
+        <p className="mt-1 truncate text-sm font-medium text-text">{subject.name}</p>
         {showLab && (
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
-            <span className="mr-1 font-medium text-[#5a6072]">{subject.labName}</span>
+            <span className="mr-1 font-medium text-soft">{subject.labName}</span>
             {selected.map((section) => {
               const checked = labSections.includes(section);
               const inputId = `lab-${subject.id}-${section}`;
@@ -51,18 +48,17 @@ export default function SubjectRow({ subject, selected, labSections, onChange, o
                 <label
                   key={section}
                   htmlFor={inputId}
-                  className="inline-flex items-center gap-1 rounded-full px-2 py-1 font-medium"
-                  style={{
-                    backgroundColor: checked ? '#e7f8f1' : '#f0f1f5',
-                    color: checked ? '#0e9d6e' : '#6b7280',
-                  }}
+                  className={[
+                    'inline-flex items-center gap-1 rounded-full px-2 py-1 font-medium',
+                    checked ? 'bg-status-green/10 text-status-green' : 'bg-secondary text-muted',
+                  ].join(' ')}
                 >
                   <input
                     id={inputId}
                     type="checkbox"
                     checked={checked}
                     onChange={(event) => onChangeLab(section, event.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-[#cfd3df] accent-[#12b886]"
+                    className="h-3.5 w-3.5 rounded border-input accent-status-green"
                   />
                   Lab {section}
                 </label>

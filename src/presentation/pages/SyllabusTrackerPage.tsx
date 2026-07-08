@@ -19,8 +19,10 @@ const demoTrackerAccess: SyllabusTrackerAccess = {
 };
 
 export default function SyllabusTrackerPage() {
-  // Subject comes from the global top-bar selector (a syllabus_subjects id).
-  const { subjects, selectedSubjectId } = useSelectedSection();
+  // Subject + section both come from the global top-bar selectors. Progress is
+  // tracked per (teacher, section, topic) — see migration 0026 — so the tracker
+  // must know which section is active, not just which subject.
+  const { subjects, selectedSubjectId, selectedSectionId } = useSelectedSection();
 
   const access = useMemo<SyllabusTrackerAccess>(
     () => (isLocalDemoMode() ? demoTrackerAccess : createSyllabusTrackerAccess(supabase)),
@@ -32,5 +34,5 @@ export default function SyllabusTrackerPage() {
     [subjects, selectedSubjectId],
   );
 
-  return <SyllabusTrackerView subjects={scopedSubjects} access={access} />;
+  return <SyllabusTrackerView subjects={scopedSubjects} sectionId={selectedSectionId} access={access} />;
 }

@@ -10,7 +10,12 @@
  */
 
 import type { RosterEntry } from '../../domain/services/rosterService';
-import type { AttendanceMark, PeriodKey } from '../../domain/services/attendanceService';
+import type {
+  AttendanceMark,
+  AttendanceStatus,
+  AttendanceStatusMark,
+  PeriodKey,
+} from '../../domain/services/attendanceService';
 import type { Topic, Unit } from '../../domain/services/syllabusService';
 import type { MarkComponent, MarkValue } from '../../domain/services/marksService';
 import type { TimetableEntry, DayOfWeek } from '../../domain/services/timetableService';
@@ -98,15 +103,17 @@ export interface AttendanceRow {
   readonly date: string;
   readonly time_slot: string;
   readonly present: boolean;
+  readonly status: AttendanceStatus;
 }
 
 /** Project an attendance row down to the domain {@link AttendanceMark}. */
 export function toAttendanceMark(row: AttendanceRow): AttendanceMark {
-  return { studentId: row.student_id, present: row.present };
+  return { studentId: row.student_id, present: row.status === 'present' };
 }
 
 /** Build the full attendance row for upsert from a period key and a single mark. */
 export function fromAttendanceMark(key: PeriodKey, mark: AttendanceMark): AttendanceRow {
+  const status: AttendanceStatus = mark.present ? 'present' : 'absent';
   return {
     student_id: mark.studentId,
     section_id: key.sectionId,
@@ -114,6 +121,25 @@ export function fromAttendanceMark(key: PeriodKey, mark: AttendanceMark): Attend
     date: key.date,
     time_slot: key.timeSlot,
     present: mark.present,
+    status,
+  };
+}
+
+/** Project an attendance row to the full teacher-facing status mark. */
+export function toAttendanceStatusMark(row: AttendanceRow): AttendanceStatusMark {
+  return { studentId: row.student_id, status: row.status };
+}
+
+/** Build an attendance row with `present` kept in sync from authoritative `status`. */
+export function fromAttendanceStatusMark(key: PeriodKey, mark: AttendanceStatusMark): AttendanceRow {
+  return {
+    student_id: mark.studentId,
+    section_id: key.sectionId,
+    subject_id: key.subjectId,
+    date: key.date,
+    time_slot: key.timeSlot,
+    present: mark.status === 'present',
+    status: mark.status,
   };
 }
 

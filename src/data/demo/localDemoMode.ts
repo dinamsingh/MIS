@@ -1,4 +1,14 @@
-import type { AttendanceAccess, AttendanceOverallMark, AttendanceOverallScope } from '@data/access/attendanceAccess';
+import type {
+  AttendanceAccess,
+  AttendanceMarkedDatesScope,
+  AttendanceMarkedSlotsScope,
+  AttendanceOverallMark,
+  AttendanceOverallScope,
+  AttendancePeriodMeta,
+  AttendanceRangeReport,
+  AttendanceRangeScope,
+  AttendanceStatusRangeReport,
+} from '@data/access/attendanceAccess';
 import type { MarksAccess, MarkComponentInput, SaveMarkValuesResult } from '@data/access/marksAccess';
 import {
   deriveQuizStatus,
@@ -15,9 +25,12 @@ import type { SyllabusAccess, UnitInput, TopicInput } from '@data/access/syllabu
 import type { TimetableAccess, TimetableEntryInput } from '@data/access/timetableAccess';
 import type { ParsedRosterRow } from '@domain/services/rosterImportService';
 import {
+  aggregateRangeTallies,
   type AttendanceMark,
+  type AttendanceStatus,
   type AttendanceStatusMark,
   type PeriodKey,
+  type RangeAttendanceRow,
   statusFromAttendanceMark,
   statusToAttendanceMark,
 } from '@domain/services/attendanceService';
@@ -178,13 +191,10 @@ function periodStorageKey(key: PeriodKey): string {
   return JSON.stringify([key.sectionId, key.subjectId, key.date, key.timeSlot]);
 }
 
-function defaultAttendanceMark(key: PeriodKey, studentId: string): boolean {
-  return demoNumber(`${key.sectionId}:${key.subjectId}:${key.date}:${key.timeSlot}:${studentId}`, 0, 1) > 0.14;
-}
-
 interface DemoAttendanceStore {
-  readonly periods: Record<string, AttendanceMark[]>;
-  readonly statusPeriods?: Record<string, AttendanceStatusMark[]>;
+  readonly periods?: Record<string, AttendanceMark[]>;
+  readonly statusPeriods: Record<string, AttendanceStatusMark[]>;
+  readonly updatedAtByPeriod?: Record<string, string>;
 }
 
 function parseDemoPeriodKey(storageKey: string): PeriodKey | null {
@@ -202,16 +212,19 @@ function parseDemoPeriodKey(storageKey: string): PeriodKey | null {
 
 function aggregateDemoOverall(store: DemoAttendanceStore, scope: AttendanceOverallScope): AttendanceOverallMark[] {
   const tallies = new Map<string, { present: number; total: number }>();
-  for (const [storageKey, marks] of Object.entries(store.periods)) {
+  for (const [storageKey, marks] of iterateDemoStatusPeriods(store)) {
     const key = parseDemoPeriodKey(storageKey);
     if (!key || key.sectionId !== scope.sectionId || (scope.subjectId && key.subjectId !== scope.subjectId)) {
       continue;
     }
 
     for (const mark of marks) {
+      if (!isCountedDemoStatus(mark.status)) {
+        continue;
+      }
       const tally = tallies.get(mark.studentId) ?? { present: 0, total: 0 };
       tally.total += 1;
-      if (mark.present) {
+      if (mark.status === 'present') {
         tally.present += 1;
       }
       tallies.set(mark.studentId, tally);
@@ -225,46 +238,214 @@ function aggregateDemoOverall(store: DemoAttendanceStore, scope: AttendanceOvera
   }));
 }
 
+function emptyDemoAttendanceStore(): DemoAttendanceStore {
+  return { periods: {}, statusPeriods: {} };
+}
+
+function readDemoAttendanceStore(): DemoAttendanceStore {
+  const store = readDemoValue<DemoAttendanceStore>(STORAGE.attendance, emptyDemoAttendanceStore());
+  return {
+    periods: store.periods ?? {},
+    statusPeriods: store.statusPeriods ?? {},
+    updatedAtByPeriod: store.updatedAtByPeriod ?? {},
+  };
+}
+
+function isCountedDemoStatus(status: AttendanceStatus): status is 'present' | 'absent' {
+  return status === 'present' || status === 'absent';
+}
+
+function iterateDemoStatusPeriods(store: DemoAttendanceStore): Array<[string, AttendanceStatusMark[]]> {
+  const entries = new Map<string, AttendanceStatusMark[]>();
+  for (const [storageKey, marks] of Object.entries(store.periods ?? {})) {
+    entries.set(storageKey, marks.map(statusFromAttendanceMark));
+  }
+  for (const [storageKey, marks] of Object.entries(store.statusPeriods)) {
+    entries.set(storageKey, marks);
+  }
+  return Array.from(entries.entries());
+}
+
 export function createLocalDemoAttendanceAccess(
   loadRoster: (sectionId: string) => Promise<readonly DemoStudent[]>,
 ): AttendanceAccess {
   async function loadPeriod(key: PeriodKey): Promise<AttendanceMark[]> {
-    const store = readDemoValue<DemoAttendanceStore>(STORAGE.attendance, { periods: {} });
+    const store = readDemoAttendanceStore();
     const storageKey = periodStorageKey(key);
-    const saved = store.periods[storageKey];
+    const savedStatuses = store.statusPeriods[storageKey];
+    if (savedStatuses) {
+      return savedStatuses
+        .map(statusToAttendanceMark)
+        .filter((mark): mark is AttendanceMark => mark !== null);
+    }
+    const saved = store.periods?.[storageKey];
     if (saved) {
       return saved;
     }
 
-    const roster = await loadRoster(key.sectionId);
-    return roster.map((student) => ({
-      studentId: student.id,
-      present: defaultAttendanceMark(key, student.id),
-    }));
+    await loadRoster(key.sectionId);
+    return [];
   }
 
   return {
     loadPeriod,
 
     async savePeriod(key, marks) {
-      const store = readDemoValue<DemoAttendanceStore>(STORAGE.attendance, { periods: {} });
+      const store = readDemoAttendanceStore();
+      const storageKey = periodStorageKey(key);
       writeDemoValue<DemoAttendanceStore>(STORAGE.attendance, {
         ...store,
         periods: {
-          ...store.periods,
-          [periodStorageKey(key)]: marks.map((mark) => ({ ...mark })),
+          ...(store.periods ?? {}),
+          [storageKey]: marks.map((mark) => ({ ...mark })),
+        },
+        statusPeriods: {
+          ...store.statusPeriods,
+          [storageKey]: marks.map(statusFromAttendanceMark),
+        },
+        updatedAtByPeriod: {
+          ...(store.updatedAtByPeriod ?? {}),
+          [storageKey]: new Date().toISOString(),
         },
       });
     },
 
     async loadStudentOverall(scope) {
-      const store = readDemoValue<DemoAttendanceStore>(STORAGE.attendance, { periods: {} });
+      const store = readDemoAttendanceStore();
       return aggregateDemoOverall(store, scope);
     },
 
+    async loadRangeReport(scope: AttendanceRangeScope): Promise<AttendanceRangeReport> {
+      const store = readDemoAttendanceStore();
+      const rows: RangeAttendanceRow[] = [];
+      for (const [storageKey, marks] of iterateDemoStatusPeriods(store)) {
+        const key = parseDemoPeriodKey(storageKey);
+        if (
+          !key ||
+          key.sectionId !== scope.sectionId ||
+          (scope.subjectId && key.subjectId !== scope.subjectId) ||
+          key.date < scope.fromDate ||
+          key.date > scope.toDate
+        ) {
+          continue;
+        }
+        for (const mark of marks) {
+          rows.push({ studentId: mark.studentId, date: key.date, status: mark.status });
+        }
+      }
+      return aggregateRangeTallies(rows);
+    },
+
+    async loadStatusRangeReport(scope: AttendanceRangeScope): Promise<AttendanceStatusRangeReport> {
+      const store = readDemoAttendanceStore();
+      const tallies = new Map<string, {
+        studentId: string;
+        present: number;
+        absent: number;
+        leave: number;
+        notApplicable: number;
+      }>();
+      const heldDates = new Set<string>();
+
+      for (const [storageKey, marks] of iterateDemoStatusPeriods(store)) {
+        const key = parseDemoPeriodKey(storageKey);
+        if (
+          !key ||
+          key.sectionId !== scope.sectionId ||
+          (scope.subjectId && key.subjectId !== scope.subjectId) ||
+          key.date < scope.fromDate ||
+          key.date > scope.toDate
+        ) {
+          continue;
+        }
+
+        for (const mark of marks) {
+          const current = tallies.get(mark.studentId) ?? {
+            studentId: mark.studentId,
+            present: 0,
+            absent: 0,
+            leave: 0,
+            notApplicable: 0,
+          };
+          if (mark.status === 'present') {
+            current.present += 1;
+            heldDates.add(key.date);
+          } else if (mark.status === 'absent') {
+            current.absent += 1;
+            heldDates.add(key.date);
+          } else if (mark.status === 'leave') {
+            current.leave += 1;
+          } else {
+            current.notApplicable += 1;
+          }
+          tallies.set(mark.studentId, current);
+        }
+      }
+
+      return {
+        tallies: Array.from(tallies.values()),
+        records: Array.from(iterateDemoStatusPeriods(store)).flatMap(([storageKey, marks]) => {
+          const key = parseDemoPeriodKey(storageKey);
+          if (
+            !key ||
+            key.sectionId !== scope.sectionId ||
+            (scope.subjectId && key.subjectId !== scope.subjectId) ||
+            key.date < scope.fromDate ||
+            key.date > scope.toDate
+          ) {
+            return [];
+          }
+          return marks.map((mark) => ({ studentId: mark.studentId, date: key.date, status: mark.status }));
+        }),
+        heldDates: Array.from(heldDates).sort(),
+      };
+    },
+
+    async loadMarkedSlots(scope: AttendanceMarkedSlotsScope): Promise<string[]> {
+      const store = readDemoAttendanceStore();
+      const slots = new Set<string>();
+      for (const [storageKey, marks] of iterateDemoStatusPeriods(store)) {
+        const key = parseDemoPeriodKey(storageKey);
+        if (
+          key &&
+          marks.length > 0 &&
+          key.sectionId === scope.sectionId &&
+          key.date === scope.date &&
+          (!scope.subjectId || key.subjectId === scope.subjectId)
+        ) {
+          slots.add(key.timeSlot);
+        }
+      }
+      return Array.from(slots).sort();
+    },
+
+    async loadMarkedDates(scope: AttendanceMarkedDatesScope): Promise<string[]> {
+      const store = readDemoAttendanceStore();
+      const dates = new Set<string>();
+      for (const [storageKey, marks] of iterateDemoStatusPeriods(store)) {
+        const key = parseDemoPeriodKey(storageKey);
+        if (
+          key &&
+          marks.length > 0 &&
+          key.sectionId === scope.sectionId &&
+          key.date >= scope.fromDate &&
+          key.date <= scope.toDate &&
+          (!scope.subjectId || key.subjectId === scope.subjectId)
+        ) {
+          dates.add(key.date);
+        }
+      }
+      return Array.from(dates).sort();
+    },
+
+    async loadPeriodMeta(key): Promise<AttendancePeriodMeta> {
+      const store = readDemoAttendanceStore();
+      return { lastSavedAt: store.updatedAtByPeriod?.[periodStorageKey(key)] ?? null };
+    },
+
     async loadStatusPeriod(key) {
-      const store = readDemoValue<DemoAttendanceStore>(STORAGE.attendance, { periods: {} });
-      const savedStatuses = store.statusPeriods?.[periodStorageKey(key)];
+      const store = readDemoAttendanceStore();
+      const savedStatuses = store.statusPeriods[periodStorageKey(key)];
       if (savedStatuses) {
         return savedStatuses;
       }
@@ -273,17 +454,22 @@ export function createLocalDemoAttendanceAccess(
     },
 
     async saveStatusPeriod(key, marks) {
-      const store = readDemoValue<DemoAttendanceStore>(STORAGE.attendance, { periods: {} });
+      const store = readDemoAttendanceStore();
+      const storageKey = periodStorageKey(key);
       writeDemoValue<DemoAttendanceStore>(STORAGE.attendance, {
         periods: {
-          ...store.periods,
-          [periodStorageKey(key)]: marks
+          ...(store.periods ?? {}),
+          [storageKey]: marks
             .map(statusToAttendanceMark)
             .filter((mark): mark is AttendanceMark => mark !== null),
         },
         statusPeriods: {
-          ...(store.statusPeriods ?? {}),
-          [periodStorageKey(key)]: marks.map((mark) => ({ ...mark })),
+          ...store.statusPeriods,
+          [storageKey]: marks.map((mark) => ({ ...mark })),
+        },
+        updatedAtByPeriod: {
+          ...(store.updatedAtByPeriod ?? {}),
+          [storageKey]: new Date().toISOString(),
         },
       });
     },
@@ -566,28 +752,44 @@ export function createLocalDemoQuizAccess(
     },
 
     async resolveAccess(quizId: string, providedEnrollment: string | null): Promise<QuizAccess> {
-      const quiz = findQuiz(readQuizStore(), quizId);
+      const store = readQuizStore();
+      const quiz = findQuiz(store, quizId);
       if (!quiz) {
-        return { status: 'denied', reason: 'not-registered' };
+        return { status: 'denied', reason: 'quiz-not-found' };
       }
       if (providedEnrollment === null) {
         return { status: 'enrollment-required' };
       }
       if (!isValidEnrollmentNumber(providedEnrollment.trim().toUpperCase())) {
-        return { status: 'denied', reason: 'not-registered' };
+        return { status: 'denied', reason: 'enrollment-not-found' };
       }
       const students = getStudents();
+      const matchedStudent = students.find(
+        (student) => student.enrollmentNumber === providedEnrollment.trim().toUpperCase()
+      );
+      const studentId = matchedStudent ? matchedStudent.id : 'demo-student';
+
       if (
         quiz.sectionId &&
         students.length > 0 &&
-        !students.some(
-          (student) =>
-            student.sectionId === quiz.sectionId &&
-            student.enrollmentNumber === providedEnrollment.trim().toUpperCase(),
-        )
+        !matchedStudent
       ) {
-        return { status: 'denied', reason: 'not-registered' };
+        return { status: 'denied', reason: 'wrong-section' };
       }
+
+      // Check if attempt already exists in local demo storage
+      const attempts = store.attemptsByQuiz[quiz.id] ?? [];
+      const studentAttempt = attempts.find((a) => a.studentId === studentId);
+      if (studentAttempt) {
+        return {
+          status: 'already-attempted',
+          result: {
+            score: studentAttempt.score,
+            totalMarks: totalQuizMarks(quiz),
+          },
+        };
+      }
+
       if (deriveQuizStatus(quiz.activeFrom ?? null, quiz.activeUntil ?? null) !== 'active') {
         return { status: 'denied', reason: 'not-active' };
       }

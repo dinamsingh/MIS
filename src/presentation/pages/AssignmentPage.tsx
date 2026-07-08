@@ -1,222 +1,235 @@
-import { useEffect, useMemo, useState } from 'react';
-import AssignmentView, {
-  type AssignmentSubjectOption,
-  type AssignmentUnitOption,
-  type AssignmentStudent,
-  type AssignmentViewAccess,
-  type AssignmentListItem,
-  type UploadedAssignmentFile,
+/**
+ * Assignment page — wires the Excel-style AssignmentGridView to real data.
+ *
+ * Uses the simplified slot-based access model (migration 0030):
+ *   • No file upload, no share token, no creation form
+ *   • Subjects come from the teacher's timetable assignment
+ *   • Students come from all onboarded sections (shared-materials model)
+ *   • Lab file is tracked per student per subject (one DONE checkbox)
+ */
+
+import { useEffect, useState, useMemo } from 'react';
+import AssignmentGridView, {
+  type GridSubject,
+  type GridStudent,
+  type AssignmentGridAccess,
 } from '@presentation/views/AssignmentView';
 import { createAssignmentAccess } from '@data/access/assignmentAccess';
-import { createTimetableAccess } from '@data/access/timetableAccess';
-import { fileStorage } from '@data/storage';
-import {
-  createDemoAssignment,
-  createDemoMaterial,
-  getDemoAssignmentSubmission,
-  getDemoLabManualSubmission,
-  isLocalDemoMode,
-  listDemoAssignments,
-  setDemoAssignmentSubmission,
-  setDemoLabManualSubmission,
-} from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
-import { loadRosterStudentsForSections } from '@presentation/loaders/rosterStudents';
+import { loadRosterStudentsForSection } from '@presentation/loaders/rosterStudents';
 import { loadSubjectOptionsForSection } from '@presentation/loaders/subjectOptions';
-import { loadUnitsForSubjects } from '@presentation/loaders/unitOptions';
-import type { UploadPolicy } from '@domain/services/storageRouter';
+import {
+  isLocalDemoMode,
+  readDemoValue,
+  writeDemoValue,
+  createDemoId,
+  demoNumber,
+} from '@data/demo/localDemoMode';
+import type { SubmissionStatus } from '@domain/shared/types';
+
+// ---------------------------------------------------------------------------
+// Supabase-backed access adapter
+// ---------------------------------------------------------------------------
 
 const assignmentAccess = createAssignmentAccess(supabase);
-const timetableAccess = createTimetableAccess(supabase);
 
-const ASSIGNMENT_POLICY: UploadPolicy = {
-  allowedTypes: [
-    'application/pdf',
-    'image/png',
-    'image/jpeg',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  ],
-  maxSizeBytes: 25 * 1024 * 1024,
-};
-
-/**
- * Compose the AssignmentViewAccess from the assignment data access + file
- * storage. `listAssignments` is scoped to the active semester's subjects, so it
- * depends on the globally-selected section's semester.
- */
-function createAccess(
-  subjects: readonly AssignmentSubjectOption[],
-  students: readonly AssignmentStudent[],
-): AssignmentViewAccess {
-  if (isLocalDemoMode()) {
-    return {
-      createAssignment: (input) => Promise.resolve(createDemoAssignment(input)),
-
-      async uploadFile(file: File): Promise<UploadedAssignmentFile> {
-        const material = createDemoMaterial({
-          category: 'assignment',
-          fileName: file.name,
-          mimeType: file.type,
-          sizeBytes: file.size,
-        });
-        return { fileId: material.id, url: material.url };
-      },
-
-      async listAssignments(): Promise<AssignmentListItem[]> {
-        const subjectIds = subjects.map((subject) => subject.id);
-        return listDemoAssignments(subjectIds).map((item) => ({
-          id: item.id,
-          title: item.title,
-          subjectId: item.subjectId,
-          unitId: item.unitId,
-          dueDate: item.dueDate,
-          shareLink: `${window.location.origin}/assignment/${item.shareToken}`,
-        }));
-      },
-
-      getAssignmentSubmission: (assignmentId, studentId, unitId) =>
-        Promise.resolve(getDemoAssignmentSubmission(assignmentId, studentId, unitId)),
-      setAssignmentSubmission: (assignmentId, studentId, unitId, status) => {
-        setDemoAssignmentSubmission(assignmentId, studentId, unitId, status);
-        return Promise.resolve();
-      },
-      getLabManualSubmission: (studentId, unitId) =>
-        Promise.resolve(getDemoLabManualSubmission(studentId, unitId)),
-      setLabManualSubmission: (studentId, unitId, status) => {
-        setDemoLabManualSubmission(studentId, unitId, status);
-        return Promise.resolve();
-      },
-      listSectionIdsForSubject: () =>
-        Promise.resolve(
-          Array.from(new Set(students.map((student) => student.sectionId).filter(Boolean) as string[])),
-        ),
-    };
-  }
-
+function createSupabaseAccess(): AssignmentGridAccess {
   return {
-    createAssignment: (input) => assignmentAccess.createAssignment(input),
+    listSlotsForSubject: (subjectId) =>
+      assignmentAccess.listSlotsForSubject(subjectId),
 
-    async uploadFile(file: File): Promise<UploadedAssignmentFile> {
-      const result = await fileStorage.uploadFile({
-        category: 'assignment',
-        data: file,
-        fileName: file.name,
-        mimeType: file.type,
-        sizeBytes: file.size,
-        policy: ASSIGNMENT_POLICY,
-      });
-      if (!result.ok) {
-        throw new Error(result.error.message);
-      }
-      return { fileId: result.value.fileId, url: result.value.url };
-    },
+    getOrCreateSlot: (subjectId, slotNumber) =>
+      assignmentAccess.getOrCreateSlot(subjectId, slotNumber),
 
-    async listAssignments(): Promise<AssignmentListItem[]> {
-      // Scope to the current section's subjects (syllabus_subjects ids).
-      const subjectIds = subjects.map((s) => s.id);
-      if (subjectIds.length === 0) return [];
+    getSlotSubmissions: (assignmentId, studentIds) =>
+      assignmentAccess.getSlotSubmissions(assignmentId, studentIds),
 
-      const { data } = await supabase
-        .from('assignments')
-        .select('id, title, subject_id, unit_id, due_date, share_token')
-        .in('subject_id', subjectIds)
-        .order('created_at', { ascending: false });
+    setSlotSubmission: (assignmentId, studentId, status) =>
+      assignmentAccess.setSlotSubmission(assignmentId, studentId, status),
 
-      if (!data) return [];
-      return data.map((row: Record<string, unknown>) => ({
-        id: row.id as string,
-        title: row.title as string,
-        subjectId: row.subject_id as string,
-        unitId: row.unit_id as string,
-        dueDate: (row.due_date as string) ?? null,
-        shareLink: `${window.location.origin}/assignment/${row.share_token as string}`,
-      }));
-    },
+    getLabManualsBySubject: (studentIds, subjectId) =>
+      assignmentAccess.getLabManualsBySubject(studentIds, subjectId),
 
-    getAssignmentSubmission: (assignmentId, studentId, unitId) =>
-      assignmentAccess.getAssignmentSubmission(assignmentId, studentId, unitId),
-    setAssignmentSubmission: (assignmentId, studentId, unitId, status) =>
-      assignmentAccess.setAssignmentSubmission(assignmentId, studentId, unitId, status),
-    getLabManualSubmission: (studentId, unitId) =>
-      assignmentAccess.getLabManualSubmission(studentId, unitId),
-    setLabManualSubmission: (studentId, unitId, status) =>
-      assignmentAccess.setLabManualSubmission(studentId, unitId, status),
-
-    // Shared-materials model: an assignment is shared across every section that
-    // studies its subject, so the trackers list students from all those sections.
-    listSectionIdsForSubject: (subjectId) =>
-      timetableAccess.listSectionIdsForSubject(subjectId),
+    setLabManualBySubject: (studentId, subjectId, status) =>
+      assignmentAccess.setLabManualBySubject(studentId, subjectId, status),
   };
 }
 
+// ---------------------------------------------------------------------------
+// Demo-mode access adapter (localStorage-backed)
+// ---------------------------------------------------------------------------
+
+const DEMO_SLOT_STORE_KEY = 'mis_demo_assignment_slots_v2';
+const DEMO_SUB_STORE_KEY  = 'mis_demo_assignment_subs_v2';
+const DEMO_LAB_STORE_KEY  = 'mis_demo_lab_by_subject_v2';
+
+interface DemoSlotStore {
+  /** slotsBySubject[subjectId][slotNumber] = assignmentId */
+  readonly slotsBySubject: Record<string, Record<string, string>>;
+}
+
+interface DemoSubStore {
+  /** subs[assignmentId][studentId] = status */
+  readonly subs: Record<string, Record<string, SubmissionStatus>>;
+}
+
+interface DemoLabStore {
+  /** lab[subjectId][studentId] = status */
+  readonly lab: Record<string, Record<string, SubmissionStatus>>;
+}
+
+function readDemoSlots(): DemoSlotStore {
+  return readDemoValue<DemoSlotStore>(DEMO_SLOT_STORE_KEY, { slotsBySubject: {} });
+}
+function readDemoSubs(): DemoSubStore {
+  return readDemoValue<DemoSubStore>(DEMO_SUB_STORE_KEY, { subs: {} });
+}
+function readDemoLab(): DemoLabStore {
+  return readDemoValue<DemoLabStore>(DEMO_LAB_STORE_KEY, { lab: {} });
+}
+
+function createDemoAccess(students: readonly GridStudent[]): AssignmentGridAccess {
+  return {
+    async listSlotsForSubject(subjectId) {
+      const store = readDemoSlots();
+      const subjectSlots = store.slotsBySubject[subjectId] ?? {};
+      return Object.entries(subjectSlots).map(([n, id]) => ({
+        id,
+        slotNumber: Number(n),
+      })).sort((a, b) => a.slotNumber - b.slotNumber);
+    },
+
+    async getOrCreateSlot(subjectId, slotNumber) {
+      const store = readDemoSlots();
+      const existing = store.slotsBySubject[subjectId]?.[String(slotNumber)];
+      if (existing) return existing;
+      const id = createDemoId('slot');
+      writeDemoValue<DemoSlotStore>(DEMO_SLOT_STORE_KEY, {
+        slotsBySubject: {
+          ...store.slotsBySubject,
+          [subjectId]: {
+            ...(store.slotsBySubject[subjectId] ?? {}),
+            [String(slotNumber)]: id,
+          },
+        },
+      });
+      return id;
+    },
+
+    async getSlotSubmissions(assignmentId, studentIds) {
+      const store = readDemoSubs();
+      const saved = store.subs[assignmentId] ?? {};
+      const result: Record<string, SubmissionStatus> = {};
+      for (const sid of studentIds) {
+        result[sid] =
+          saved[sid] ??
+          (demoNumber(`${assignmentId}:${sid}:slot`, 0, 1) > 0.42
+            ? 'submitted'
+            : 'not-submitted');
+      }
+      return result;
+    },
+
+    async setSlotSubmission(assignmentId, studentId, status) {
+      const store = readDemoSubs();
+      writeDemoValue<DemoSubStore>(DEMO_SUB_STORE_KEY, {
+        subs: {
+          ...store.subs,
+          [assignmentId]: {
+            ...(store.subs[assignmentId] ?? {}),
+            [studentId]: status,
+          },
+        },
+      });
+    },
+
+    async getLabManualsBySubject(studentIds, subjectId) {
+      const store = readDemoLab();
+      const saved = store.lab[subjectId] ?? {};
+      const result: Record<string, SubmissionStatus> = {};
+      for (const sid of studentIds) {
+        result[sid] =
+          saved[sid] ??
+          (demoNumber(`${subjectId}:${sid}:lab`, 0, 1) > 0.5
+            ? 'submitted'
+            : 'not-submitted');
+      }
+      return result;
+    },
+
+    async setLabManualBySubject(studentId, subjectId, status) {
+      const store = readDemoLab();
+      writeDemoValue<DemoLabStore>(DEMO_LAB_STORE_KEY, {
+        lab: {
+          ...store.lab,
+          [subjectId]: {
+            ...(store.lab[subjectId] ?? {}),
+            [studentId]: status,
+          },
+        },
+      });
+    },
+  };
+
+  // suppress unused warning — students used only for demo seed
+  void students;
+}
+
+// ---------------------------------------------------------------------------
+// Page component
+// ---------------------------------------------------------------------------
+
 export default function AssignmentPage() {
-  const { selectedSection, sections } = useSelectedSection();
-  const [subjects, setSubjects] = useState<AssignmentSubjectOption[]>([]);
-  const [units, setUnits] = useState<AssignmentUnitOption[]>([]);
-  const [students, setStudents] = useState<AssignmentStudent[]>([]);
+  const { selectedSection } = useSelectedSection();
 
-  const semester = selectedSection?.semester ?? null;
-  const access = useMemo(
-    () => createAccess(subjects, students),
-    [subjects, students],
-  );
+  const [subjects, setSubjects] = useState<GridSubject[]>([]);
+  const [students, setStudents] = useState<GridStudent[]>([]);
 
+  // Load subjects + students when selected section changes
   useEffect(() => {
-    if (!semester) {
+    if (!selectedSection) {
       setSubjects([]);
-      setUnits([]);
+      setStudents([]);
       return;
     }
-    setSubjects([]);
-    setUnits([]);
+    let cancelled = false;
     void (async () => {
       try {
-        // Subjects are scoped to the selected semester; units follow those subjects.
-        const activeSubjects = await loadSubjectOptionsForSection(selectedSection);
-        setSubjects(activeSubjects);
-
-        const activeSubjectIds = activeSubjects.map((s) => s.id);
-        if (activeSubjectIds.length === 0) {
-          setUnits([]);
-          return;
+        const [opts, roster] = await Promise.all([
+          loadSubjectOptionsForSection(selectedSection),
+          loadRosterStudentsForSection(selectedSection),
+        ]);
+        if (!cancelled) {
+          setSubjects(opts);
+          setStudents(
+            roster.map((s) => ({
+              id: s.id,
+              name: s.name,
+              enrollmentNumber: s.enrollmentNumber,
+              sectionLabel: s.sectionLabel,
+            })),
+          );
         }
-        // Units come from the shared master syllabus for those subjects.
-        const activeUnits = await loadUnitsForSubjects(activeSubjectIds);
-        setUnits(activeUnits.map((u) => ({ id: u.id, name: u.name })));
       } catch {
-        // View handles empty arrays gracefully.
+        if (!cancelled) {
+          setSubjects([]);
+          setStudents([]);
+        }
       }
     })();
-  }, [semester, selectedSection]);
+    return () => { cancelled = true; };
+  }, [selectedSection]);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        // Assignments/quizzes/materials are shared across every section that
-        // studies a subject, so the tracker lists students from all onboarded
-        // sections, each labelled by its section.
-        const roster = await loadRosterStudentsForSections(sections);
-        setStudents(
-          roster.map((student) => ({
-            id: student.id,
-            name: student.name,
-            enrollmentNumber: student.enrollmentNumber,
-            sectionId: student.sectionId,
-            sectionLabel: student.sectionLabel,
-          })),
-        );
-      } catch {
-        // View handles empty arrays gracefully.
-      }
-    })();
-  }, [sections]);
+  const access = useMemo<AssignmentGridAccess>(
+    () => (isLocalDemoMode() ? createDemoAccess(students) : createSupabaseAccess()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isLocalDemoMode()],
+  );
 
   return (
-    <AssignmentView
+    <AssignmentGridView
       subjects={subjects}
-      units={units}
       students={students}
       access={access}
     />

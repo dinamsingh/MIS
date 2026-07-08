@@ -10,7 +10,12 @@
  * They are pure, so the parsing logic is unit-tested without a live database.
  */
 
-import type { QuizAccess, QuizPayloadNoAnswers } from '../../domain/services/rosterService';
+import type {
+  QuizAccess,
+  QuizAccessDeniedReason,
+  QuizPayloadNoAnswers,
+  SubmitAttemptDeniedReason,
+} from '../../domain/services/rosterService';
 import type { AttemptResult } from '../../domain/services/quizService';
 
 /** Narrow an unknown value to a plain object record. */
@@ -48,6 +53,23 @@ function parseQuizPayload(value: unknown): QuizPayloadNoAnswers {
   };
 }
 
+const QUIZ_DENIAL_REASONS = new Set<QuizAccessDeniedReason>([
+  'not-authenticated',
+  'quiz-not-found',
+  'enrollment-not-found',
+  'enrollment-already-bound',
+  'wrong-section',
+  'not-registered',
+  'not-active',
+  'teacher-account',
+]);
+
+function parseQuizDeniedReason(value: unknown): QuizAccessDeniedReason {
+  return typeof value === 'string' && QUIZ_DENIAL_REASONS.has(value as QuizAccessDeniedReason)
+    ? (value as QuizAccessDeniedReason)
+    : 'not-registered';
+}
+
 /**
  * Parse the `request_quiz_access` payload into the domain {@link QuizAccess}
  * union. Any unrecognized shape is treated as a `denied: not-registered`
@@ -73,27 +95,43 @@ export function parseQuizAccess(value: unknown): QuizAccess {
     case 'denied':
       return {
         status: 'denied',
-        reason: record?.reason === 'not-active' ? 'not-active' : 'not-registered',
+        reason: parseQuizDeniedReason(record?.reason),
       };
     default:
       return { status: 'denied', reason: 'not-registered' };
   }
 }
 
+const SUBMIT_DENIAL_REASONS = new Set<SubmitAttemptDeniedReason>([
+  'not-authenticated',
+  'quiz-not-found',
+  'not-registered',
+  'teacher-account',
+]);
+
+function parseSubmitDeniedReason(value: unknown): SubmitAttemptDeniedReason {
+  return typeof value === 'string' && SUBMIT_DENIAL_REASONS.has(value as SubmitAttemptDeniedReason)
+    ? (value as SubmitAttemptDeniedReason)
+    : 'not-registered';
+}
+
 /**
  * The outcome of a server-side quiz submission via `submit_attempt`. Mirrors
  * the domain submit-outcome plus the `denied` branch the DB function can return
- * when the roster/enrollment gate fails at submission time.
+ * when the roster/enrollment gate fails at submission time. The specific
+ * `reason` is threaded through (not collapsed to one generic message) so the
+ * student sees exactly why their submission was denied.
  */
 export type SubmitAttemptOutcome =
   | { readonly status: 'recorded'; readonly result: AttemptResult }
   | { readonly status: 'already-attempted'; readonly result: AttemptResult }
-  | { readonly status: 'denied'; readonly reason: 'not-registered' };
+  | { readonly status: 'denied'; readonly reason: SubmitAttemptDeniedReason };
 
 /**
  * Parse the `submit_attempt` payload into a {@link SubmitAttemptOutcome}. An
- * unrecognized shape is treated as `denied`, so a malformed response never
- * presents a fabricated score.
+ * unrecognized shape is treated as `denied: not-registered`, so a malformed
+ * response never presents a fabricated score, but a recognized `reason` is
+ * preserved rather than collapsed to a single generic denial.
  */
 export function parseSubmitOutcome(value: unknown): SubmitAttemptOutcome {
   const record = asRecord(value);
@@ -105,6 +143,7 @@ export function parseSubmitOutcome(value: unknown): SubmitAttemptOutcome {
     case 'already-attempted':
       return { status: 'already-attempted', result: parseAttemptResult(record?.result) };
     case 'denied':
+      return { status: 'denied', reason: parseSubmitDeniedReason(record?.reason) };
     default:
       return { status: 'denied', reason: 'not-registered' };
   }

@@ -1,189 +1,164 @@
 /**
- * Assignment module UI (task 22.1).
+ * Assignment module — Excel-style grid view (redesigned).
  *
- * The teacher-facing surface for the Assignment_Module. It composes three
- * concerns in one screen:
+ * Matches the teacher's real classroom workflow:
+ *   • Teacher distributes assignment/lab-file PDF via WhatsApp
+ *   • Students physically submit; teacher signs
+ *   • Teacher opens this page, selects subject → sees full student grid
+ *   • Clicks a cell → toggles DONE / blank (persisted immediately)
  *
- *  1. **Create an assignment** — the teacher enters a title, selects a subject
- *     and unit, optionally sets a due date, and uploads an assignment file. On
- *     save a unique shareable link is generated (Req 9.1). Any user who opens
- *     the link can view or download the file (Req 9.2). There is explicitly no
- *     student upload or online submission flow (Req 9.3).
+ * Grid layout (mirrors the reference Excel sheet):
+ *   SN | Enrollment | Name | A1 | A2 | A3 | A4 | A5 | Lab File
  *
- *  2. **Assignment Tracker** — a per-student, per-unit grid where the teacher
- *     marks physical submissions as submitted / not-submitted. Each cell
- *     persists immediately through the injected access layer (Req 9.4, 9.5).
- *
- *  3. **Lab Manual Tracker** — an independent per-student, per-unit grid for
- *     lab-manual submissions, managed independently from the Assignment Tracker
- *     (Req 9.6, 9.7).
- *
- * All persistence is delegated to injected ports so the view stays testable
- * with in-memory fakes. The file upload delegates to the injected
- * {@link AssignmentViewDeps.uploadFile} which in production calls the hybrid
- * file-storage facade routing assignment files to Cloudinary.
- *
- * _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7_
+ * Rules:
+ *   • Max 5 assignment slots per subject (numbered, not named)
+ *   • Lab File = one DONE checkbox per student per subject (not unit-wise)
+ *   • No file upload; WhatsApp sharing stays on WhatsApp
+ *   • Export button generates a CSV that opens in Excel
  */
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { SubmissionStatus } from '@domain/shared/types';
-import { messages } from '@domain/shared/messages';
-import SharedAcrossSectionsNotice from '@presentation/components/SharedAcrossSectionsNotice';
+import { useToast } from '@presentation/components/ToastProvider';
 
 // ---------------------------------------------------------------------------
-// Types
+// Public types (injected from AssignmentPage)
 // ---------------------------------------------------------------------------
 
-/** A subject option for the assignment creation form. */
-export interface AssignmentSubjectOption {
+export interface GridSubject {
   readonly id: string;
   readonly name: string;
 }
 
-/** A unit option for the assignment creation form. */
-export interface AssignmentUnitOption {
-  readonly id: string;
-  readonly name: string;
-}
-
-/** A student displayed in the tracker grids. */
-export interface AssignmentStudent {
+export interface GridStudent {
   readonly id: string;
   readonly name: string;
   readonly enrollmentNumber?: string;
-  /** The id of the section this student belongs to (for shared-materials filtering). */
-  readonly sectionId?: string;
-  /** Human-readable section label (from `formatSectionLabel`) for display. */
   readonly sectionLabel?: string;
 }
 
-/** An existing assignment shown in the list. */
-export interface AssignmentListItem {
+export interface GridSlot {
+  /** DB assignment id */
   readonly id: string;
-  readonly title: string;
-  readonly subjectId: string;
-  readonly unitId: string;
-  readonly dueDate: string | null;
-  readonly shareLink: string;
+  /** 1 – 5 */
+  readonly slotNumber: number;
 }
 
-/** The result of a successful file upload. */
-export interface UploadedAssignmentFile {
-  readonly fileId: string;
-  readonly url: string;
-}
+export interface AssignmentGridAccess {
+  /** Fetch existing slots for a subject (sparse – only touched slots). */
+  listSlotsForSubject(subjectId: string): Promise<GridSlot[]>;
 
-/**
- * The persistence/data port the Assignment view depends on.
- * Structurally compatible with the Supabase-backed `assignmentAccess` +
- * file-storage facade so production passes those while tests pass fakes.
- */
-export interface AssignmentViewAccess {
-  /** Create an assignment and return its id (Req 9.1). */
-  createAssignment(input: {
-    title: string;
-    subjectId: string;
-    unitId: string;
-    dueDate: string | null;
-    fileId: string | null;
-    shareToken: string;
-  }): Promise<string>;
+  /** Find-or-create slot; returns assignment id. */
+  getOrCreateSlot(subjectId: string, slotNumber: 1 | 2 | 3 | 4 | 5): Promise<string>;
 
-  /** Upload the assignment file (routed to Cloudinary as public/heavy). */
-  uploadFile(file: File): Promise<UploadedAssignmentFile>;
+  /** Batch-fetch submissions for one slot across all students. */
+  getSlotSubmissions(
+    assignmentId: string,
+    studentIds: string[],
+  ): Promise<Record<string, SubmissionStatus>>;
 
-  /** List existing assignments. */
-  listAssignments(): Promise<AssignmentListItem[]>;
-
-  /** Read Assignment Tracker cell status. */
-  getAssignmentSubmission(
+  /** Toggle one cell in the assignment grid. */
+  setSlotSubmission(
     assignmentId: string,
     studentId: string,
-    unitId: string,
-  ): Promise<SubmissionStatus>;
-
-  /** Persist Assignment Tracker cell status (Req 9.4, 9.5). */
-  setAssignmentSubmission(
-    assignmentId: string,
-    studentId: string,
-    unitId: string,
     status: SubmissionStatus,
   ): Promise<void>;
 
-  /** Read Lab Manual Tracker cell status. */
-  getLabManualSubmission(
-    studentId: string,
-    unitId: string,
-  ): Promise<SubmissionStatus>;
+  /** Batch-fetch lab-file statuses (subject-level). */
+  getLabManualsBySubject(
+    studentIds: string[],
+    subjectId: string,
+  ): Promise<Record<string, SubmissionStatus>>;
 
-  /** Persist Lab Manual Tracker cell status (Req 9.6, 9.7). */
-  setLabManualSubmission(
+  /** Toggle lab-file for one student. */
+  setLabManualBySubject(
     studentId: string,
-    unitId: string,
+    subjectId: string,
     status: SubmissionStatus,
   ): Promise<void>;
-
-  /**
-   * Resolve the sections that are taught a subject (shared-materials model).
-   * An assignment is shared across every section that studies its subject, so
-   * the trackers list students from all of those sections. Optional so tests
-   * may omit it — when absent, every provided student is shown.
-   */
-  listSectionIdsForSubject?(subjectId: string): Promise<string[]>;
 }
 
-export interface AssignmentViewProps {
-  /** Subjects available (for creation and display). */
-  subjects: readonly AssignmentSubjectOption[];
-  /** Units available (for creation and trackers). */
-  units: readonly AssignmentUnitOption[];
-  /** Students displayed in both tracker grids. */
-  students: readonly AssignmentStudent[];
-  /** Persistence/data port. */
-  access: AssignmentViewAccess;
-  /** Generates a unique share token (defaults to crypto UUID). */
-  generateShareToken?: () => string;
-  /** Builds the shareable link from a share token. */
-  buildShareLink?: (shareToken: string) => string;
+export interface AssignmentGridViewProps {
+  subjects: readonly GridSubject[];
+  students: readonly GridStudent[];
+  access: AssignmentGridAccess;
+}
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const SLOT_NUMBERS = [1, 2, 3, 4, 5] as const;
+
+// ---------------------------------------------------------------------------
+// CSV Export utility
+// ---------------------------------------------------------------------------
+
+function buildCsv(
+  students: readonly GridStudent[],
+  slots: readonly GridSlot[],
+  slotMap: Record<string, Record<number, SubmissionStatus>>,
+  labMap: Record<string, SubmissionStatus>,
+  subjectName: string,
+): string {
+  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+
+  const headers = [
+    'SN',
+    'Enrollment',
+    'Name',
+    ...slots.map((s) => `Assignment ${s.slotNumber}`),
+    'Lab File',
+  ];
+
+  const rows = students.map((student, idx) => {
+    const assignCols = slots.map((slot) => {
+      const st = slotMap[student.id]?.[slot.slotNumber] ?? 'not-submitted';
+      return st === 'submitted' ? 'DONE' : '';
+    });
+    const labCol = labMap[student.id] === 'submitted' ? 'DONE' : '';
+    return [
+      String(idx + 1),
+      student.enrollmentNumber ?? '',
+      student.name,
+      ...assignCols,
+      labCol,
+    ];
+  });
+
+  const csvRows = [headers, ...rows];
+  const csvContent = [
+    `"Subject: ${subjectName.replace(/"/g, '""')}"`,
+    '',
+    csvRows.map((row) => row.map(escape).join(',')).join('\r\n'),
+  ].join('\r\n');
+
+  return csvContent;
+}
+
+function downloadCsv(content: string, filename: string) {
+  const bom = '\uFEFF'; // BOM so Excel opens UTF-8 correctly
+  const blob = new Blob([bom + content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Default share-token generator. */
-function defaultGenerateShareToken(): string {
-  const g = globalThis as { crypto?: { randomUUID?: () => string } };
-  if (g.crypto?.randomUUID) {
-    return g.crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-/** Default link builder. */
-function defaultBuildShareLink(shareToken: string): string {
-  const origin =
-    typeof window !== 'undefined' && window.location ? window.location.origin : '';
-  return `${origin}/assignment/${shareToken}`;
-}
-
-const inputClass =
-  'w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text ' +
-  'placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30';
-
-/** Compute days remaining until due date. */
-function getDaysLeft(dueDate: string | null): string | null {
-  if (!dueDate) return null;
-  const now = new Date();
-  const due = new Date(dueDate);
-  const diff = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  if (diff < 0) return 'Overdue';
-  if (diff === 0) return 'Due today';
-  return `${diff} day${diff === 1 ? '' : 's'} left`;
-}
-
-/** Get initials from a name string. */
 function getInitials(name: string): string {
   return name
     .split(' ')
@@ -194,277 +169,55 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
-/** Determine submission timing badge based on due date. */
-function getSubmissionTiming(
-  dueDate: string | null,
-  studentIndex: number,
-): { label: string; colorClass: string } {
-  // Since we don't have actual submission timestamps, we derive a visual
-  // representation based on the student's position (simulated timing).
-  if (!dueDate) return { label: 'On-time', colorClass: 'bg-blue-100 text-blue-700' };
-  const variants = [
-    { label: 'Early', colorClass: 'bg-emerald-100 text-emerald-700' },
-    { label: 'On-time', colorClass: 'bg-blue-100 text-blue-700' },
-    { label: 'Late', colorClass: 'bg-red-100 text-red-700' },
-  ];
-  return variants[studentIndex % 3];
+function slotKey(studentId: string, slotNumber: number): string {
+  return `${studentId}::${slotNumber}`;
 }
 
 // ---------------------------------------------------------------------------
-// Sub-components
+// Status toggle button (single cell)
 // ---------------------------------------------------------------------------
 
-/**
- * Assignment Tracker grid — per-student, per-unit submitted controls
- * (Req 9.4, 9.5).
- */
-function AssignmentTrackerGrid({
-  assignmentId,
-  students,
-  units,
-  access,
+function StatusCell({
+  status,
+  saving,
+  label,
+  onToggle,
+  color = 'green',
 }: {
-  assignmentId: string;
-  students: readonly AssignmentStudent[];
-  units: readonly AssignmentUnitOption[];
-  access: AssignmentViewAccess;
+  status: SubmissionStatus;
+  saving: boolean;
+  label: string;
+  onToggle: () => void;
+  color?: 'green' | 'blue';
 }) {
-  const [grid, setGrid] = useState<Record<string, SubmissionStatus>>({});
-  const [loading, setLoading] = useState(true);
-
-  const cellKey = (studentId: string, unitId: string) => `${studentId}::${unitId}`;
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      const results: Record<string, SubmissionStatus> = {};
-      for (const student of students) {
-        for (const unit of units) {
-          const status = await access.getAssignmentSubmission(assignmentId, student.id, unit.id);
-          if (cancelled) return;
-          results[cellKey(student.id, unit.id)] = status;
-        }
-      }
-      setGrid(results);
-      setLoading(false);
-    }
-    void load();
-    return () => { cancelled = true; };
-  }, [assignmentId, students, units, access]);
-
-  const toggle = useCallback(
-    async (studentId: string, unitId: string) => {
-      const key = cellKey(studentId, unitId);
-      const current = grid[key] ?? 'not-submitted';
-      const next: SubmissionStatus = current === 'submitted' ? 'not-submitted' : 'submitted';
-      setGrid((prev) => ({ ...prev, [key]: next }));
-      try {
-        await access.setAssignmentSubmission(assignmentId, studentId, unitId, next);
-      } catch {
-        setGrid((prev) => ({ ...prev, [key]: current }));
-      }
-    },
-    [access, assignmentId, grid],
-  );
-
-  if (loading) {
-    return <p className="text-sm text-muted animate-pulse py-4">Loading tracker…</p>;
-  }
-
-  if (students.length === 0 || units.length === 0) {
-    return (
-      <p className="text-sm text-muted py-4">
-        {students.length === 0
-          ? messages.emptyState.noStudents
-          : 'No units defined yet.'}
-      </p>
-    );
-  }
+  const isDone = status === 'submitted';
+  const greenStyles = isDone
+    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200'
+    : 'bg-gray-100 text-gray-300 hover:bg-gray-200 hover:text-gray-400';
+  const blueStyles = isDone
+    ? 'bg-blue-500 text-white shadow-md shadow-blue-200'
+    : 'bg-gray-100 text-gray-300 hover:bg-gray-200 hover:text-gray-400';
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border">
-      <table className="w-full text-left text-sm">
-        <thead className="bg-gray-50">
-          <tr className="border-b border-border">
-            <th className="py-3 px-4 font-medium text-muted text-xs uppercase tracking-wide">Student</th>
-            {units.map((unit) => (
-              <th key={unit.id} className="px-3 py-3 text-center font-medium text-muted text-xs uppercase tracking-wide">
-                {unit.name}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {students.map((student) => (
-            <tr key={student.id} className="hover:bg-gray-50/50 transition-colors">
-              <td className="py-3 px-4">
-                <div className="flex items-center gap-2">
-                  <div className="h-7 w-7 rounded-full bg-accent/10 flex items-center justify-center text-xs font-semibold text-accent">
-                    {getInitials(student.name)}
-                  </div>
-                  <div>
-                    <span className="text-text font-medium text-sm">{student.name}</span>
-                    {student.enrollmentNumber && (
-                      <span className="ml-2 text-xs text-muted">{student.enrollmentNumber}</span>
-                    )}
-                    {student.sectionLabel && (
-                      <span className="block text-[11px] text-muted">{student.sectionLabel}</span>
-                    )}
-                  </div>
-                </div>
-              </td>
-              {units.map((unit) => {
-                const status = grid[cellKey(student.id, unit.id)] ?? 'not-submitted';
-                return (
-                  <td key={unit.id} className="px-3 py-3 text-center">
-                    <button
-                      type="button"
-                      aria-label={`${student.name} - ${unit.name}: ${status}`}
-                      className={[
-                        'inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all duration-150',
-                        status === 'submitted'
-                          ? 'bg-emerald-100 text-emerald-600 shadow-sm'
-                          : 'bg-gray-100 text-gray-400 hover:bg-gray-200',
-                      ].join(' ')}
-                      onClick={() => void toggle(student.id, unit.id)}
-                    >
-                      {status === 'submitted' ? '✓' : '—'}
-                    </button>
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-/**
- * Lab Manual Tracker grid — independent per-student, per-unit submitted
- * controls (Req 9.6, 9.7).
- */
-function LabManualTrackerGrid({
-  students,
-  units,
-  access,
-}: {
-  students: readonly AssignmentStudent[];
-  units: readonly AssignmentUnitOption[];
-  access: AssignmentViewAccess;
-}) {
-  const [grid, setGrid] = useState<Record<string, SubmissionStatus>>({});
-  const [loading, setLoading] = useState(true);
-
-  const cellKey = (studentId: string, unitId: string) => `${studentId}::${unitId}`;
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      const results: Record<string, SubmissionStatus> = {};
-      for (const student of students) {
-        for (const unit of units) {
-          const status = await access.getLabManualSubmission(student.id, unit.id);
-          if (cancelled) return;
-          results[cellKey(student.id, unit.id)] = status;
-        }
-      }
-      setGrid(results);
-      setLoading(false);
-    }
-    void load();
-    return () => { cancelled = true; };
-  }, [students, units, access]);
-
-  const toggle = useCallback(
-    async (studentId: string, unitId: string) => {
-      const key = cellKey(studentId, unitId);
-      const current = grid[key] ?? 'not-submitted';
-      const next: SubmissionStatus = current === 'submitted' ? 'not-submitted' : 'submitted';
-      setGrid((prev) => ({ ...prev, [key]: next }));
-      try {
-        await access.setLabManualSubmission(studentId, unitId, next);
-      } catch {
-        setGrid((prev) => ({ ...prev, [key]: current }));
-      }
-    },
-    [access, grid],
-  );
-
-  if (loading) {
-    return <p className="text-sm text-muted animate-pulse py-4">Loading tracker…</p>;
-  }
-
-  if (students.length === 0 || units.length === 0) {
-    return (
-      <p className="text-sm text-muted py-4">
-        {students.length === 0
-          ? messages.emptyState.noStudents
-          : 'No units defined yet.'}
-      </p>
-    );
-  }
-
-  return (
-    <div className="overflow-x-auto rounded-lg border border-border">
-      <table className="w-full text-left text-sm">
-        <thead className="bg-gray-50">
-          <tr className="border-b border-border">
-            <th className="py-3 px-4 font-medium text-muted text-xs uppercase tracking-wide">Student</th>
-            {units.map((unit) => (
-              <th key={unit.id} className="px-3 py-3 text-center font-medium text-muted text-xs uppercase tracking-wide">
-                {unit.name}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {students.map((student) => (
-            <tr key={student.id} className="hover:bg-gray-50/50 transition-colors">
-              <td className="py-3 px-4">
-                <div className="flex items-center gap-2">
-                  <div className="h-7 w-7 rounded-full bg-accent/10 flex items-center justify-center text-xs font-semibold text-accent">
-                    {getInitials(student.name)}
-                  </div>
-                  <div>
-                    <span className="text-text font-medium text-sm">{student.name}</span>
-                    {student.enrollmentNumber && (
-                      <span className="ml-2 text-xs text-muted">{student.enrollmentNumber}</span>
-                    )}
-                    {student.sectionLabel && (
-                      <span className="block text-[11px] text-muted">{student.sectionLabel}</span>
-                    )}
-                  </div>
-                </div>
-              </td>
-              {units.map((unit) => {
-                const status = grid[cellKey(student.id, unit.id)] ?? 'not-submitted';
-                return (
-                  <td key={unit.id} className="px-3 py-3 text-center">
-                    <button
-                      type="button"
-                      aria-label={`${student.name} - ${unit.name} lab manual: ${status}`}
-                      className={[
-                        'inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all duration-150',
-                        status === 'submitted'
-                          ? 'bg-emerald-100 text-emerald-600 shadow-sm'
-                          : 'bg-gray-100 text-gray-400 hover:bg-gray-200',
-                      ].join(' ')}
-                      onClick={() => void toggle(student.id, unit.id)}
-                    >
-                      {status === 'submitted' ? '✓' : '—'}
-                    </button>
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <button
+      type="button"
+      aria-label={label}
+      disabled={saving}
+      onClick={onToggle}
+      className={[
+        'inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold',
+        'transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50',
+        color === 'green' ? greenStyles : blueStyles,
+      ].join(' ')}
+    >
+      {saving ? (
+        <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+      ) : isDone ? (
+        '✓'
+      ) : (
+        '—'
+      )}
+    </button>
   );
 }
 
@@ -472,506 +225,643 @@ function LabManualTrackerGrid({
 // Main view
 // ---------------------------------------------------------------------------
 
-/** Teacher assignment management view — create, share, and track submissions. */
-export default function AssignmentView({
+export default function AssignmentGridView({
   subjects,
-  units,
   students,
   access,
-  generateShareToken = defaultGenerateShareToken,
-  buildShareLink = defaultBuildShareLink,
-}: AssignmentViewProps) {
-  // --- Creation form state ---
-  const [title, setTitle] = useState('');
-  const [subjectId, setSubjectId] = useState('');
-  const [unitId, setUnitId] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+}: AssignmentGridViewProps) {
+  const { notify } = useToast();
 
-  // --- Assignments list state ---
-  const [assignments, setAssignments] = useState<AssignmentListItem[]>([]);
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
+  // ── Subject selection ────────────────────────────────────────────────────
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(
+    subjects[0]?.id ?? '',
+  );
+  const selectedSubject = subjects.find((s) => s.id === selectedSubjectId) ?? null;
 
-  // --- Active tab for trackers ---
-  const [activeTab, setActiveTab] = useState<'assignment' | 'lab-manual'>('assignment');
+  // Keep selection valid when subjects list changes
+  useEffect(() => {
+    if (selectedSubjectId === '' && subjects.length > 0) {
+      setSelectedSubjectId(subjects[0].id);
+    } else if (selectedSubjectId !== '' && !subjects.some((s) => s.id === selectedSubjectId)) {
+      setSelectedSubjectId(subjects[0]?.id ?? '');
+    }
+  }, [subjects, selectedSubjectId]);
 
-  // --- Creation form visibility ---
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  // ── Slot ids for selected subject (sparse, lazy-created on first toggle) ─
+  const [slots, setSlots] = useState<GridSlot[]>([]);
 
-  // --- Shared-materials model: sections that study the selected assignment's
-  // subject. An assignment is shared across every such section, so the trackers
-  // list students from all of them. `null` means "not resolved / show all". ---
-  const [subjectSectionIds, setSubjectSectionIds] = useState<string[] | null>(null);
+  // slotIdByNumber: cache so we don't hit the DB for already-known slots
+  const slotIdByNumber = useRef<Record<string, Record<number, string>>>({});
 
   useEffect(() => {
-    if (subjects.length === 0) {
-      setSubjectId('');
-      setUnitId('');
-      return;
-    }
-    if (subjectId !== '' && !subjects.some((subject) => subject.id === subjectId)) {
-      setSubjectId('');
-      setUnitId('');
-    }
-  }, [subjectId, subjects]);
-
-  // Load existing assignments on mount
-  useEffect(() => {
+    if (!selectedSubjectId) { setSlots([]); return; }
     let cancelled = false;
-    async function load() {
-      try {
-        const list = await access.listAssignments();
-        if (!cancelled) {
-          setAssignments(list);
-          if (list.length > 0 && selectedAssignmentId === null) {
-            setSelectedAssignmentId(list[0].id);
-          }
-        }
-      } catch {
-        // Silently ignore on initial load
-      }
-    }
-    void load();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [access]);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-
-    if (title.trim() === '') {
-      setError(messages.validation.required);
-      return;
-    }
-    if (subjectId === '') {
-      setError('Select a subject.');
-      return;
-    }
-    if (unitId === '') {
-      setError('Select a unit.');
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      let fileId: string | null = null;
-      if (file) {
-        const uploaded = await access.uploadFile(file);
-        fileId = uploaded.fileId;
-      }
-
-      const shareToken = generateShareToken();
-      const id = await access.createAssignment({
-        title: title.trim(),
-        subjectId,
-        unitId,
-        dueDate: dueDate || null,
-        fileId,
-        shareToken,
-      });
-
-      const newItem: AssignmentListItem = {
-        id,
-        title: title.trim(),
-        subjectId,
-        unitId,
-        dueDate: dueDate || null,
-        shareLink: buildShareLink(shareToken),
-      };
-      setAssignments((prev) => [newItem, ...prev]);
-      setSelectedAssignmentId(id);
-
-      // Reset form
-      setTitle('');
-      setSubjectId('');
-      setUnitId('');
-      setDueDate('');
-      setFile(null);
-      setShowCreateForm(false);
-    } catch {
-      setError(messages.error.saveFailed);
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  const selectedAssignment = assignments.find((a) => a.id === selectedAssignmentId) ?? null;
-
-  // Resolve which sections study the selected assignment's subject so the
-  // trackers can list students from every section the assignment is shared with
-  // (Shared-materials model). Falls back to "show all" when the resolver is not
-  // wired (tests) or no timetable mapping exists yet.
-  const selectedSubjectId = selectedAssignment?.subjectId ?? null;
-  useEffect(() => {
-    let cancelled = false;
-    const resolve = access.listSectionIdsForSubject;
-    if (selectedSubjectId === null || resolve === undefined) {
-      setSubjectSectionIds(null);
-      return;
-    }
     void (async () => {
       try {
-        const ids = await resolve(selectedSubjectId);
-        if (!cancelled) setSubjectSectionIds(ids);
+        const fetched = await access.listSlotsForSubject(selectedSubjectId);
+        if (cancelled) return;
+        setSlots(fetched);
+        // Prime the cache
+        slotIdByNumber.current[selectedSubjectId] ??= {};
+        for (const slot of fetched) {
+          slotIdByNumber.current[selectedSubjectId][slot.slotNumber] = slot.id;
+        }
       } catch {
-        if (!cancelled) setSubjectSectionIds(null);
+        if (!cancelled) setSlots([]);
       }
     })();
     return () => { cancelled = true; };
   }, [access, selectedSubjectId]);
 
-  // Students shown in the trackers / submission list: every student in a section
-  // that studies the subject. When the section mapping is unavailable, show all
-  // provided students unchanged.
-  const visibleStudents =
-    subjectSectionIds && subjectSectionIds.length > 0
-      ? students.filter(
-          (s) => s.sectionId !== undefined && subjectSectionIds.includes(s.sectionId),
-        )
-      : students;
+  // ── Submission grids ─────────────────────────────────────────────────────
+  // assignGrid[studentId][slotNumber] = status
+  const [assignGrid, setAssignGrid] = useState<Record<string, Record<number, SubmissionStatus>>>({});
+  // labGrid[studentId] = status
+  const [labGrid, setLabGrid] = useState<Record<string, SubmissionStatus>>({});
+  const [gridLoading, setGridLoading] = useState(false);
 
-  // Distinct section labels among the visible students, for the shared notice.
-  const sharedSectionLabels = Array.from(
-    new Set(
-      visibleStudents
-        .map((s) => s.sectionLabel)
-        .filter((label): label is string => label !== undefined && label !== ''),
-    ),
+  // When subject OR students changes, reload all submission data
+  useEffect(() => {
+    if (!selectedSubjectId || students.length === 0) {
+      setAssignGrid({});
+      setLabGrid({});
+      return;
+    }
+    let cancelled = false;
+    const studentIds = students.map((s) => s.id);
+
+    void (async () => {
+      setGridLoading(true);
+      try {
+        // Load lab file statuses (subject-level)
+        const labData = await access.getLabManualsBySubject(studentIds, selectedSubjectId);
+        if (cancelled) return;
+        setLabGrid(labData);
+
+        // Load assignment slot statuses (one fetch per existing slot)
+        const knownSlots = await access.listSlotsForSubject(selectedSubjectId);
+        if (cancelled) return;
+
+        // Prime cache
+        slotIdByNumber.current[selectedSubjectId] ??= {};
+        for (const slot of knownSlots) {
+          slotIdByNumber.current[selectedSubjectId][slot.slotNumber] = slot.id;
+        }
+        setSlots(knownSlots);
+
+        const newAssignGrid: Record<string, Record<number, SubmissionStatus>> = {};
+        await Promise.all(
+          knownSlots.map(async (slot) => {
+            const data = await access.getSlotSubmissions(slot.id, studentIds);
+            if (cancelled) return;
+            for (const [studentId, status] of Object.entries(data)) {
+              newAssignGrid[studentId] ??= {};
+              newAssignGrid[studentId][slot.slotNumber] = status;
+            }
+          }),
+        );
+        if (!cancelled) setAssignGrid(newAssignGrid);
+      } catch {
+        // Silent fail — empty grid shown
+      } finally {
+        if (!cancelled) setGridLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [access, selectedSubjectId, students]);
+
+  // ── Saving cell states ───────────────────────────────────────────────────
+  // saving[slotKey(studentId, slotNumber)] = true while in-flight
+  const [savingCells, setSavingCells] = useState<Record<string, boolean>>({});
+  const [savingLab, setSavingLab] = useState<Record<string, boolean>>({});
+
+  // ── Toggle assignment cell ───────────────────────────────────────────────
+  const toggleAssignCell = useCallback(
+    async (studentId: string, slotNumber: 1 | 2 | 3 | 4 | 5) => {
+      const key = slotKey(studentId, slotNumber);
+      setSavingCells((prev) => ({ ...prev, [key]: true }));
+
+      const currentStatus =
+        assignGrid[studentId]?.[slotNumber] ?? 'not-submitted';
+      const nextStatus: SubmissionStatus =
+        currentStatus === 'submitted' ? 'not-submitted' : 'submitted';
+
+      // Optimistic update
+      setAssignGrid((prev) => ({
+        ...prev,
+        [studentId]: { ...(prev[studentId] ?? {}), [slotNumber]: nextStatus },
+      }));
+
+      try {
+        // Get or create the slot id
+        let assignmentId =
+          slotIdByNumber.current[selectedSubjectId]?.[slotNumber];
+        if (!assignmentId) {
+          assignmentId = await access.getOrCreateSlot(
+            selectedSubjectId,
+            slotNumber,
+          );
+          slotIdByNumber.current[selectedSubjectId] ??= {};
+          slotIdByNumber.current[selectedSubjectId][slotNumber] = assignmentId;
+          // Add to slots list if not already there
+          setSlots((prev) =>
+            prev.some((s) => s.slotNumber === slotNumber)
+              ? prev
+              : [...prev, { id: assignmentId, slotNumber }].sort(
+                  (a, b) => a.slotNumber - b.slotNumber,
+                ),
+          );
+        }
+        await access.setSlotSubmission(assignmentId, studentId, nextStatus);
+      } catch {
+        // Rollback
+        setAssignGrid((prev) => ({
+          ...prev,
+          [studentId]: {
+            ...(prev[studentId] ?? {}),
+            [slotNumber]: currentStatus,
+          },
+        }));
+        notify({ tone: 'danger', title: 'Save failed', message: 'Dobara try karein.' });
+      } finally {
+        setSavingCells((prev) => ({ ...prev, [key]: false }));
+      }
+    },
+    [access, assignGrid, notify, selectedSubjectId],
   );
 
-  // Count submitted students for the selected assignment
-  const submittedCount = visibleStudents.filter((_, i) => i % 3 !== 2).length; // visual simulation
-  const totalCount = visibleStudents.length;
+  // ── Toggle lab file cell ─────────────────────────────────────────────────
+  const toggleLabCell = useCallback(
+    async (studentId: string) => {
+      setSavingLab((prev) => ({ ...prev, [studentId]: true }));
 
+      const currentStatus = labGrid[studentId] ?? 'not-submitted';
+      const nextStatus: SubmissionStatus =
+        currentStatus === 'submitted' ? 'not-submitted' : 'submitted';
+
+      setLabGrid((prev) => ({ ...prev, [studentId]: nextStatus }));
+
+      try {
+        await access.setLabManualBySubject(studentId, selectedSubjectId, nextStatus);
+      } catch {
+        setLabGrid((prev) => ({ ...prev, [studentId]: currentStatus }));
+        notify({ tone: 'danger', title: 'Save failed', message: 'Dobara try karein.' });
+      } finally {
+        setSavingLab((prev) => ({ ...prev, [studentId]: false }));
+      }
+    },
+    [access, labGrid, notify, selectedSubjectId],
+  );
+
+  // ── Search ───────────────────────────────────────────────────────────────
+  const [search, setSearch] = useState('');
+  useEffect(() => { setSearch(''); }, [selectedSubjectId]);
+
+  const filteredStudents = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return students;
+    return students.filter((s) =>
+      [s.name, s.enrollmentNumber, s.sectionLabel]
+        .filter(Boolean)
+        .some((v) => v!.toLowerCase().includes(q)),
+    );
+  }, [search, students]);
+
+  // ── Summary counts ───────────────────────────────────────────────────────
+  const slotSubmittedCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    for (const n of SLOT_NUMBERS) {
+      counts[n] = students.filter(
+        (s) => assignGrid[s.id]?.[n] === 'submitted',
+      ).length;
+    }
+    return counts;
+  }, [assignGrid, students]);
+
+  const labSubmittedCount = useMemo(
+    () => students.filter((s) => labGrid[s.id] === 'submitted').length,
+    [labGrid, students],
+  );
+
+  // Which slots have at least one interaction (= "active" columns)
+  // We always show all 5 columns so teacher can click any slot
+  const activeSlotNumbers = SLOT_NUMBERS;
+
+  // ── Bulk mark ────────────────────────────────────────────────────────────
+  const [bulkSaving, setBulkSaving] = useState(false);
+
+  const handleBulkMark = useCallback(
+    async (status: SubmissionStatus) => {
+      if (!selectedSubjectId || filteredStudents.length === 0 || bulkSaving) return;
+
+      const confirmed = window.confirm(
+        status === 'submitted'
+          ? `${filteredStudents.length} dikhe hue students ko "DONE" mark karein sabhi assignments ke liye?`
+          : `${filteredStudents.length} dikhe hue students ko "Pending" mark karein sabhi assignments ke liye?`,
+      );
+      if (!confirmed) return;
+
+      setBulkSaving(true);
+
+      try {
+        // Ensure all slots exist
+        const slotIds: Record<number, string> = {};
+        for (const n of SLOT_NUMBERS) {
+          let id = slotIdByNumber.current[selectedSubjectId]?.[n];
+          if (!id) {
+            id = await access.getOrCreateSlot(selectedSubjectId, n);
+            slotIdByNumber.current[selectedSubjectId] ??= {};
+            slotIdByNumber.current[selectedSubjectId][n] = id;
+          }
+          slotIds[n] = id;
+        }
+
+        // Update all slots for all filtered students in parallel
+        await Promise.all(
+          filteredStudents.flatMap((student) =>
+            SLOT_NUMBERS.map((n) =>
+              access.setSlotSubmission(slotIds[n], student.id, status),
+            ),
+          ),
+        );
+
+        // Update lab too
+        await Promise.all(
+          filteredStudents.map((student) =>
+            access.setLabManualBySubject(student.id, selectedSubjectId, status),
+          ),
+        );
+
+        // Sync state
+        setAssignGrid((prev) => {
+          const next = { ...prev };
+          for (const student of filteredStudents) {
+            next[student.id] = Object.fromEntries(
+              SLOT_NUMBERS.map((n) => [n, status]),
+            );
+          }
+          return next;
+        });
+        setLabGrid((prev) => {
+          const next = { ...prev };
+          for (const student of filteredStudents) next[student.id] = status;
+          return next;
+        });
+
+        // Ensure all 5 slots appear in the slots list
+        setSlots(
+          SLOT_NUMBERS.map((n) => ({ id: slotIds[n], slotNumber: n })),
+        );
+
+        notify({
+          tone: 'success',
+          title: status === 'submitted' ? 'All marked Done' : 'All marked Pending',
+          message: `${filteredStudents.length} students updated.`,
+        });
+      } catch {
+        notify({ tone: 'danger', title: 'Bulk update failed', message: 'Dobara try karein.' });
+      } finally {
+        setBulkSaving(false);
+      }
+    },
+    [access, bulkSaving, filteredStudents, notify, selectedSubjectId],
+  );
+
+  // ── Export CSV ───────────────────────────────────────────────────────────
+  const handleExport = useCallback(() => {
+    if (!selectedSubject) return;
+    const activeSlots = SLOT_NUMBERS.map((n) => ({
+      id: slotIdByNumber.current[selectedSubjectId]?.[n] ?? n.toString(),
+      slotNumber: n,
+    }));
+    const csv = buildCsv(
+      filteredStudents,
+      activeSlots,
+      assignGrid,
+      labGrid,
+      selectedSubject.name,
+    );
+    const safeName = selectedSubject.name.replace(/[^a-z0-9]/gi, '_');
+    downloadCsv(csv, `${safeName}_assignments.csv`);
+  }, [assignGrid, filteredStudents, labGrid, selectedSubject, selectedSubjectId]);
+
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col gap-6">
-      {/* --- Header --- */}
-      <header className="flex items-center justify-between">
+    <div className="flex flex-col gap-5">
+
+      {/* ── Header ── */}
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-text">Assignments</h2>
-          <p className="mt-0.5 text-sm text-muted">Track submissions</p>
+          <h2 className="text-2xl font-bold text-text">Assignments & Lab File</h2>
+          <p className="mt-0.5 text-sm text-muted">
+            Subject select karo → student grid mein directly DONE mark karo.
+          </p>
         </div>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-accent/90 transition-colors"
-          onClick={() => setShowCreateForm(!showCreateForm)}
+          onClick={handleExport}
+          disabled={!selectedSubject || students.length === 0}
+          className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2
+                     text-sm font-semibold text-text shadow-soft transition-colors
+                     hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <span className="text-lg leading-none">+</span> New
+          <svg className="h-4 w-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Export Excel (CSV)
         </button>
       </header>
 
-      {/* --- Creation form (toggled by + New) --- */}
-      {showCreateForm && (
-        <form
-          className="rounded-xl border border-border bg-surface p-6 shadow-sm"
-          onSubmit={handleSubmit}
-          noValidate
-        >
-          <h3 className="text-base font-semibold text-text mb-4">Create assignment</h3>
-
-          <div className="mb-4">
-            <SharedAcrossSectionsNotice itemNoun="assignment" />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="assignment-title" className="text-xs font-medium text-muted uppercase tracking-wide">
-                Title
-              </label>
-              <input
-                id="assignment-title"
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className={inputClass}
-                placeholder="Assignment title"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="assignment-subject" className="text-xs font-medium text-muted uppercase tracking-wide">
-                Subject
-              </label>
-              <select
-                id="assignment-subject"
-                value={subjectId}
-                onChange={(e) => setSubjectId(e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Select a subject</option>
-                {subjects.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="assignment-unit" className="text-xs font-medium text-muted uppercase tracking-wide">
-                Unit
-              </label>
-              <select
-                id="assignment-unit"
-                value={unitId}
-                onChange={(e) => setUnitId(e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Select a unit</option>
-                {units.map((u) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="assignment-due-date" className="text-xs font-medium text-muted uppercase tracking-wide">
-                Due date
-              </label>
-              <input
-                id="assignment-due-date"
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className={inputClass}
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-col gap-1.5">
-            <label htmlFor="assignment-file" className="text-xs font-medium text-muted uppercase tracking-wide">
-              Assignment file
+      {/* ── Subject selector ── */}
+      {subjects.length === 0 ? (
+        <div className="rounded-xl border-2 border-dashed border-border bg-surface p-10 text-center">
+          <p className="text-sm font-medium text-text">Koi subject nahi mila</p>
+          <p className="mt-1 text-sm text-muted">
+            Pehle timetable ya onboarding mein subject assign karein.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <label htmlFor="subject-select" className="text-sm font-semibold text-muted">
+              Subject:
             </label>
-            <input
-              id="assignment-file"
-              type="file"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="text-sm text-text file:mr-3 file:rounded-lg file:border-0 file:bg-accent/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-accent hover:file:bg-accent/15"
-            />
-            <p className="text-xs text-muted">
-              Students can view or download this file via the shareable link. No
-              student upload or online submission is accepted.
-            </p>
-          </div>
-
-          {error !== null && (
-            <p role="alert" className="mt-3 text-sm font-medium text-red-600">
-              {error}
-            </p>
-          )}
-
-          <div className="mt-5 flex gap-3">
-            <button type="submit" className="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-accent/90 transition-colors disabled:opacity-50" disabled={isSaving}>
-              {isSaving ? 'Creating…' : 'Create assignment'}
-            </button>
-            <button type="button" className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:bg-gray-50 transition-colors" onClick={() => setShowCreateForm(false)}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* --- Assignment Card (selected assignment detail) --- */}
-      {selectedAssignment !== null && (
-        <section className="rounded-xl border border-border bg-surface shadow-sm overflow-hidden">
-          {/* Card header */}
-          <div className="p-6 pb-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-3">
-                  <h3 className="text-lg font-bold text-text">{selectedAssignment.title}</h3>
-                  {getDaysLeft(selectedAssignment.dueDate) && (
-                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
-                      {getDaysLeft(selectedAssignment.dueDate)}
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1.5 text-sm text-muted">
-                  Assignment shared via link. Students can view or download the file.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <SharedAcrossSectionsNotice
-                itemNoun="assignment"
-                sectionLabels={sharedSectionLabels}
-              />
-            </div>
-
-            {/* Actions row */}
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-3.5 py-2 text-sm font-medium text-text shadow-sm hover:bg-gray-50 transition-colors"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(selectedAssignment.shareLink);
-                }}
-              >
-                <svg className="h-4 w-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                </svg>
-                Copy share link
-              </button>
-              <div className="flex items-center gap-2 text-sm text-muted">
-                <span className="font-medium text-text">Submissions:</span>
-                <span className="font-bold text-accent">{submittedCount}</span>
-                <span>/</span>
-                <span>{totalCount}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Student submission list with badges */}
-          {visibleStudents.length > 0 && (
-            <div className="border-t border-border px-6 py-4">
-              <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">Student submissions</h4>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {visibleStudents.map((student, i) => {
-                  const timing = getSubmissionTiming(selectedAssignment.dueDate, i);
-                  return (
-                    <div
-                      key={student.id}
-                      className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-accent/10 flex items-center justify-center text-xs font-bold text-accent">
-                          {getInitials(student.name)}
-                        </div>
-                        <div>
-                          <span className="text-sm font-medium text-text">{student.name}</span>
-                          {student.enrollmentNumber && (
-                            <span className="ml-2 text-xs text-muted">{student.enrollmentNumber}</span>
-                          )}
-                          {student.sectionLabel && (
-                            <span className="block text-[11px] text-muted">{student.sectionLabel}</span>
-                          )}
-                        </div>
-                      </div>
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${timing.colorClass}`}>
-                        {timing.label}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* --- Published assignments list (selectable) --- */}
-      {assignments.length > 1 && (
-        <section className="rounded-xl border border-border bg-surface shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-text mb-3">All assignments</h3>
-          <div className="flex flex-col gap-2">
-            {assignments.map((a) => (
-              <div
-                key={a.id}
-                className={[
-                  'flex items-center justify-between rounded-lg border px-4 py-3 text-sm cursor-pointer transition-all duration-150',
-                  a.id === selectedAssignmentId
-                    ? 'border-accent bg-accent/5 ring-1 ring-accent/20'
-                    : 'border-border hover:border-gray-300 hover:bg-gray-50',
-                ].join(' ')}
-                onClick={() => setSelectedAssignmentId(a.id)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') setSelectedAssignmentId(a.id);
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-lg bg-accent/10 flex items-center justify-center">
-                    <svg className="h-4 w-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="font-medium text-text">{a.title}</span>
-                    {a.dueDate && (
-                      <span className="text-xs text-muted">Due: {a.dueDate}</span>
-                    )}
-                  </div>
-                </div>
-                <a
-                  href={a.shareLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-medium text-accent hover:underline"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Share ↗
-                </a>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* --- Tracker tabs --- */}
-      {selectedAssignment !== null && (
-        <section className="rounded-xl border border-border bg-surface shadow-sm overflow-hidden">
-          <div className="flex items-center gap-1 border-b border-border bg-gray-50 px-5 pt-4">
-            <button
-              type="button"
-              className={[
-                'px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px',
-                activeTab === 'assignment'
-                  ? 'border-accent text-accent bg-surface'
-                  : 'border-transparent text-muted hover:text-text',
-              ].join(' ')}
-              onClick={() => setActiveTab('assignment')}
+            <select
+              id="subject-select"
+              value={selectedSubjectId}
+              onChange={(e) => setSelectedSubjectId(e.target.value)}
+              className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium
+                         text-text focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
             >
-              Assignment Tracker
-            </button>
-            <button
-              type="button"
-              className={[
-                'px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px',
-                activeTab === 'lab-manual'
-                  ? 'border-accent text-accent bg-surface'
-                  : 'border-transparent text-muted hover:text-text',
-              ].join(' ')}
-              onClick={() => setActiveTab('lab-manual')}
-            >
-              Lab Manual Tracker
-            </button>
-          </div>
-
-          <div className="p-5">
-            {activeTab === 'assignment' ? (
-              <AssignmentTrackerGrid
-                assignmentId={selectedAssignment.id}
-                students={visibleStudents}
-                units={units}
-                access={access}
-              />
-            ) : (
-              <LabManualTrackerGrid
-                students={visibleStudents}
-                units={units}
-                access={access}
-              />
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            {students.length > 0 && (
+              <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold text-muted">
+                {students.length} students
+              </span>
             )}
           </div>
-        </section>
-      )}
 
-      {/* Empty state when no assignments exist yet */}
-      {assignments.length === 0 && (
-        <section className="rounded-xl border-2 border-dashed border-border bg-surface p-10 text-center">
-          <div className="mx-auto h-12 w-12 rounded-full bg-accent/10 flex items-center justify-center mb-4">
-            <svg className="h-6 w-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
+          {/* ── Summary stats ── */}
+          {students.length > 0 && (
+            <section className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+              {SLOT_NUMBERS.map((n) => (
+                <div
+                  key={n}
+                  className="rounded-lg border border-border bg-surface px-3 py-2.5 shadow-soft"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                    Assign {n}
+                  </p>
+                  <p className="mt-1 text-xl font-bold text-text">
+                    {slotSubmittedCounts[n]}
+                    <span className="text-sm font-normal text-muted">/{students.length}</span>
+                  </p>
+                </div>
+              ))}
+              <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 shadow-soft">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-600">
+                  Lab File
+                </p>
+                <p className="mt-1 text-xl font-bold text-text">
+                  {labSubmittedCount}
+                  <span className="text-sm font-normal text-muted">/{students.length}</span>
+                </p>
+              </div>
+            </section>
+          )}
+
+          {/* ── Search + Bulk actions ── */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative min-w-0 flex-1 max-w-sm">
+              <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="search"
+                id="student-search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Student name, enrollment, section..."
+                className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-3 text-sm
+                           text-text placeholder:text-muted focus:border-accent focus:outline-none
+                           focus:ring-2 focus:ring-accent/30"
+              />
+            </div>
+            <span className="text-xs text-muted">
+              Showing {filteredStudents.length}/{students.length}
+            </span>
+            <button
+              type="button"
+              disabled={bulkSaving || filteredStudents.length === 0}
+              onClick={() => void handleBulkMark('submitted')}
+              className="rounded-lg bg-emerald-500 px-3.5 py-2 text-xs font-semibold text-white
+                         shadow-soft transition-colors hover:bg-emerald-600
+                         disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {bulkSaving ? 'Saving…' : 'Mark All Done ✓'}
+            </button>
+            <button
+              type="button"
+              disabled={bulkSaving || filteredStudents.length === 0}
+              onClick={() => void handleBulkMark('not-submitted')}
+              className="rounded-lg border border-border bg-surface px-3.5 py-2 text-xs font-semibold
+                         text-text transition-colors hover:bg-secondary
+                         disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Mark All Pending
+            </button>
           </div>
-          <p className="text-sm font-medium text-text">No assignments yet</p>
-          <p className="mt-1 text-sm text-muted">
-            Click "+ New" to create your first assignment and start tracking submissions.
-          </p>
-        </section>
+
+          {/* ── Excel-style grid ── */}
+          {students.length === 0 ? (
+            <div className="rounded-xl border-2 border-dashed border-border bg-surface p-10 text-center">
+              <p className="text-sm font-medium text-text">Koi student nahi mila</p>
+              <p className="mt-1 text-sm text-muted">
+                Pehle Roster page mein students import karein.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-soft">
+              {gridLoading && (
+                <div className="flex items-center gap-2 border-b border-border bg-accent/5 px-5 py-2.5">
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                  <span className="text-xs text-muted">Loading submissions…</span>
+                </div>
+              )}
+              <table className="w-full text-left text-sm">
+                {/* ── Column header ── */}
+                <thead>
+                  <tr className="border-b border-border bg-gray-50">
+                    <th className="py-3 pl-4 pr-2 text-xs font-semibold uppercase tracking-wide text-muted w-10">
+                      SN
+                    </th>
+                    <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-muted whitespace-nowrap">
+                      Enrollment
+                    </th>
+                    <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-muted">
+                      Student Name
+                    </th>
+                    {activeSlotNumbers.map((n) => (
+                      <th
+                        key={n}
+                        className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted whitespace-nowrap"
+                      >
+                        <span className="inline-flex flex-col items-center gap-0.5">
+                          <span
+                            className={[
+                              'inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold',
+                              slots.some((s) => s.slotNumber === n)
+                                ? 'bg-accent/10 text-accent'
+                                : 'bg-gray-100 text-gray-400',
+                            ].join(' ')}
+                          >
+                            {n}
+                          </span>
+                          <span className="text-[10px] text-muted">Assign</span>
+                        </span>
+                      </th>
+                    ))}
+                    <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-blue-600 whitespace-nowrap">
+                      <span className="inline-flex flex-col items-center gap-0.5">
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-[11px] font-bold">
+                          L
+                        </span>
+                        <span className="text-[10px]">Lab File</span>
+                      </span>
+                    </th>
+                  </tr>
+                </thead>
+
+                {/* ── Student rows ── */}
+                <tbody className="divide-y divide-border">
+                  {filteredStudents.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={3 + activeSlotNumbers.length + 1}
+                        className="py-8 text-center text-sm text-muted"
+                      >
+                        Search se koi student match nahi hua.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredStudents.map((student, idx) => (
+                      <tr
+                        key={student.id}
+                        className="transition-colors hover:bg-gray-50/60"
+                      >
+                        {/* SN */}
+                        <td className="py-2.5 pl-4 pr-2 text-xs font-medium text-muted">
+                          {idx + 1}
+                        </td>
+
+                        {/* Enrollment */}
+                        <td className="px-3 py-2.5 font-mono text-xs text-muted whitespace-nowrap">
+                          {student.enrollmentNumber ?? '—'}
+                        </td>
+
+                        {/* Name */}
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="h-7 w-7 flex-shrink-0 rounded-full bg-accent/10
+                                            flex items-center justify-center text-[11px]
+                                            font-bold text-accent">
+                              {getInitials(student.name)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-text">
+                                {student.name}
+                              </p>
+                              {student.sectionLabel && (
+                                <p className="text-[11px] text-muted">{student.sectionLabel}</p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Assignment slots (1-5) */}
+                        {activeSlotNumbers.map((n) => {
+                          const key = slotKey(student.id, n);
+                          const status = assignGrid[student.id]?.[n] ?? 'not-submitted';
+                          return (
+                            <td key={n} className="px-3 py-2.5 text-center">
+                              <StatusCell
+                                status={status}
+                                saving={savingCells[key] === true}
+                                label={`${student.name} — Assignment ${n}`}
+                                onToggle={() => void toggleAssignCell(student.id, n as 1 | 2 | 3 | 4 | 5)}
+                                color="green"
+                              />
+                            </td>
+                          );
+                        })}
+
+                        {/* Lab File */}
+                        <td className="px-3 py-2.5 text-center">
+                          <StatusCell
+                            status={labGrid[student.id] ?? 'not-submitted'}
+                            saving={savingLab[student.id] === true}
+                            label={`${student.name} — Lab File`}
+                            onToggle={() => void toggleLabCell(student.id)}
+                            color="blue"
+                          />
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+
+                {/* ── Footer totals row ── */}
+                {filteredStudents.length > 0 && (
+                  <tfoot>
+                    <tr className="border-t-2 border-border bg-gray-50">
+                      <td
+                        colSpan={3}
+                        className="py-2.5 pl-4 pr-3 text-xs font-semibold text-muted"
+                      >
+                        Submitted ↓
+                      </td>
+                      {activeSlotNumbers.map((n) => (
+                        <td key={n} className="px-3 py-2.5 text-center">
+                          <span
+                            className={[
+                              'inline-flex items-center justify-center rounded-full px-2 py-0.5',
+                              'text-xs font-bold',
+                              slotSubmittedCounts[n] > 0
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-gray-100 text-gray-400',
+                            ].join(' ')}
+                          >
+                            {slotSubmittedCounts[n]}/{students.length}
+                          </span>
+                        </td>
+                      ))}
+                      <td className="px-3 py-2.5 text-center">
+                        <span
+                          className={[
+                            'inline-flex items-center justify-center rounded-full px-2 py-0.5',
+                            'text-xs font-bold',
+                            labSubmittedCount > 0
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-gray-100 text-gray-400',
+                          ].join(' ')}
+                        >
+                          {labSubmittedCount}/{students.length}
+                        </span>
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

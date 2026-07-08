@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyPresentList, parsePresentTokens, previewPresentList } from './quickAttendance';
+import { applyAbsentList, applyPresentList, parsePresentTokens, previewPresentList } from './quickAttendance';
 
 const roster = [
   { id: 'a', enrollmentNumber: '0131CS241001' }, // 001
@@ -69,7 +69,7 @@ describe('applyPresentList', () => {
     expect(result.matchedCount).toBe(1);
   });
 
-  it('reports ambiguous tokens that match more than one student (and marks both present)', () => {
+  it('reports ambiguous tokens that match more than one student without marking anyone', () => {
     const dupRoster = [
       { id: 'x', enrollmentNumber: '0131CS241001' }, // 001
       { id: 'y', enrollmentNumber: '9999ZZ999001' }, // 001 (same last three)
@@ -77,8 +77,8 @@ describe('applyPresentList', () => {
     ];
     const result = applyPresentList(dupRoster, '001');
     expect(result.ambiguous).toEqual(['001']);
-    expect(result.statusById).toEqual({ x: 'present', y: 'present' });
-    expect(result.matchedCount).toBe(2);
+    expect(result.statusById).toEqual({});
+    expect(result.matchedCount).toBe(0);
   });
 
   it('does not change anyone when the input is empty', () => {
@@ -100,6 +100,33 @@ describe('applyPresentList', () => {
   });
 });
 
+describe('applyAbsentList', () => {
+  it('marks matched students absent and everyone else present in first-time mode', () => {
+    const result = applyAbsentList(roster, '002, D01', { mode: 'first-time' });
+    expect(result.statusById).toEqual({ a: 'present', b: 'absent', c: 'present', d: 'absent' });
+    expect(result.matchedCount).toBe(2);
+    expect(result.notFound).toEqual([]);
+    expect(result.ambiguous).toEqual([]);
+  });
+
+  it('marks matched students absent without changing everyone else in correction mode', () => {
+    const result = applyAbsentList(roster, '067');
+    expect(result.statusById).toEqual({ c: 'absent' });
+    expect(result.matchedCount).toBe(1);
+  });
+
+  it('does not mark ambiguous absent-list tokens', () => {
+    const dupRoster = [
+      { id: 'x', enrollmentNumber: '0131CS241001' },
+      { id: 'y', enrollmentNumber: '9999ZZ999001' },
+    ];
+    const result = applyAbsentList(dupRoster, '001', { mode: 'first-time' });
+    expect(result.ambiguous).toEqual(['001']);
+    expect(result.statusById).toEqual({ x: 'present', y: 'present' });
+    expect(result.matchedCount).toBe(0);
+  });
+});
+
 describe('previewPresentList', () => {
   it('lists matched students (in roster order) with the token that matched', () => {
     const preview = applyPreview('067, 001');
@@ -115,6 +142,15 @@ describe('previewPresentList', () => {
     const preview = applyPreview('001, 999');
     expect(preview.matched.map((m) => m.id)).toEqual(['a']);
     expect(preview.notFound).toEqual(['999']);
+  });
+
+  it('does not include ambiguous matches in the unique matched list', () => {
+    const preview = previewPresentList([
+      { id: 'x', enrollmentNumber: '0131CS241001' },
+      { id: 'y', enrollmentNumber: '9999ZZ999001' },
+    ], '001');
+    expect(preview.matched).toEqual([]);
+    expect(preview.ambiguous).toEqual(['001']);
   });
 });
 

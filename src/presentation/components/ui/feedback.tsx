@@ -8,11 +8,16 @@ export interface AlertProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'
   readonly action?: ReactNode;
 }
 
-export function Alert({ tone = 'info', title, action, children, className, ...props }: AlertProps) {
+export function Alert({ tone = 'info', title, action, children, className, role, ...props }: AlertProps) {
   const styles = toneClass[tone];
+  const alertRole = role ?? (tone === 'danger' ? 'alert' : undefined);
 
   return (
-    <div className={cx('flex items-start gap-3 rounded-card border p-4', styles.bg, styles.border, className)} role="status" {...props}>
+    <div
+      className={cx('flex items-start gap-3 rounded-card border p-4', styles.bg, styles.border, className)}
+      role={alertRole}
+      {...props}
+    >
       <span className={cx('mt-1 h-2 w-2 shrink-0 rounded-full', styles.dot)} aria-hidden="true" />
       <div className="min-w-0 flex-1">
         {title && <p className={cx('text-sm font-semibold', styles.text)}>{title}</p>}

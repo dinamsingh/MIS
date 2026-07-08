@@ -1,94 +1,8 @@
 -- ============================================================================
--- Migration: 0024_quiz_section_roster_options
--- Store the section a quiz is published for, expose a safe roster dropdown for
--- /quiz/:token, and enforce that section on new section-scoped quizzes.
---
--- Existing quizzes keep section_id = NULL and continue to work as before. New
--- quizzes created by the app save the currently selected section id.
+-- Migration: 0025_quiz_specific_access_errors
+-- Return precise quiz access denial reasons instead of collapsing every failure
+-- into "not-registered". Safe to run after 0024; it only replaces the RPC.
 -- ============================================================================
-
-alter table public.quizzes
-    add column if not exists section_id uuid references public.sections (id) on delete set null;
-
-create index if not exists idx_quizzes_section_id on public.quizzes (section_id);
-
-create or replace function public.list_quiz_roster_options(p_quiz_id text)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-    v_quiz       public.quizzes%rowtype;
-    v_subject_id uuid;
-    v_rows       jsonb;
-begin
-    if auth.uid() is null then
-        return '[]'::jsonb;
-    end if;
-
-    select * into v_quiz
-    from public.quizzes
-    where share_token = p_quiz_id or id::text = p_quiz_id
-    order by case when share_token = p_quiz_id then 0 else 1 end
-    limit 1;
-
-    if not found then
-        return '[]'::jsonb;
-    end if;
-
-    select subject_id into v_subject_id
-    from public.syllabus_units
-    where id = v_quiz.unit_id;
-
-    with target_sections as (
-        -- Preferred path for quizzes created after this migration.
-        select s.id, s.name, s.batch, s.semester, s.department
-        from public.sections s
-        where v_quiz.section_id is not null
-          and s.id = v_quiz.section_id
-
-        union
-
-        -- Backward-compatible path for older quizzes that only know unit/subject.
-        select distinct s.id, s.name, s.batch, s.semester, s.department
-        from public.teacher_assignments ta
-        join public.sections s
-          on s.batch = ta.batch_id
-         and upper(right(s.name, 1)) = ta.section
-        where v_quiz.section_id is null
-          and v_quiz.owner_id is not null
-          and ta.teacher_id = v_quiz.owner_id
-          and ta.subject_id = v_subject_id
-    )
-    select coalesce(
-        jsonb_agg(
-            jsonb_build_object(
-                'enrollmentNumber', st.enrollment_number,
-                'name', coalesce(nullif(btrim(st.name), ''), st.enrollment_number),
-                'sectionId', ts.id,
-                'sectionName', ts.name,
-                'batch', ts.batch,
-                'semester', ts.semester,
-                'department', ts.department
-            )
-            order by ts.name, st.enrollment_number
-        ),
-        '[]'::jsonb
-    )
-    into v_rows
-    from public.students st
-    join target_sections ts on ts.id = st.section_id
-    where st.enrollment_number is not null;
-
-    return v_rows;
-end;
-$$;
-
-grant execute on function public.list_quiz_roster_options(text) to authenticated;
-
-drop function if exists public.request_quiz_access(text, text);
-drop function if exists public.request_quiz_access(uuid, text);
 
 create or replace function public.request_quiz_access(
     p_quiz_id text,
@@ -120,8 +34,6 @@ begin
         return jsonb_build_object('status', 'denied', 'reason', 'quiz-not-found');
     end if;
 
-    -- Teacher preview: the owning teacher can view their own quiz without
-    -- being on the roster. No attempt is recorded; answers stay hidden.
     if v_quiz.owner_id is not null and v_quiz.owner_id = v_uid then
         select coalesce(
             jsonb_agg(jsonb_build_object('id', q.id, 'text', q.text, 'options', q.options) order by q.id),
@@ -142,20 +54,16 @@ begin
         );
     end if;
 
-    -- 1) Roster lookup by the verified Google email (already-bound students).
     select * into v_roster
     from public.student_roster
     where lower(email) = lower(v_email)
     limit 1;
 
-    -- 2) Not bound by email yet -> enrollment self-registration.
     if not found then
         if p_provided_enrollment is null then
             return jsonb_build_object('status', 'enrollment-required');
         end if;
 
-        -- For new section-scoped quizzes, do not bind an email to an enrollment
-        -- unless that enrollment belongs to the quiz's section.
         if v_quiz.section_id is not null and not exists (
             select 1
             from public.students st
@@ -184,7 +92,6 @@ begin
         returning * into v_roster;
     end if;
 
-    -- 3) Upsert the managed student row, keyed by the stable enrollment number.
     insert into public.students (name, email, enrollment_number)
     values (coalesce(v_roster.name, v_email), v_email, v_roster.enrollment_number)
     on conflict (enrollment_number) do update
@@ -198,7 +105,6 @@ begin
         return jsonb_build_object('status', 'denied', 'reason', 'wrong-section');
     end if;
 
-    -- 4) A prior attempt short-circuits to already-attempted.
     declare
         v_attempt public.quiz_attempts%rowtype;
     begin
@@ -216,13 +122,11 @@ begin
         end if;
     end;
 
-    -- 5) Enforce the active window.
     if (v_quiz.active_from is not null and now() < v_quiz.active_from)
        or (v_quiz.active_until is not null and now() > v_quiz.active_until) then
         return jsonb_build_object('status', 'denied', 'reason', 'not-active');
     end if;
 
-    -- 6) Grant: answer-free quiz payload.
     select coalesce(
         jsonb_agg(jsonb_build_object('id', q.id, 'text', q.text, 'options', q.options) order by q.id),
         '[]'::jsonb

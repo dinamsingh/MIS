@@ -33,6 +33,7 @@ import { useAuth } from '@presentation/auth/AuthContext';
 import {
   isValidEnrollmentNumber,
   type QuizAccess,
+  type QuizAccessDeniedReason,
   type QuizPayloadNoAnswers,
 } from '@domain/services/rosterService';
 import { messages } from '@domain/shared/messages';
@@ -62,9 +63,50 @@ export interface StudentQuizAccessViewProps {
 type Phase =
   | { kind: 'resolving' }
   | { kind: 'enrollment-required'; submitting: boolean; error: string | null }
-  | { kind: 'denied'; reason: 'not-registered' | 'not-active' }
+  | { kind: 'denied'; reason: QuizAccessDeniedReason }
   | { kind: 'already-attempted'; score: number; totalMarks: number }
   | { kind: 'granted'; quiz: QuizPayloadNoAnswers; preview: boolean };
+
+/**
+ * Specific title/body copy per denial reason. Exported so other student-facing
+ * surfaces (e.g. {@link import('./QuizAttemptView').default}) that receive a
+ * `SubmitAttemptDeniedReason` (a subset of this) show the exact same wording
+ * instead of a generic fallback.
+ */
+export const DENIED_COPY: Record<QuizAccessDeniedReason, { title: string; body: string }> = {
+  'not-authenticated': {
+    title: 'Sign in required',
+    body: 'Your sign-in session could not be verified. Please sign in again with Google.',
+  },
+  'quiz-not-found': {
+    title: 'Quiz link not found',
+    body: 'This quiz link is invalid or the quiz has been removed. Ask your teacher for a fresh link.',
+  },
+  'enrollment-not-found': {
+    title: 'Enrollment not found',
+    body: 'This enrollment number is not present in the quiz roster. Check the number or contact your teacher.',
+  },
+  'enrollment-already-bound': {
+    title: 'Enrollment already linked',
+    body: 'This enrollment number is already linked with another Google account. Ask your teacher to reset the binding.',
+  },
+  'wrong-section': {
+    title: 'Wrong section for this quiz',
+    body: 'Your enrollment belongs to a different section than this quiz. Ask your teacher for the correct quiz link.',
+  },
+  'not-registered': {
+    title: 'Access not available',
+    body: messages.auth.notRegistered,
+  },
+  'not-active': {
+    title: 'Quiz not available',
+    body: 'This quiz is not open right now. It may not have started yet or the deadline has passed.',
+  },
+  'teacher-account': {
+    title: 'Teacher accounts cannot attempt quizzes',
+    body: 'This Google account is registered as a teacher and cannot self-register as a student. Sign in with your personal student account instead.',
+  },
+};
 
 /** Card wrapper shared by every message/prompt state. */
 function AccessCard({ title, children }: { title: string; children: ReactNode }) {
@@ -305,7 +347,7 @@ export default function StudentQuizAccessView({
               </>
             )}
             {phase.error !== null && (
-              <p role="alert" className="text-sm font-medium text-red">
+              <p role="alert" className="text-sm font-medium text-status-red">
                 {phase.error}
               </p>
             )}
@@ -322,15 +364,9 @@ export default function StudentQuizAccessView({
     }
 
     case 'denied':
-      return phase.reason === 'not-active' ? (
-        <AccessCard title="Quiz not available">
-          <p role="alert">
-            This quiz is not open right now. It may not have started yet or the deadline has passed.
-          </p>
-        </AccessCard>
-      ) : (
-        <AccessCard title="Access not available">
-          <p role="alert">{messages.auth.notRegistered}</p>
+      return (
+        <AccessCard title={DENIED_COPY[phase.reason].title}>
+          <p role="alert">{DENIED_COPY[phase.reason].body}</p>
         </AccessCard>
       );
 

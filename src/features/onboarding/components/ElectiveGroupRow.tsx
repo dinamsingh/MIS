@@ -46,16 +46,13 @@ export default function ElectiveGroupRow({
   const chosenSections = chosenId ? selection[chosenId]?.sections ?? [] : [];
 
   return (
-    <div className="rounded-xl border border-[#ecedf4] bg-[#fff] p-4">
+    <div className="rounded-control border border-border bg-surface p-4 shadow-[0_1px_0_rgb(var(--color-border)/0.45)]">
       <div className="flex items-center gap-2">
-        <span
-          className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
-          style={{ backgroundColor: '#eef0fe', color: '#4a42d4' }}
-        >
+        <span className="inline-flex items-center rounded-full bg-accent-tint px-2 py-0.5 text-xs font-semibold text-accent">
           Elective
         </span>
-        <span className="text-sm font-semibold text-[#1d2030]">{groupName}</span>
-        <span className="text-xs text-[#969cad]">· pick the one you teach</span>
+        <span className="text-sm font-semibold text-text">{groupName}</span>
+        <span className="text-xs text-muted">· pick the one you teach</span>
       </div>
 
       <div className="mt-3 flex flex-col gap-2">
@@ -66,8 +63,8 @@ export default function ElectiveGroupRow({
             <label
               key={variant.id}
               htmlFor={id}
-              className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 transition-colors ${
-                checked ? 'border-[#5b54e6] bg-[#eef0fe]' : 'border-[#ecedf4] hover:bg-[#f4f5f9]'
+              className={`flex cursor-pointer items-center gap-2 rounded-button border px-3 py-2 transition-colors ${
+                checked ? 'border-accent bg-accent-tint' : 'border-border hover:bg-surface-muted'
               }`}
             >
               <input
@@ -76,10 +73,10 @@ export default function ElectiveGroupRow({
                 name={`elective-group-${groupName}`}
                 checked={checked}
                 onChange={() => pickVariant(variant.id)}
-                className="h-4 w-4 accent-[#5b54e6]"
+                className="h-4 w-4 accent-accent"
               />
-              <span className="text-xs font-medium text-[#969cad]">{variant.code}</span>
-              <span className="truncate text-sm text-[#1d2030]">{variant.name}</span>
+              <span className="text-xs font-medium text-muted">{variant.code}</span>
+              <span className="truncate text-sm text-text">{variant.name}</span>
             </label>
           );
         })}
@@ -87,7 +84,7 @@ export default function ElectiveGroupRow({
 
       {chosenId && (
         <div className="mt-3 flex items-center justify-between gap-3">
-          <span className="text-xs font-medium text-[#5a6072]">Sections</span>
+          <span className="text-xs font-medium text-soft">Sections</span>
           <SectionChips
             selected={chosenSections}
             onChange={(next) => onChangeSubject(chosenId, next)}

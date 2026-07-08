@@ -31,15 +31,16 @@ import { isFeatureEnabled } from '@domain/featureFlags';
 const DashboardPage = lazy(() => import('@presentation/pages/DashboardPage'));
 const TimetablePage = lazy(() => import('@presentation/pages/TimetablePage'));
 const AttendancePage = lazy(() => import('@presentation/pages/AttendancePage'));
+const AttendanceReportPage = lazy(() => import('@presentation/pages/AttendanceReportPage'));
 const SyllabusTrackerPage = lazy(() => import('@presentation/pages/SyllabusTrackerPage'));
 const MarksCalculatorPage = lazy(() => import('@presentation/pages/MarksCalculatorPage'));
 const QuizCreationPage = lazy(() => import('@presentation/pages/QuizCreationPage'));
 const AssignmentPage = lazy(() => import('@presentation/pages/AssignmentPage'));
+const AssignmentSharePage = lazy(() => import('@presentation/pages/AssignmentSharePage'));
 const MaterialPage = lazy(() => import('@presentation/pages/MaterialPage'));
 const RosterPage = lazy(() => import('@presentation/pages/RosterPage'));
 const AnalyticsPage = lazy(() => import('@presentation/pages/AnalyticsPage'));
 const LeaderboardPage = lazy(() => import('@presentation/pages/LeaderboardPage'));
-const HeatmapPage = lazy(() => import('@presentation/pages/HeatmapPage'));
 const StudentQuizAccessPage = lazy(() => import('@presentation/pages/StudentQuizAccessPage'));
 const QuizAttemptPage = lazy(() => import('@presentation/pages/QuizAttemptPage'));
 const OnboardingPage = lazy(() => import('../features/onboarding/OnboardingPage'));
@@ -160,14 +161,15 @@ export default function App() {
               <Route path="/timetable" element={<TimetablePage />} />
               <Route path="/roster" element={<RosterPage />} />
               <Route path="/attendance" element={<AttendancePage />} />
+              <Route path="/attendance/report" element={<AttendanceReportPage />} />
               <Route path="/syllabus" element={<SyllabusTrackerPage />} />
               <Route path="/marks" element={<MarksCalculatorPage />} />
               <Route path="/quizzes" element={<QuizCreationPage />} />
               <Route path="/assignments" element={<AssignmentPage />} />
+              <Route path="/assignments/share" element={<AssignmentSharePage />} />
               <Route path="/material" element={<MaterialPage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
-              <Route path="/heatmap" element={<HeatmapPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route
                 path="/ai/quiz-generator"

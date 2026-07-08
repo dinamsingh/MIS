@@ -132,6 +132,29 @@ export interface QuizPayloadNoAnswers {
   }>;
 }
 
+export type QuizAccessDeniedReason =
+  | 'not-authenticated'
+  | 'quiz-not-found'
+  | 'enrollment-not-found'
+  | 'enrollment-already-bound'
+  | 'wrong-section'
+  | 'not-registered'
+  | 'not-active'
+  /** The signed-in email belongs to a teacher account, which can never
+   * self-register as a student (identity separation, migration 0027). */
+  | 'teacher-account';
+
+/**
+ * Denial reasons `submit_attempt` can return. A subset of
+ * {@link QuizAccessDeniedReason} — submission re-checks identity but not the
+ * active window (a student already granted access may still submit after the
+ * window closes; the window only gates entry, per migration 0020/0024).
+ */
+export type SubmitAttemptDeniedReason = Extract<
+  QuizAccessDeniedReason,
+  'not-authenticated' | 'quiz-not-found' | 'not-registered' | 'teacher-account'
+>;
+
 /**
  * The outcome of resolving a student's request to attempt a quiz.
  *
@@ -152,10 +175,7 @@ export type QuizAccess =
   // opening their own quiz to preview it (roster gate bypassed, no attempt).
   | { status: 'granted'; quiz: QuizPayloadNoAnswers; preview?: boolean }
   | { status: 'enrollment-required' }
-  // `not-registered`: email not on roster / enrollment mismatch / enrollment
-  //   already bound to a different Google account.
-  // `not-active`: the quiz is outside its active window (not yet live or expired).
-  | { status: 'denied'; reason: 'not-registered' | 'not-active' }
+  | { status: 'denied'; reason: QuizAccessDeniedReason }
   | { status: 'already-attempted'; result: AttemptResult };
 
 /**

@@ -47,15 +47,15 @@ export default function ProfileStep({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-[#1d2030]">Verify teacher profile</h1>
-        <p className="mt-1 text-sm text-[#5a6072]">
+        <h1 className="text-2xl font-bold text-text">Verify teacher profile</h1>
+        <p className="mt-1 text-sm text-soft">
           Your registered identity is locked for this setup.
         </p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="onb-name" className="text-sm font-medium text-[#1d2030]">
+          <label htmlFor="onb-name" className="text-sm font-medium text-text">
             Name
           </label>
           <input
@@ -66,19 +66,19 @@ export default function ProfileStep({
             onChange={(event) => onNameChange(event.target.value)}
             placeholder="Teacher name not found"
             className={[
-              'rounded-xl border px-4 py-2.5 text-sm font-semibold text-[#1d2030] placeholder:text-[#969cad]',
+              'rounded-control border px-4 py-2.5 text-sm font-semibold text-text placeholder:text-muted transition-[border-color,box-shadow,background-color] duration-fast',
               nameEditable
-                ? 'border-[#d8dbee] bg-white focus:border-[#5b54e6] focus:outline-none focus:ring-2 focus:ring-[#5b54e6]/20'
-                : 'border-[#ecedf4] bg-[#f4f5f9]',
+                ? 'border-input bg-surface focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25'
+                : 'border-border bg-surface-muted text-soft',
             ].join(' ')}
           />
           {nameEditable && (
-            <p className="text-xs text-[#969cad]">Name not found. Please enter it once for setup.</p>
+            <p className="text-xs text-muted">Name not found. Please enter it once for setup.</p>
           )}
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="onb-email" className="text-sm font-medium text-[#1d2030]">
+          <label htmlFor="onb-email" className="text-sm font-medium text-text">
             College email
           </label>
           <input
@@ -87,13 +87,13 @@ export default function ProfileStep({
             value={profile.email}
             readOnly
             placeholder="Registered email not found"
-            className="rounded-xl border border-[#ecedf4] bg-[#f4f5f9] px-4 py-2.5 text-sm font-semibold text-[#1d2030] placeholder:text-[#969cad]"
+            className="rounded-control border border-border bg-surface-muted px-4 py-2.5 text-sm font-semibold text-soft placeholder:text-muted"
           />
         </div>
       </div>
 
       <fieldset className="flex flex-col gap-3">
-        <legend className="text-sm font-medium text-[#1d2030]">Current session</legend>
+        <legend className="text-sm font-medium text-text">Current session</legend>
         <div className="grid gap-3 sm:grid-cols-2">
           {SESSION_OPTIONS.map((option) => {
             const active = currentSession === option.value;
@@ -104,15 +104,15 @@ export default function ProfileStep({
                 aria-pressed={active}
                 onClick={() => onSessionChange(option.value)}
                 className={[
-                  'rounded-xl border px-4 py-3 text-left transition-colors',
-                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5b54e6]/35',
+                  'rounded-control border px-4 py-3 text-left transition-[border-color,background-color,box-shadow,color] duration-fast',
+                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/35',
                   active
-                    ? 'border-[#5b54e6] bg-[#eef0fe] text-[#1d2030]'
-                    : 'border-[#ecedf4] bg-white text-[#5a6072] hover:bg-[#f4f5f9]',
+                    ? 'border-accent bg-accent-tint text-text shadow-soft'
+                    : 'border-border bg-surface text-soft hover:bg-secondary hover:text-text',
                 ].join(' ')}
               >
                 <span className="block text-sm font-bold">{option.label}</span>
-                <span className="mt-1 block text-xs font-medium text-[#5a6072]">{option.detail}</span>
+                <span className="mt-1 block text-xs font-medium text-muted">{option.detail}</span>
               </button>
             );
           })}
@@ -120,19 +120,19 @@ export default function ProfileStep({
       </fieldset>
 
       <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium text-[#1d2030]">Session batches</span>
+        <span className="text-sm font-medium text-text">Session batches</span>
         {currentSession === null ? (
-          <p className="rounded-xl border border-[#ecedf4] bg-[#f4f5f9] px-4 py-3 text-sm text-[#5a6072]">
+          <p className="rounded-control border border-border bg-surface-muted px-4 py-3 text-sm text-soft">
             Select odd or even session to preview batches.
           </p>
         ) : activeBatches.length === 0 ? (
-          <p className="text-xs text-[#969cad]">No active batches detected.</p>
+          <p className="text-xs text-muted">No active batches detected.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {activeBatches.map((batch) => (
               <span
                 key={batch.id}
-                className="inline-flex items-center rounded-full bg-[#eef0fe] px-3 py-1 text-xs font-semibold text-[#4a42d4]"
+                className="inline-flex items-center rounded-full bg-accent-tint px-3 py-1 text-xs font-semibold text-accent"
               >
                 Batch {batch.id} / Sem {toRoman(batch.currentSem)}
               </span>
@@ -144,7 +144,7 @@ export default function ProfileStep({
       <button
         type="submit"
         disabled={!canContinue}
-        className="mt-2 inline-flex items-center justify-center rounded-xl bg-[#5b54e6] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#4a42d4] disabled:cursor-not-allowed disabled:opacity-50"
+        className="btn-primary mt-2 disabled:cursor-not-allowed"
       >
         Continue
       </button>

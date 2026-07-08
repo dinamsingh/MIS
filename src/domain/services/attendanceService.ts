@@ -111,6 +111,58 @@ function periodKeyToString(key: PeriodKey): string {
     .join('|');
 }
 
+/** One student's tally across a date range: how many held classes they attended. */
+export interface StudentRangeTally {
+  readonly studentId: string;
+  readonly present: number;
+  /** Classes counted as held: present + absent (leave/N-A are excluded). */
+  readonly total: number;
+}
+
+/** A raw attendance row within a date range, as loaded from storage. */
+export interface RangeAttendanceRow {
+  readonly studentId: string;
+  readonly date: string;
+  readonly status: AttendanceStatus;
+}
+
+/**
+ * Aggregate raw attendance rows (already filtered to a date range by the
+ * caller) into one present/total tally per student, and the distinct set of
+ * dates that had at least one recorded row (the "classes held" count).
+ *
+ * Pure and deterministic: given the same rows, always returns the same tally,
+ * so the date-range report can be tested without a live database.
+ */
+export function aggregateRangeTallies(rows: readonly RangeAttendanceRow[]): {
+  readonly tallies: StudentRangeTally[];
+  readonly heldDates: readonly string[];
+} {
+  const byStudent = new Map<string, { present: number; total: number }>();
+  const dates = new Set<string>();
+
+  for (const row of rows) {
+    if (row.status !== 'present' && row.status !== 'absent') {
+      continue;
+    }
+    dates.add(row.date);
+    const entry = byStudent.get(row.studentId) ?? { present: 0, total: 0 };
+    entry.total += 1;
+    if (row.status === 'present') {
+      entry.present += 1;
+    }
+    byStudent.set(row.studentId, entry);
+  }
+
+  const tallies = Array.from(byStudent.entries()).map(([studentId, tally]) => ({
+    studentId,
+    present: tally.present,
+    total: tally.total,
+  }));
+
+  return { tallies, heldDates: Array.from(dates).sort() };
+}
+
 /**
  * Create an in-memory `AttendanceService`.
  *

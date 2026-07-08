@@ -70,6 +70,8 @@ export interface HeatmapViewProps {
   loadStudents: LoadStudents;
   /** The heatmap persistence port. */
   heatmap: HeatmapPersistence;
+  /** Render as an embedded panel inside another report page. */
+  compact?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +133,7 @@ export default function HeatmapView({
   sections,
   loadStudents,
   heatmap,
+  compact = false,
 }: HeatmapViewProps) {
   const [sectionId, setSectionId] = useState('');
 
@@ -253,19 +256,19 @@ export default function HeatmapView({
     'focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30';
 
   return (
-    <section className="flex flex-col gap-6">
+    <section className={compact ? 'flex flex-col gap-3' : 'flex flex-col gap-6'}>
       {/* Header */}
-      <header>
+      {!compact && <header>
         <h2 className="text-2xl font-bold text-text">
           Attendance Heatmap 🗓️
         </h2>
         <p className="mt-1 text-sm text-text-soft">
           Poore semester ka attendance ek nazar me.
         </p>
-      </header>
+      </header>}
 
       {/* Section selection */}
-      <div className="max-w-xs">
+      {!compact && <div className="max-w-xs">
         <select
           id="heatmap-section"
           className={FIELD_CLASS}
@@ -280,28 +283,28 @@ export default function HeatmapView({
             </option>
           ))}
         </select>
-      </div>
+      </div>}
 
       {/* Content area */}
       {!sectionId ? (
-        <div className="card p-6">
+        <div className={compact ? 'rounded-control border border-border bg-background p-4' : 'card p-6'}>
           <p className="text-sm text-text-soft">Choose a section to view the attendance heatmap.</p>
         </div>
       ) : loading ? (
         <CalendarSkeleton />
       ) : error ? (
-        <div className="card p-6">
+        <div className={compact ? 'rounded-control border border-border bg-background p-4' : 'card p-6'}>
           <p role="alert" className="text-sm font-medium text-status-red">
             {messages.error.generic}
           </p>
         </div>
       ) : (
         /* Two-column layout: Calendar (left, larger) | Defaulters (right) */
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className={compact ? 'grid grid-cols-1 gap-3 xl:grid-cols-[1.25fr_0.75fr]' : 'grid grid-cols-1 lg:grid-cols-3 gap-6'}>
           {/* Left column — Daily attendance calendar */}
-          <div className="lg:col-span-2 card p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-base font-semibold text-text">Daily attendance</h3>
+          <div className={compact ? 'rounded-control border border-border bg-background p-3 shadow-soft xl:col-span-1' : 'lg:col-span-2 card p-5 sm:p-6'}>
+            <div className={compact ? 'mb-3 flex items-center justify-between gap-3' : 'flex items-center justify-between mb-5'}>
+              <h3 className={compact ? 'text-sm font-black text-text' : 'text-base font-semibold text-text'}>Daily attendance</h3>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -330,7 +333,7 @@ export default function HeatmapView({
             ) : (
               <>
                 <div className="overflow-x-auto">
-                  <div className="grid grid-cols-7 gap-1.5 min-w-[280px]">
+                  <div className={compact ? 'grid min-w-[260px] grid-cols-7 gap-1' : 'grid grid-cols-7 gap-1.5 min-w-[280px]'}>
                     {/* Weekday headers */}
                     {WEEKDAY_LABELS.map((label) => (
                       <div
@@ -354,7 +357,7 @@ export default function HeatmapView({
                         <div
                           key={dateKey}
                           className={
-                            'aspect-square flex items-center justify-center rounded-md text-xs font-medium transition-colors ' +
+                            `${compact ? 'aspect-square rounded-[6px] text-[11px]' : 'aspect-square rounded-md text-xs'} flex items-center justify-center font-medium transition-colors ` +
                             (hasData
                               ? `${heatColorStyle(level)} text-white`
                               : 'bg-gray-100 text-text-muted')
@@ -378,13 +381,13 @@ export default function HeatmapView({
                 </div>
 
                 {/* Legend: Less ▓▓▓▓▓ More */}
-                <div className="flex items-center gap-2 mt-5 text-xs text-text-soft">
+                <div className={compact ? 'mt-3 flex items-center gap-1.5 text-[11px] text-text-soft' : 'flex items-center gap-2 mt-5 text-xs text-text-soft'}>
                   <span>Less</span>
-                  <span className="inline-block w-4 h-4 rounded-sm bg-green-200" />
-                  <span className="inline-block w-4 h-4 rounded-sm bg-green-300" />
-                  <span className="inline-block w-4 h-4 rounded-sm bg-green-400" />
-                  <span className="inline-block w-4 h-4 rounded-sm bg-green-500" />
-                  <span className="inline-block w-4 h-4 rounded-sm bg-green-700" />
+                  <span className="inline-block h-3.5 w-3.5 rounded-sm bg-green-200" />
+                  <span className="inline-block h-3.5 w-3.5 rounded-sm bg-green-300" />
+                  <span className="inline-block h-3.5 w-3.5 rounded-sm bg-green-400" />
+                  <span className="inline-block h-3.5 w-3.5 rounded-sm bg-green-500" />
+                  <span className="inline-block h-3.5 w-3.5 rounded-sm bg-green-700" />
                   <span>More</span>
                 </div>
               </>
@@ -392,14 +395,14 @@ export default function HeatmapView({
           </div>
 
           {/* Right column — Defaulters list */}
-          <div className="lg:col-span-1 card p-5 sm:p-6 flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-text">
+          <div className={compact ? 'flex flex-col rounded-control border border-border bg-background p-3 shadow-soft xl:col-span-1' : 'lg:col-span-1 card p-5 sm:p-6 flex flex-col'}>
+            <div className={compact ? 'mb-3 flex items-center justify-between gap-3' : 'flex items-center justify-between mb-4'}>
+              <h3 className={compact ? 'text-sm font-black text-text' : 'text-base font-semibold text-text'}>
                 Defaulters (&lt;{DEFAULTER_THRESHOLD}%)
               </h3>
               <button
                 type="button"
-                className="px-3 py-1.5 text-xs font-medium rounded-button bg-accent text-white hover:bg-accent-hover transition-colors"
+                className="rounded-button bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent-hover"
                 onClick={handleExport}
                 disabled={defaulterList.length === 0}
               >
@@ -412,14 +415,14 @@ export default function HeatmapView({
                 {messages.emptyState.noDefaulters}
               </p>
             ) : (
-              <ul className="flex flex-col gap-3 overflow-y-auto max-h-[420px] pr-1">
+              <ul className={compact ? 'flex max-h-[250px] flex-col gap-2 overflow-y-auto pr-1' : 'flex flex-col gap-3 overflow-y-auto max-h-[420px] pr-1'}>
                 {defaulterList.map((student) => (
                   <li
                     key={student.id}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-background hover:bg-gray-100 transition-colors"
+                    className={compact ? 'flex items-center gap-2 rounded-button bg-surface px-2.5 py-2 transition-colors hover:bg-secondary' : 'flex items-center gap-3 p-3 rounded-xl bg-background hover:bg-gray-100 transition-colors'}
                   >
                     {/* Avatar with initials */}
-                    <div className="w-9 h-9 rounded-full bg-accent-tint text-accent flex items-center justify-center text-xs font-bold shrink-0">
+                    <div className={compact ? 'flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-tint text-[11px] font-bold text-accent' : 'w-9 h-9 rounded-full bg-accent-tint text-accent flex items-center justify-center text-xs font-bold shrink-0'}>
                       {getInitials(student.name)}
                     </div>
 

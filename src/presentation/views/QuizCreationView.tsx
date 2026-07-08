@@ -31,6 +31,7 @@ import {
   Badge,
   Alert,
   SkeletonLoader,
+  Dialog,
 } from '@presentation/components/ui';
 
 export const DEFAULT_TIME_LIMIT_MINUTES = 15;
@@ -106,6 +107,12 @@ function emptyQuestion(): QuestionDraft {
 const inputClass =
   'w-full rounded-button border border-border bg-surface px-3 py-2 text-sm text-text ' +
   'placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30';
+
+const aiGenerateButtonClass =
+  "ai-cta-sheen relative isolate overflow-hidden border-emerald-200/70 !bg-[linear-gradient(135deg,rgb(6,78,59)_0%,rgb(13,116,106)_56%,rgb(202,138,4)_135%)] !text-white " +
+  "shadow-[0_10px_26px_rgba(13,116,106,0.24)] ring-1 ring-white/35 transition-[transform,box-shadow,border-color,filter] duration-200 " +
+  "before:pointer-events-none before:absolute before:inset-y-[-35%] before:-left-8 before:z-0 before:w-8 before:rotate-12 before:bg-white/35 before:blur-sm before:content-[''] " +
+  'hover:-translate-y-0.5 hover:border-amber-200/80 hover:shadow-[0_16px_36px_rgba(13,116,106,0.32)] hover:saturate-110 focus-visible:ring-2 focus-visible:ring-amber-200/60 motion-reduce:hover:translate-y-0';
 
 const STATUS_TONE: Record<SavedQuizSummary['status'], 'success' | 'warning' | 'neutral'> = {
   active: 'success',
@@ -189,8 +196,8 @@ export default function QuizCreationView({
   const [loadingQuizzes, setLoadingQuizzes] = useState(true);
   const [quizzesError, setQuizzesError] = useState<string | null>(null);
 
-  // Per-quiz results panel.
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Per-quiz results dialog state.
+  const [resultsQuiz, setResultsQuiz] = useState<SavedQuizSummary | null>(null);
   const [resultsByQuiz, setResultsByQuiz] = useState<Record<string, QuizResultRow[]>>({});
   const [loadingResults, setLoadingResults] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -198,19 +205,36 @@ export default function QuizCreationView({
   const unitIds = useMemo(() => new Set(units.map((u) => u.id)), [units]);
   const selectedUnit = units.find((unit) => unit.id === unitId) ?? null;
 
+  // Build ordering map based on unit index in subject's syllabus
+  const unitOrder = useMemo(() => {
+    const order: Record<string, number> = {};
+    units.forEach((u, i) => {
+      order[u.id] = i;
+    });
+    return order;
+  }, [units]);
+
   const loadQuizzes = useCallback(async () => {
     setLoadingQuizzes(true);
     setQuizzesError(null);
     try {
       const all = await quizAccess.listQuizzes();
       // Scope to the currently-selected subject via its unit ids.
-      setSavedQuizzes(all.filter((q) => unitIds.has(q.unitId)));
+      const filtered = all.filter((q) => unitIds.has(q.unitId));
+      // Sort unit-wise
+      filtered.sort((a, b) => {
+        const orderA = unitOrder[a.unitId] ?? 999;
+        const orderB = unitOrder[b.unitId] ?? 999;
+        if (orderA !== orderB) return orderA - orderB;
+        return b.id.localeCompare(a.id); // fallback to ID descending
+      });
+      setSavedQuizzes(filtered);
     } catch {
       setQuizzesError(messages.error.generic);
     } finally {
       setLoadingQuizzes(false);
     }
-  }, [quizAccess, unitIds]);
+  }, [quizAccess, unitIds, unitOrder]);
 
   useEffect(() => {
     void loadQuizzes();
@@ -259,19 +283,15 @@ export default function QuizCreationView({
     }
   }
 
-  async function toggleResults(quizId: string) {
-    if (expandedId === quizId) {
-      setExpandedId(null);
-      return;
-    }
-    setExpandedId(quizId);
-    if (!resultsByQuiz[quizId]) {
+  async function openResultsModal(quiz: SavedQuizSummary) {
+    setResultsQuiz(quiz);
+    if (!resultsByQuiz[quiz.id]) {
       setLoadingResults(true);
       try {
-        const rows = await quizAccess.listQuizResults(quizId);
-        setResultsByQuiz((prev) => ({ ...prev, [quizId]: rows }));
+        const rows = await quizAccess.listQuizResults(quiz.id);
+        setResultsByQuiz((prev) => ({ ...prev, [quiz.id]: rows }));
       } catch {
-        setResultsByQuiz((prev) => ({ ...prev, [quizId]: [] }));
+        setResultsByQuiz((prev) => ({ ...prev, [quiz.id]: [] }));
       } finally {
         setLoadingResults(false);
       }
@@ -295,7 +315,7 @@ export default function QuizCreationView({
     setBusyKey(`del-${quiz.id}`);
     try {
       await quizAccess.deleteQuiz(quiz.id);
-      if (expandedId === quiz.id) setExpandedId(null);
+      if (resultsQuiz?.id === quiz.id) setResultsQuiz(null);
       await loadQuizzes();
     } catch {
       setQuizzesError(messages.error.generic);
@@ -336,7 +356,7 @@ export default function QuizCreationView({
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={() => onAiGenerate?.()}>
+            <Button variant="outline" className={aiGenerateButtonClass} onClick={() => onAiGenerate?.()}>
               ✨ AI Generate
             </Button>
             <Button
@@ -397,104 +417,45 @@ export default function QuizCreationView({
               </thead>
               <tbody className="divide-y divide-border">
                 {savedQuizzes.map((quiz) => {
-                  const isOpen = expandedId === quiz.id;
-                  const results = resultsByQuiz[quiz.id] ?? [];
                   return (
-                    <>
-                      <tr key={quiz.id} className="align-top">
-                        <td className="px-4 py-3">
-                          <p className="font-semibold text-text">{quiz.unitName}</p>
-                          <p className="mt-0.5 text-xs text-muted">
-                            {formatWindow(quiz.activeFrom, quiz.activeUntil)} · {quiz.timeLimitMinutes} min
-                          </p>
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge tone={STATUS_TONE[quiz.status]} size="sm">
-                            {STATUS_LABEL[quiz.status]}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 text-text">{quiz.questionCount}</td>
-                        <td className="px-4 py-3 text-text">{quiz.responseCount}</td>
-                        <td className="px-4 py-3 text-text">
-                          {quiz.averageScore !== null
-                            ? `${quiz.averageScore.toFixed(1)} / ${quiz.totalMarks}`
-                            : '—'}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button size="sm" variant="ghost" onClick={() => void handleCopyLink(quiz.shareToken)}>
-                              Copy link
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => void toggleResults(quiz.id)}>
-                              {isOpen ? 'Hide' : 'Results'}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="danger"
-                              loading={busyKey === `del-${quiz.id}`}
-                              onClick={() => void handleDeleteQuiz(quiz)}
-                            >
-                              Delete
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                      {isOpen && (
-                        <tr key={`${quiz.id}-results`}>
-                          <td colSpan={6} className="bg-surface-muted/30 px-4 py-4">
-                            {loadingResults && !resultsByQuiz[quiz.id] ? (
-                              <p className="text-sm text-muted">Loading submissions…</p>
-                            ) : results.length === 0 ? (
-                              <p className="text-sm text-muted">{messages.emptyState.noQuizAttempts}</p>
-                            ) : (
-                              <div className="overflow-hidden rounded-control border border-border bg-surface">
-                                <table className="w-full text-left text-sm">
-                                  <thead>
-                                    <tr className="border-b border-border bg-surface-muted/40">
-                                      <th className="px-3 py-2 text-[11px] font-bold uppercase text-muted">Student</th>
-                                      <th className="px-3 py-2 text-[11px] font-bold uppercase text-muted">Enrollment</th>
-                                      <th className="px-3 py-2 text-[11px] font-bold uppercase text-muted">Section</th>
-                                      <th className="px-3 py-2 text-[11px] font-bold uppercase text-muted">Score</th>
-                                      <th className="px-3 py-2 text-[11px] font-bold uppercase text-muted">Submitted</th>
-                                      <th className="px-3 py-2 text-right text-[11px] font-bold uppercase text-muted">Action</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-border">
-                                    {results.map((r) => (
-                                      <tr key={r.studentId}>
-                                        <td className="px-3 py-2 font-medium text-text">{r.studentName}</td>
-                                        <td className="px-3 py-2 font-mono text-xs text-muted">
-                                          {r.enrollmentNumber ?? '—'}
-                                        </td>
-                                        <td className="px-3 py-2 text-muted">
-                                          {r.section ? formatSectionLabel(r.section) : '—'}
-                                        </td>
-                                        <td className="px-3 py-2 text-text">
-                                          {r.score} / {r.totalMarks}
-                                        </td>
-                                        <td className="px-3 py-2 text-xs text-muted">
-                                          {formatDateTime(r.submittedAt)}
-                                        </td>
-                                        <td className="px-3 py-2 text-right">
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            loading={busyKey === `att-${quiz.id}-${r.studentId}`}
-                                            onClick={() => void handleRemoveAttempt(quiz.id, r)}
-                                          >
-                                            Remove attempt
-                                          </Button>
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      )}
-                    </>
+                    <tr key={quiz.id} className="align-top">
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-text">{quiz.unitName}</p>
+                        <p className="mt-0.5 text-xs text-muted">
+                          {formatWindow(quiz.activeFrom, quiz.activeUntil)} · {quiz.timeLimitMinutes} min
+                        </p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge tone={STATUS_TONE[quiz.status]} size="sm">
+                          {STATUS_LABEL[quiz.status]}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-text">{quiz.questionCount}</td>
+                      <td className="px-4 py-3 text-text">{quiz.responseCount}</td>
+                      <td className="px-4 py-3 text-text">
+                        {quiz.averageScore !== null
+                          ? `${quiz.averageScore.toFixed(1)} / ${quiz.totalMarks}`
+                          : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button size="sm" variant="ghost" onClick={() => void handleCopyLink(quiz.shareToken)}>
+                            Copy link
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => void openResultsModal(quiz)}>
+                            Results
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            loading={busyKey === `del-${quiz.id}`}
+                            onClick={() => void handleDeleteQuiz(quiz)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>
@@ -650,6 +611,67 @@ export default function QuizCreationView({
           </form>
         </Card>
       )}
+      {/* ── Results Detail Dialog Modal ── */}
+      <Dialog
+        open={resultsQuiz !== null}
+        onOpenChange={(open) => {
+          if (!open) setResultsQuiz(null);
+        }}
+        title={resultsQuiz ? `Results: ${resultsQuiz.unitName}` : 'Quiz Results'}
+        description={resultsQuiz ? `Submissions log for ${resultsQuiz.title}` : undefined}
+      >
+        {resultsQuiz && (
+          <div className="space-y-4">
+            {loadingResults && !resultsByQuiz[resultsQuiz.id] ? (
+              <p className="text-sm text-muted py-8 text-center">Loading submissions…</p>
+            ) : (resultsByQuiz[resultsQuiz.id] ?? []).length === 0 ? (
+              <p className="text-sm text-muted py-8 text-center">{messages.emptyState.noQuizAttempts}</p>
+            ) : (
+              <div className="overflow-hidden rounded-control border border-border bg-surface">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-border bg-surface-muted/40">
+                      <th className="px-3 py-2 font-bold uppercase text-muted">Student</th>
+                      <th className="px-3 py-2 font-bold uppercase text-muted">Enrollment</th>
+                      <th className="px-3 py-2 font-bold uppercase text-muted">Section</th>
+                      <th className="px-3 py-2 font-bold uppercase text-muted">Score</th>
+                      <th className="px-3 py-2 font-bold uppercase text-muted">Submitted</th>
+                      <th className="px-3 py-2 text-right font-bold uppercase text-muted">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {(resultsByQuiz[resultsQuiz.id] ?? []).map((r) => (
+                      <tr key={r.studentId} className="hover:bg-surface-muted/30">
+                        <td className="px-3 py-2 font-medium text-text">{r.studentName}</td>
+                        <td className="px-3 py-2 font-mono text-muted">{r.enrollmentNumber ?? '—'}</td>
+                        <td className="px-3 py-2 text-muted">{r.section ? formatSectionLabel(r.section) : '—'}</td>
+                        <td className="px-3 py-2 font-black text-accent">{r.score} / {r.totalMarks}</td>
+                        <td className="px-3 py-2 text-muted">{formatDateTime(r.submittedAt)}</td>
+                        <td className="px-3 py-2 text-right">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            loading={busyKey === `att-${resultsQuiz.id}-${r.studentId}`}
+                            onClick={() => void handleRemoveAttempt(resultsQuiz.id, r)}
+                            className="text-status-red hover:bg-status-red/10"
+                          >
+                            Remove
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="flex justify-end pt-2">
+              <Button variant="secondary" onClick={() => setResultsQuiz(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+      </Dialog>
     </div>
   );
 }

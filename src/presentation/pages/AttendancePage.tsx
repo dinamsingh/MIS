@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import AttendanceView, { type AttendanceOption, type AttendanceSectionOption, type RosterStudent } from '@presentation/views/AttendanceView';
-import { createAttendanceAccess } from '@data/access/attendanceAccess';
+import { createAttendanceAccess, migrateLocalStatusStore } from '@data/access/attendanceAccess';
 import { createLocalDemoAttendanceAccess, isLocalDemoMode, listDemoRoster } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
@@ -43,6 +43,12 @@ export default function AttendancePage() {
     () => (isLocalDemoMode() ? createLocalDemoAttendanceAccess(loadRoster) : supabaseAttendance),
     [],
   );
+
+  useEffect(() => {
+    if (!isLocalDemoMode()) {
+      void migrateLocalStatusStore(supabase);
+    }
+  }, []);
 
   // Section + subject both come from the global top-bar selectors — no per-page
   // pickers. Attendance is scoped to the one globally-selected subject.

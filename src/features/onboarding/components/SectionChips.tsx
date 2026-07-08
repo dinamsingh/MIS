@@ -32,11 +32,11 @@ export default function SectionChips({ selected, onChange, idPrefix }: SectionCh
             aria-pressed={active}
             onClick={() => toggle(section)}
             className={[
-              'h-8 w-8 rounded-full text-sm font-semibold transition-colors',
-              'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5b54e6]/40',
+              'h-8 w-8 rounded-full text-sm font-semibold transition-[border-color,background-color,color,box-shadow] duration-fast',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
               active
-                ? 'bg-[#5b54e6] text-white shadow-sm'
-                : 'bg-[#f4f5f9] text-[#5a6072] border border-[#ecedf4] hover:bg-[#eef0fe]',
+                ? 'bg-accent text-surface shadow-soft'
+                : 'border border-border bg-surface-muted text-soft hover:bg-accent-tint hover:text-accent',
             ].join(' ')}
           >
             {section}

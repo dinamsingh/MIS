@@ -27,6 +27,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { QuizPayloadNoAnswers } from '@domain/services/rosterService';
 import type { SubmitAttemptOutcome } from '@data/access/parsers';
 import { messages } from '@domain/shared/messages';
+import { DENIED_COPY } from './StudentQuizAccessView';
+import { Button } from '@presentation/components/ui';
 
 /** The function that submits an attempt to the server (RPC wrapper). */
 export type SubmitAttemptFn = (
@@ -94,8 +96,13 @@ export default function QuizAttemptView({
             });
             break;
           case 'denied':
+            // Show the specific reason's copy (e.g. "teacher-account",
+            // "quiz-not-found") instead of a single generic message, so the
+            // student sees exactly why the submission was denied.
+            setPhase({ kind: 'error', message: DENIED_COPY[outcome.reason].body });
+            break;
           default:
-            setPhase({ kind: 'error', message: messages.auth.notRegistered });
+            setPhase({ kind: 'error', message: messages.error.generic });
             break;
         }
       } catch {
@@ -257,14 +264,14 @@ export default function QuizAttemptView({
 
       {/* Submit button */}
       <div className="mt-8 flex justify-center">
-        <button
-          type="button"
-          className="btn-primary px-8"
+        <Button
+          variant="primary"
           onClick={handleSubmit}
-          disabled={isSubmitting}
+          loading={isSubmitting}
+          className="px-8"
         >
-          {isSubmitting ? 'Submitting…' : 'Submit quiz'}
-        </button>
+          Submit quiz
+        </Button>
       </div>
     </div>
   );

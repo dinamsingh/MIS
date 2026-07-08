@@ -4,6 +4,8 @@ import {
   fromRosterEntry,
   toAttendanceMark,
   fromAttendanceMark,
+  toAttendanceStatusMark,
+  fromAttendanceStatusMark,
   toTopic,
   toUnit,
   toMarkComponent,
@@ -74,8 +76,23 @@ describe('attendance row mappers', () => {
         date: '2024-05-01',
         time_slot: '09:00',
         present: true,
+        status: 'present',
       }),
     ).toEqual({ studentId: 'st1', present: true });
+  });
+
+  it('uses status as the authoritative value when projecting legacy marks', () => {
+    expect(
+      toAttendanceMark({
+        student_id: 'st1',
+        section_id: 's1',
+        subject_id: 'sub1',
+        date: '2024-05-01',
+        time_slot: '09:00',
+        present: false,
+        status: 'leave',
+      }),
+    ).toEqual({ studentId: 'st1', present: false });
   });
 
   it('builds a full upsert row from a key and a mark', () => {
@@ -87,7 +104,22 @@ describe('attendance row mappers', () => {
       date: '2024-05-01',
       time_slot: '09:00',
       present: false,
+      status: 'absent',
     });
+  });
+
+  it('round-trips status marks while deriving present from status', () => {
+    const row = fromAttendanceStatusMark(key, { studentId: 'st1', status: 'not-applicable' });
+    expect(row).toEqual({
+      student_id: 'st1',
+      section_id: 's1',
+      subject_id: 'sub1',
+      date: '2024-05-01',
+      time_slot: '09:00',
+      present: false,
+      status: 'not-applicable',
+    });
+    expect(toAttendanceStatusMark(row)).toEqual({ studentId: 'st1', status: 'not-applicable' });
   });
 });
 

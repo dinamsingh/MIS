@@ -1,14 +1,22 @@
 /**
- * Syllabus Tracker data-access (shared master curriculum + per-teacher progress).
+ * Syllabus Tracker data-access (shared master curriculum + per-teacher,
+ * per-section progress).
  *
  * Reads the SHARED master syllabus (`syllabus_units` + `syllabus_topics`, keyed
  * to `syllabus_subjects`) and overlays the CURRENT teacher's private progress
- * (`teacher_topic_progress`, RLS-scoped to auth.uid()). A topic is "complete"
- * for this teacher iff a progress row exists for it.
+ * for the currently-selected SECTION (`teacher_topic_progress`, RLS-scoped to
+ * auth.uid(), keyed by (teacher_id, section_id, topic_id)). A topic is
+ * "complete" for this teacher IN THIS SECTION iff a progress row exists for
+ * that exact combination.
+ *
+ * Progress is deliberately section-scoped (migration 0026): a teacher teaching
+ * the same subject to two sections (e.g. CSE-5A and CSE-5B) tracks each
+ * section's syllabus completion independently — ticking a topic taught in one
+ * section must NOT mark it taught in another.
  *
  * Toggling completion inserts (taught) or deletes (not taught) the teacher's
- * own progress row — teacher_id defaults to auth.uid() server-side, so the
- * client never sends it.
+ * own progress row for the given section — teacher_id defaults to auth.uid()
+ * server-side, so the client never sends it.
  *
  * Independent of the legacy `subjects/units/topics` tables: subjectId here is a
  * `syllabus_subjects.id` (the same id the global Subject selector provides).
@@ -20,12 +28,12 @@ import { progressPercent, type Topic, type Unit } from '../../domain/services/sy
 
 export { progressPercent };
 
-/** Read-only master + per-teacher completion for the Syllabus Tracker. */
+/** Read-only master + per-teacher, per-section completion for the Syllabus Tracker. */
 export interface SyllabusTrackerAccess {
-  /** Load a subject's master units (each with topics + this teacher's ✓). */
-  listUnits(subjectId: string): Promise<Unit[]>;
-  /** Mark/unmark a topic as taught by the current teacher. */
-  setTopicComplete(topicId: string, complete: boolean): Promise<void>;
+  /** Load a subject's master units for one section (each with topics + this teacher's ✓ in that section). */
+  listUnits(subjectId: string, sectionId: string): Promise<Unit[]>;
+  /** Mark/unmark a topic as taught by the current teacher, scoped to one section. */
+  setTopicComplete(topicId: string, sectionId: string, complete: boolean): Promise<void>;
 }
 
 interface UnitRow {
@@ -47,8 +55,8 @@ export function createSyllabusTrackerAccess(
   client: SupabaseClient = defaultClient,
 ): SyllabusTrackerAccess {
   return {
-    async listUnits(subjectId: string): Promise<Unit[]> {
-      if (!subjectId) {
+    async listUnits(subjectId: string, sectionId: string): Promise<Unit[]> {
+      if (!subjectId || !sectionId) {
         return [];
       }
 
@@ -78,13 +86,16 @@ export function createSyllabusTrackerAccess(
       }
       const topicRows = (topicData ?? []) as TopicRow[];
 
-      // The teacher's own progress (RLS scopes this to auth.uid()).
+      // The teacher's own progress FOR THIS SECTION ONLY (RLS scopes rows to
+      // auth.uid(); section_id further scopes them so another section's ✓
+      // never leaks in).
       const topicIds = topicRows.map((t) => t.id);
       const taught = new Set<string>();
       if (topicIds.length > 0) {
         const { data: progressData, error: progressError } = await client
           .from('teacher_topic_progress')
           .select('topic_id')
+          .eq('section_id', sectionId)
           .in('topic_id', topicIds);
         if (progressError) {
           throw new Error(progressError.message);
@@ -104,21 +115,24 @@ export function createSyllabusTrackerAccess(
       });
     },
 
-    async setTopicComplete(topicId: string, complete: boolean): Promise<void> {
+    async setTopicComplete(topicId: string, sectionId: string, complete: boolean): Promise<void> {
       if (complete) {
         // teacher_id defaults to auth.uid(); ignore duplicate-insert conflicts.
-        const { error } = await client
-          .from('teacher_topic_progress')
-          .upsert({ topic_id: topicId }, { onConflict: 'teacher_id,topic_id', ignoreDuplicates: true });
+        const { error } = await client.from('teacher_topic_progress').upsert(
+          { topic_id: topicId, section_id: sectionId },
+          { onConflict: 'teacher_id,section_id,topic_id', ignoreDuplicates: true },
+        );
         if (error) {
           throw new Error(error.message);
         }
       } else {
-        // RLS restricts the delete to the current teacher's own row.
+        // RLS restricts the delete to the current teacher's own rows; the
+        // section_id filter ensures only THIS section's row is cleared.
         const { error } = await client
           .from('teacher_topic_progress')
           .delete()
-          .eq('topic_id', topicId);
+          .eq('topic_id', topicId)
+          .eq('section_id', sectionId);
         if (error) {
           throw new Error(error.message);
         }

@@ -19,6 +19,7 @@ import {
   type StudentAttendance,
 } from '../../domain/services/heatmapService';
 import type { AttendanceMark } from '../../domain/services/attendanceService';
+import type { AttendanceStatus } from '../../domain/services/attendanceService';
 import { unwrapList } from './support';
 
 export {
@@ -52,6 +53,7 @@ interface AttendanceHeatRow {
   readonly student_id: string;
   readonly date: string;
   readonly present: boolean;
+  readonly status: AttendanceStatus;
 }
 
 /** Create a {@link HeatmapAccess} bound to the given Supabase client. */
@@ -60,7 +62,7 @@ export function createHeatmapAccess(client: SupabaseClient = defaultClient): Hea
     return unwrapList(
       await client
         .from('attendance')
-        .select('student_id, date, present')
+        .select('student_id, date, present, status')
         .eq('section_id', sectionId),
     ) as AttendanceHeatRow[];
   }
@@ -68,9 +70,12 @@ export function createHeatmapAccess(client: SupabaseClient = defaultClient): Hea
   function aggregateByStudent(rows: AttendanceHeatRow[]): StudentAttendance[] {
     const tallies = new Map<string, { attended: number; total: number }>();
     for (const row of rows) {
+      if (row.status !== 'present' && row.status !== 'absent') {
+        continue;
+      }
       const tally = tallies.get(row.student_id) ?? { attended: 0, total: 0 };
       tally.total += 1;
-      if (row.present) {
+      if (row.status === 'present') {
         tally.attended += 1;
       }
       tallies.set(row.student_id, tally);
@@ -95,8 +100,11 @@ export function createHeatmapAccess(client: SupabaseClient = defaultClient): Hea
       const rows = await loadRows(sectionId);
       const marksByDay = new Map<string, AttendanceMark[]>();
       for (const row of rows) {
+        if (row.status !== 'present' && row.status !== 'absent') {
+          continue;
+        }
         const marks = marksByDay.get(row.date) ?? [];
-        marks.push({ studentId: row.student_id, present: row.present });
+        marks.push({ studentId: row.student_id, present: row.status === 'present' });
         marksByDay.set(row.date, marks);
       }
       const levels: Record<string, number> = {};

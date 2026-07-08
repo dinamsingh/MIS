@@ -8,6 +8,7 @@
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@presentation/auth';
 import { messages } from '@domain/shared/messages';
 import { isAtRisk, classAverage } from '@domain/services/analyticsService';
@@ -105,6 +106,7 @@ export default function DashboardView({
   sectionNames = {},
 }: DashboardViewProps) {
   const { actor } = useAuth();
+  const navigate = useNavigate();
   const teacherName = useMemo(
     () => actor.kind === 'teacher'
       ? actor.email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
@@ -279,6 +281,7 @@ export default function DashboardView({
   const attPct = resolvedSummary.avgAttendancePercent;
   const attColor = attPct >= 75 ? 'bg-status-green' : attPct >= 60 ? 'bg-status-amber' : 'bg-status-red';
   const openStudentsModal = useCallback(() => setShowStudentsModal(true), []);
+  const openAttendanceReport = useCallback(() => navigate('/attendance/report'), [navigate]);
 
   const statCards = useMemo(() => [
     {
@@ -305,7 +308,7 @@ export default function DashboardView({
       trendDirection: resolvedSummary.avgAttendancePercent >= 75 ? 'up' as const : 'down' as const,
       tone: resolvedSummary.avgAttendancePercent >= 75 ? 'green' as const : 'amber' as const,
       description: 'Average class attendance',
-      onClick: undefined as (() => void) | undefined,
+      onClick: openAttendanceReport,
     },
     {
       key: 'subjects',
@@ -361,6 +364,7 @@ export default function DashboardView({
     },
   ], [
     averageQuizScore,
+    openAttendanceReport,
     openStudentsModal,
     pendingAssignments,
     resolvedSummary.avgAttendancePercent,

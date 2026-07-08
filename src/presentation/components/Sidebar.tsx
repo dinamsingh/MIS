@@ -13,6 +13,7 @@ interface SidebarProps {
   onNavigate?: (path: string) => void;
   onLogout?: () => void;
   onToggleCollapse?: () => void;
+  onClose?: () => void;
 }
 
 function nameFromEmail(email: string): string {
@@ -45,6 +46,7 @@ export default function Sidebar({
   onNavigate,
   onLogout,
   onToggleCollapse,
+  onClose,
 }: SidebarProps) {
   const isCollapsed = collapsed && !mobile;
   const { actor } = useAuth();
@@ -79,18 +81,25 @@ export default function Sidebar({
     };
   }, [actor.kind, fallbackTeacherName]);
 
+  const handleSidebarNavigate = (path: string) => {
+    if (mobile) {
+      onClose?.();
+    }
+    onNavigate?.(path);
+  };
+
   return (
     <nav
       aria-label="Primary"
       className={[
-        'relative flex h-full max-h-screen flex-col overflow-hidden border-r border-sidebar-border/80 bg-[linear-gradient(180deg,rgb(var(--color-surface))_0%,rgb(var(--color-sidebar))_46%,rgb(var(--color-secondary))_100%)] text-sidebar-foreground shadow-[6px_0_32px_rgba(15,23,42,0.07)] transition-[width] duration-slow ease-entrance motion-reduce:transition-none',
+        'relative flex h-full max-h-screen flex-col overflow-hidden border-r border-sidebar-border/80 bg-[linear-gradient(180deg,rgb(var(--color-surface))_0%,rgb(var(--color-sidebar))_46%,rgb(var(--color-secondary))_100%)] text-sidebar-foreground shadow-[6px_0_30px_rgb(var(--color-text)/0.06)] transition-[width] duration-slow ease-entrance motion-reduce:transition-none',
         isCollapsed ? 'w-20' : 'w-72',
       ].join(' ')}
     >
       <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-border to-transparent" aria-hidden="true" />
 
       <div className="relative flex h-[4.25rem] shrink-0 items-center gap-3 border-b border-sidebar-border/70 bg-surface/70 px-4 backdrop-blur-xl">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-[linear-gradient(135deg,rgb(var(--color-accent))_0%,rgb(var(--color-text-soft))_100%)] text-sm font-black text-surface shadow-[0_10px_28px_rgba(15,23,42,0.18)] ring-1 ring-white/60">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-[linear-gradient(135deg,rgb(var(--color-accent))_0%,rgb(var(--color-text-soft))_100%)] text-sm font-black text-surface shadow-elevated ring-1 ring-border/60">
           A
         </span>
         <AnimatePresence initial={false}>
@@ -126,6 +135,19 @@ export default function Sidebar({
             </svg>
           </button>
         )}
+        {mobile && (
+          <button
+            type="button"
+            onPointerDown={onClose}
+            onClick={onClose}
+            className="icon-btn h-9 w-9 shrink-0 border border-border/70 bg-surface/85 shadow-soft hover:border-border hover:bg-secondary"
+            aria-label="Close navigation"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        )}
       </div>
 
       <div className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden px-3 py-4">
@@ -147,25 +169,25 @@ export default function Sidebar({
 
             <ul className="flex flex-col gap-1">
               {group.items.map((item) => {
-                const isActive = activePath === item.path;
+                const isActive = activePath === item.path || item.children?.some((child) => child.path === activePath);
                 const effectivelyLocked = item.locked && !isFeatureEnabled('ai');
                 return (
-                  <li key={item.id}>
+                  <li key={item.id} className="group flex flex-col gap-1">
                     <motion.button
                       layout
                       type="button"
                       title={isCollapsed ? item.label : undefined}
                       aria-current={isActive ? 'page' : undefined}
                       aria-disabled={effectivelyLocked || undefined}
-                      onClick={() => !effectivelyLocked && onNavigate?.(item.path)}
+                      onClick={() => !effectivelyLocked && handleSidebarNavigate(item.path)}
                       className={[
-                        'motion-interactive group relative flex min-h-touch w-full items-center rounded-control border text-left text-[13px] font-semibold transition-[transform,border-color,background-color,color,box-shadow] duration-fast ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar',
+                        'motion-interactive group relative flex min-h-touch w-full touch-manipulation items-center rounded-control border text-left text-[13px] font-semibold transition-[transform,border-color,background-color,color,box-shadow] duration-fast ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar',
                         isCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
                         effectivelyLocked
                           ? 'cursor-not-allowed border-transparent text-muted/60'
                           : isActive
                             ? 'border-teal-200/20 bg-[linear-gradient(140deg,rgb(6,78,75)_0%,rgb(13,116,106)_52%,rgb(20,184,166)_100%)] text-white shadow-[0_14px_32px_rgba(13,116,106,0.28)] ring-1 ring-teal-100/20'
-                            : 'border-transparent text-soft hover:border-accent/20 hover:bg-[linear-gradient(135deg,rgb(var(--color-accent-tint))_0%,rgb(var(--color-surface))_58%,rgb(var(--color-secondary))_100%)] hover:text-text hover:shadow-[0_10px_24px_rgba(15,23,42,0.10)]',
+                            : 'border-transparent text-soft hover:border-accent/20 hover:bg-[linear-gradient(135deg,rgb(var(--color-accent-tint))_0%,rgb(var(--color-surface))_58%,rgb(var(--color-secondary))_100%)] hover:text-text hover:shadow-elevated',
                       ].join(' ')}
                     >
                       {isActive && (
@@ -184,7 +206,7 @@ export default function Sidebar({
                           'flex h-7 w-7 shrink-0 items-center justify-center rounded-button border text-sm transition-[transform,background-color,border-color,color,box-shadow] duration-fast ease-standard group-hover:scale-105 motion-reduce:transition-none',
                           isActive
                             ? 'border-white/25 bg-white/20 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]'
-                            : 'border-border/70 bg-surface text-soft shadow-[0_2px_8px_rgba(15,23,42,0.04)] group-hover:border-border group-hover:text-text',
+                            : 'border-border/70 bg-surface text-soft shadow-soft group-hover:border-border group-hover:text-text',
                         ].join(' ')}
                         aria-hidden="true"
                       >
@@ -193,6 +215,7 @@ export default function Sidebar({
                       {!isCollapsed && (
                         <AnimatePresence initial={false}>
                           <motion.span
+                            key="label"
                             className="min-w-0 flex-1 truncate"
                             initial={{ opacity: 0, x: -4 }}
                             animate={{ opacity: 1, x: 0 }}
@@ -203,6 +226,7 @@ export default function Sidebar({
                           </motion.span>
                           {item.badge && (
                             <motion.span
+                              key="badge"
                               className={[
                                 'rounded-sm border px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none',
                                 item.badge === 'AI'
@@ -222,6 +246,46 @@ export default function Sidebar({
                         </AnimatePresence>
                       )}
                     </motion.button>
+                    {!isCollapsed && item.children && item.children.length > 0 && (
+                      <motion.ul
+                        className={[
+                          'ml-10 flex flex-col gap-1 overflow-hidden border-l border-sidebar-border/70 pl-2 transition-all duration-fast ease-standard',
+                          isActive ? 'max-h-28 opacity-100' : 'max-h-0 opacity-0 group-hover:max-h-28 group-hover:opacity-100 group-focus-within:max-h-28 group-focus-within:opacity-100',
+                        ].join(' ')}
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: motionDurations.fast, ease: motionEase }}
+                      >
+                        {item.children.map((child) => {
+                          const childActive = activePath === child.path;
+                          return (
+                            <li key={child.id}>
+                              <button
+                                type="button"
+                                onClick={() => handleSidebarNavigate(child.path)}
+                                aria-current={childActive ? 'page' : undefined}
+                                className={[
+                                  'group flex min-h-8 w-full items-center gap-2 rounded-button border px-2 text-left text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                                  childActive
+                                    ? 'border-accent/20 bg-accent-tint text-accent'
+                                    : 'border-transparent text-muted hover:border-accent/15 hover:bg-surface hover:text-text',
+                                ].join(' ')}
+                              >
+                                <span className="flex h-5 min-w-5 items-center justify-center rounded-sm bg-surface text-[9px] font-black text-soft ring-1 ring-border/70">
+                                  {child.icon}
+                                </span>
+                                <span className="min-w-0 flex-1 truncate">{child.label}</span>
+                                {child.badge && (
+                                  <span className="rounded-sm border border-status-green/10 bg-status-green/10 px-1 py-0.5 text-[8px] font-bold uppercase leading-none text-status-green">
+                                    {child.badge}
+                                  </span>
+                                )}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </motion.ul>
+                    )}
                   </li>
                 );
               })}
@@ -233,13 +297,13 @@ export default function Sidebar({
       <div className="relative shrink-0 border-t border-sidebar-border/70 bg-surface/65 p-3 backdrop-blur-xl">
         <div
           className={[
-            'motion-border flex items-center rounded-control border border-border/80 bg-[linear-gradient(135deg,rgb(var(--color-surface))_0%,rgb(var(--color-secondary))_100%)] p-2 shadow-[0_12px_30px_rgba(15,23,42,0.09)]',
+            'motion-border flex items-center rounded-control border border-border/80 bg-[linear-gradient(135deg,rgb(var(--color-surface))_0%,rgb(var(--color-secondary))_100%)] p-2 shadow-elevated',
             isCollapsed ? 'justify-center' : 'gap-2',
           ].join(' ')}
         >
           <button
             type="button"
-            onClick={() => onNavigate?.('/profile')}
+            onClick={() => handleSidebarNavigate('/profile')}
             aria-current={activePath === '/profile' ? 'page' : undefined}
             title="Profile"
             className={[

@@ -67,14 +67,12 @@ export {
   type SubmitAttemptFn,
 } from './QuizAttemptView';
 export {
-  default as AssignmentView,
-  type AssignmentViewProps,
-  type AssignmentViewAccess,
-  type AssignmentSubjectOption,
-  type AssignmentUnitOption,
-  type AssignmentStudent,
-  type AssignmentListItem,
-  type UploadedAssignmentFile,
+  default as AssignmentGridView,
+  type AssignmentGridViewProps,
+  type AssignmentGridAccess,
+  type GridSubject,
+  type GridStudent,
+  type GridSlot,
 } from './AssignmentView';
 export {
   default as MaterialView,

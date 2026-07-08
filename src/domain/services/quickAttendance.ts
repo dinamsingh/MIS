@@ -19,15 +19,15 @@ export interface QuickAttendanceStudent {
   readonly enrollmentNumber?: string;
 }
 
-/** Outcome of applying a pasted present-list to a roster. */
+/** Outcome of applying a pasted roll-list to a roster. */
 export interface PresentListResult {
   /** Per-student status updates. Correction mode includes only matched students. */
   readonly statusById: Record<string, AttendanceStatus>;
   /** Tokens (as entered) that matched no student in the roster. */
   readonly notFound: string[];
-  /** Tokens that matched more than one student (ambiguous - all are marked present). */
+  /** Tokens that matched more than one student. Ambiguous tokens mark nobody. */
   readonly ambiguous: string[];
-  /** How many students were marked present. */
+  /** How many students were explicitly matched and updated. */
   readonly matchedCount: number;
 }
 
@@ -59,7 +59,7 @@ export interface PresentListMatch {
 
 /** Preview of what a pasted present-list will do, shown before confirming. */
 export interface PresentListPreview {
-  /** Students that matched a pasted token (each with the token that matched). */
+  /** Students that uniquely matched a pasted token (each with the token that matched). */
   readonly matched: PresentListMatch[];
   /** Tokens that matched no student in the roster. */
   readonly notFound: string[];
@@ -102,7 +102,7 @@ export function previewPresentList(
       continue;
     }
     const key = lastThree(student.enrollmentNumber);
-    if (idsByToken.has(key)) {
+    if (idsByToken.get(key)?.length === 1) {
       matched.push({ id: student.id, token: key });
     }
   }
@@ -162,6 +162,24 @@ export function applyPresentList(
   input: string,
   options: PresentListApplyOptions = {},
 ): PresentListResult {
+  return applyRollList(roster, input, 'present', options);
+}
+
+/** Apply a pasted absent-list to a roster with the same matching rules as present-list mode. */
+export function applyAbsentList(
+  roster: ReadonlyArray<QuickAttendanceStudent>,
+  input: string,
+  options: PresentListApplyOptions = {},
+): PresentListResult {
+  return applyRollList(roster, input, 'absent', options);
+}
+
+function applyRollList(
+  roster: ReadonlyArray<QuickAttendanceStudent>,
+  input: string,
+  matchedStatus: 'present' | 'absent',
+  options: PresentListApplyOptions,
+): PresentListResult {
   const mode = options.mode ?? 'correction';
   const tokens = parsePresentTokens(input);
 
@@ -180,7 +198,7 @@ export function applyPresentList(
     }
   }
 
-  const presentIds = new Set<string>();
+  const matchedIds = new Set<string>();
   const notFound: string[] = [];
   const ambiguous: string[] = [];
 
@@ -192,22 +210,23 @@ export function applyPresentList(
     }
     if (matches.length > 1) {
       ambiguous.push(token);
+      continue;
     }
-    for (const id of matches) {
-      presentIds.add(id);
-    }
+    matchedIds.add(matches[0]);
   }
 
   const statusById: Record<string, AttendanceStatus> = {};
   if (mode === 'first-time') {
     for (const student of roster) {
-      statusById[student.id] = presentIds.has(student.id) ? 'present' : 'absent';
+      statusById[student.id] = matchedIds.has(student.id)
+        ? matchedStatus
+        : matchedStatus === 'present' ? 'absent' : 'present';
     }
   } else {
-    for (const id of presentIds) {
-      statusById[id] = 'present';
+    for (const id of matchedIds) {
+      statusById[id] = matchedStatus;
     }
   }
 
-  return { statusById, notFound, ambiguous, matchedCount: presentIds.size };
+  return { statusById, notFound, ambiguous, matchedCount: matchedIds.size };
 }

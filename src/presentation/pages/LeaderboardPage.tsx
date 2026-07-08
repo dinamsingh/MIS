@@ -11,6 +11,7 @@ import { supabase } from '@data/supabase';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 import { loadRosterStudentsForSection } from '@presentation/loaders/rosterStudents';
 import type { StudentMetrics } from '@domain/services/leaderboardService';
+import type { AttendanceStatus } from '@domain/services/attendanceService';
 
 const leaderboardAccess = createLeaderboardAccess(supabase);
 
@@ -69,10 +70,13 @@ export default function LeaderboardPage() {
           // Attendance: percentage
           const { data: attRows } = await supabase
             .from('attendance')
-            .select('present')
+            .select('status')
             .eq('student_id', s.id);
-          const attendance = attRows && attRows.length > 0
-            ? (attRows.filter((r: { present: boolean }) => r.present).length / attRows.length) * 100
+          const countedAttendanceRows = (attRows ?? []).filter(
+            (r: { status: AttendanceStatus }) => r.status === 'present' || r.status === 'absent',
+          );
+          const attendance = countedAttendanceRows.length > 0
+            ? (countedAttendanceRows.filter((r) => r.status === 'present').length / countedAttendanceRows.length) * 100
             : 0;
 
           metrics.push({

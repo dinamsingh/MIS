@@ -31,10 +31,10 @@ export default function Stepper({ current }: StepperProps) {
               className={[
                 'inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold',
                 isCurrent
-                  ? 'bg-[#5b54e6] text-white'
+                  ? 'bg-accent text-surface'
                   : isDone
-                    ? 'bg-[#eef0fe] text-[#4a42d4]'
-                    : 'bg-[#f0f1f5] text-[#969cad]',
+                    ? 'bg-accent-tint text-accent'
+                    : 'bg-secondary text-muted',
               ].join(' ')}
             >
               {index + 1}
@@ -42,12 +42,12 @@ export default function Stepper({ current }: StepperProps) {
             <span
               className={[
                 'text-sm font-medium',
-                isCurrent ? 'text-[#1d2030]' : 'text-[#969cad]',
+                isCurrent ? 'text-text' : 'text-muted',
               ].join(' ')}
             >
               {step.label}
             </span>
-            {index < STEPS.length - 1 && <span className="mx-1 text-[#ecedf4]">·</span>}
+            {index < STEPS.length - 1 && <span className="mx-1 text-border">·</span>}
           </li>
         );
       })}

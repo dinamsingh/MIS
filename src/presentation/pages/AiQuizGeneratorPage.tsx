@@ -13,6 +13,7 @@ import { createQuizAccess } from '@data/access/quizAccess';
 import { supabase } from '@data/supabase';
 import { generateQuizQuestions } from '@data/access/aiQuizClient';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
+import { Button } from '@presentation/components/ui';
 import {
   loadUnitsForSubject,
   loadTopicNamesForUnit,
@@ -109,7 +110,10 @@ export default function AiQuizGeneratorPage() {
     setError(null);
     setPhase({ kind: 'saving', questions });
     try {
-      const shareToken = crypto.randomUUID();
+      // Safe UUID / token generator compatible with non-secure contexts
+      const g = globalThis as { crypto?: { randomUUID?: () => string } };
+      const shareToken = g.crypto?.randomUUID ? g.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
       const quizTitle =
         title.trim().length > 0 ? title.trim() : `${selectedUnit?.name ?? 'Quiz'} (AI)`;
       const quizId = await quizAccess.createQuiz({
@@ -243,14 +247,14 @@ export default function AiQuizGeneratorPage() {
         </label>
 
         <div className="sm:col-span-2">
-          <button
-            type="button"
-            className="btn-primary px-4 py-2 text-sm"
-            disabled={phase.kind === 'generating' || units.length === 0}
+          <Button
+            variant="primary"
+            disabled={units.length === 0}
+            loading={phase.kind === 'generating'}
             onClick={handleGenerate}
           >
-            {phase.kind === 'generating' ? 'Generating…' : '✨ Generate with AI'}
-          </button>
+            ✨ Generate with AI
+          </Button>
         </div>
       </section>
 
@@ -275,21 +279,20 @@ export default function AiQuizGeneratorPage() {
           <p className="mt-1 text-sm text-soft">{phase.count} questions saved. Share this link with students:</p>
           <div className="mt-3 flex items-center gap-2">
             <input readOnly className={`${inputClass} flex-1`} value={phase.shareLink} />
-            <button
-              type="button"
-              className="btn-secondary px-3 py-2 text-sm"
+            <Button
+              variant="secondary"
               onClick={() => void navigator.clipboard?.writeText(phase.shareLink)}
             >
               Copy
-            </button>
+            </Button>
           </div>
-          <button
-            type="button"
-            className="btn-primary mt-4 px-4 py-2 text-sm"
+          <Button
+            variant="primary"
+            className="mt-4"
             onClick={() => setPhase({ kind: 'idle' })}
           >
             Create another
-          </button>
+          </Button>
         </section>
       )}
     </div>
@@ -316,12 +319,12 @@ function PreviewSection({
           {rejected > 0 && <span className="ml-2 text-xs text-muted">({rejected} discarded)</span>}
         </h3>
         <div className="flex gap-2">
-          <button type="button" className="btn-secondary px-3 py-2 text-sm" onClick={onRegenerate}>
+          <Button variant="secondary" onClick={onRegenerate}>
             Regenerate
-          </button>
-          <button type="button" className="btn-primary px-4 py-2 text-sm" onClick={() => onSave(questions)}>
+          </Button>
+          <Button variant="primary" onClick={() => onSave(questions)}>
             Save quiz
-          </button>
+          </Button>
         </div>
       </div>
 

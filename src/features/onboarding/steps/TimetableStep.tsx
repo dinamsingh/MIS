@@ -51,12 +51,12 @@ export default function TimetableStep({
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#1d2030]">Aapki timetable</h1>
-          <p className="mt-1 text-sm text-[#5a6072]">
+          <h1 className="text-2xl font-bold text-text">Aapki timetable</h1>
+          <p className="mt-1 text-sm text-soft">
             Har batch ke liye apne subjects aur sections chuniye.
           </p>
         </div>
-        <span className="inline-flex shrink-0 items-center rounded-full bg-[#eef0fe] px-3 py-1 text-xs font-semibold text-[#4a42d4]">
+        <span className="inline-flex shrink-0 items-center rounded-full bg-accent-tint px-3 py-1 text-xs font-semibold text-accent">
           {total} selected
         </span>
       </div>
@@ -82,14 +82,14 @@ export default function TimetableStep({
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center justify-center rounded-xl border border-[#ecedf4] bg-[#fff] px-5 py-3 text-sm font-semibold text-[#5a6072] transition-colors hover:bg-[#f4f5f9]"
+          className="btn-secondary"
         >
           Back
         </button>
         <button
           type="button"
           onClick={onContinue}
-          className="inline-flex items-center justify-center rounded-xl bg-[#5b54e6] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#4a42d4]"
+          className="btn-primary"
         >
           Continue →
         </button>

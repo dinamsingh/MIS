@@ -59,26 +59,26 @@ export default function SemAccordion({
   const bodyId = `sem-panel-${batch.id}`;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-[#ecedf4] bg-[#fff] shadow-sm">
+    <div className="overflow-hidden rounded-card border border-border bg-surface shadow-soft">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
         aria-controls={bodyId}
-        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-[#f4f5f9]"
+        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-surface-muted"
       >
         <span className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-[#1d2030]">
+          <span className="text-sm font-semibold text-text">
             Sem {toRoman(batch.currentSem)} · Batch {batch.id}
           </span>
           {selectedCount > 0 && (
-            <span className="inline-flex items-center rounded-full bg-[#eef0fe] px-2 py-0.5 text-xs font-semibold text-[#4a42d4]">
+            <span className="inline-flex items-center rounded-full bg-accent-tint px-2 py-0.5 text-xs font-semibold text-accent">
               {selectedCount} selected
             </span>
           )}
         </span>
         <svg
-          className={`h-5 w-5 shrink-0 text-[#969cad] transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+          className={`h-5 w-5 shrink-0 text-muted transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
           viewBox="0 0 20 20"
           fill="currentColor"
           aria-hidden
@@ -92,9 +92,9 @@ export default function SemAccordion({
       </button>
 
       {expanded && (
-        <div id={bodyId} className="flex flex-col gap-3 border-t border-[#ecedf4] bg-[#f4f5f9] p-4">
+        <div id={bodyId} className="flex flex-col gap-3 border-t border-border bg-surface-muted/60 p-4">
           {subjects.length === 0 ? (
-            <p className="px-1 py-2 text-sm text-[#969cad]">No subjects for this semester.</p>
+            <p className="px-1 py-2 text-sm text-muted">No subjects for this semester.</p>
           ) : (
             <>
               {/* Non-elective subjects render as normal rows. */}
