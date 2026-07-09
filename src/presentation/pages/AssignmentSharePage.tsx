@@ -564,24 +564,35 @@ export default function AssignmentSharePage() {
                 }}
                 className="group relative cursor-pointer rounded-control border border-border bg-background p-4 text-left shadow-soft transition-colors hover:border-accent/40 hover:bg-accent-tint/30"
               >
-                <button
-                  type="button"
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    if (!window.confirm('Delete this assignment share?')) return;
-                    try {
-                      await deleteShareRecord(record.id);
-                      setHistory(h => h.filter(x => x.id !== record.id));
-                      if (activeRecord?.id === record.id) setActiveRecord(null);
-                    } catch (err) {
-                      alert(err instanceof Error ? err.message : 'Delete failed');
-                    }
-                  }}
-                  className="absolute right-3 top-3 opacity-0 transition-opacity hover:bg-status-red/20 group-hover:opacity-100 rounded bg-status-red/10 px-2 py-1 text-[10px] font-bold text-status-red"
-                >
-                  Delete
-                </button>
-                <p className="truncate pr-12 text-sm font-black text-text">{record.title}</p>
+                <div className="absolute right-3 top-3 flex gap-2">
+                  <a
+                    href={record.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded bg-accent/10 px-2 py-1 text-[10px] font-bold text-accent hover:bg-accent/20"
+                  >
+                    Open
+                  </a>
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!window.confirm('Delete this assignment share?')) return;
+                      try {
+                        await deleteShareRecord(record.id);
+                        setHistory(h => h.filter(x => x.id !== record.id));
+                        if (activeRecord?.id === record.id) setActiveRecord(null);
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : 'Delete failed');
+                      }
+                    }}
+                    className="rounded bg-status-red/10 px-2 py-1 text-[10px] font-bold text-status-red hover:bg-status-red/20 transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
+                <p className="truncate pr-24 text-sm font-black text-text">{record.title}</p>
                 <p className="mt-1 truncate text-xs font-semibold text-muted">{record.subjectName} - {record.unitName}</p>
                 <p className="mt-3 text-xs font-semibold text-soft">{record.fileName} - {fileSizeLabel(record.sizeBytes)}</p>
               </div>

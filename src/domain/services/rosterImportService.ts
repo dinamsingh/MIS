@@ -26,6 +26,8 @@ export interface ParsedRosterRow {
   readonly enrollmentNumber: string;
   /** The student's display name. */
   readonly name: string;
+  /** The student's email (optional). */
+  readonly email: string | null;
 }
 
 /** Why a single source line was rejected during parsing. */
@@ -139,7 +141,19 @@ export function parseRosterCsv(text: string): RosterImportResult {
     }
 
     const enrollmentNumber = firstCell.trim();
-    const name = trimmed.slice(commaAt + 1).trim();
+    const remaining = trimmed.slice(commaAt + 1).trim();
+    const secondCommaAt = remaining.indexOf(',');
+
+    let name = remaining;
+    let email = null;
+
+    if (secondCommaAt !== -1) {
+      name = remaining.slice(0, secondCommaAt).trim();
+      const rawEmail = remaining.slice(secondCommaAt + 1).trim();
+      if (rawEmail.length > 0) {
+        email = rawEmail;
+      }
+    }
 
     if (enrollmentNumber === '') {
       reject('malformed');
@@ -159,7 +173,7 @@ export function parseRosterCsv(text: string): RosterImportResult {
     }
 
     seen.add(enrollmentNumber);
-    valid.push({ enrollmentNumber, name });
+    valid.push({ enrollmentNumber, name, email });
   }
 
   return { valid, rejected };

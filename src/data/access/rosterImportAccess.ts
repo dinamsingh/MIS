@@ -84,13 +84,13 @@ export function createRosterImportAccess(
         await client.from('students').delete().eq('section_id', sectionId),
       );
 
-      // 4. Insert the new students (email is unknown until Google sign-in).
+      // 4. Insert the new students (email is unknown until Google sign-in unless provided).
       if (rows.length > 0) {
         const studentRows = rows.map((row) => ({
           section_id: sectionId,
           enrollment_number: row.enrollmentNumber,
           name: row.name,
-          email: null,
+          email: row.email,
         }));
         expectOk(await client.from('students').insert(studentRows));
 
@@ -99,7 +99,7 @@ export function createRosterImportAccess(
         const rosterRows = rows.map((row) => ({
           enrollment_number: row.enrollmentNumber,
           name: row.name,
-          email: null,
+          email: row.email,
         }));
         expectOk(
           await client

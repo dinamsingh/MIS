@@ -37,7 +37,7 @@ import {
   statusToAttendanceMark,
 } from '@domain/services/attendanceService';
 import { computeInternalMarks, validateMarkValue, type MarkComponent, type MarkValue } from '@domain/services/marksService';
-import { isValidEnrollmentNumber, type QuizAccess, type QuizPayloadNoAnswers } from '@domain/services/rosterService';
+import { isValidEnrollmentNumber, type QuizAccess, type QuizPayloadNoAnswers, type QuizAttemptSessionInfo } from '@domain/services/rosterService';
 import type { Unit } from '@domain/services/syllabusService';
 import { todaysClasses, type DayOfWeek, type TimetableEntry } from '@domain/services/timetableService';
 import type { LeaderboardWeights, StudentMetrics } from '@domain/services/leaderboardService';
@@ -790,11 +790,17 @@ export function createLocalDemoQuizAccess(
       return id;
     },
 
-    async startAttempt() {
+    async startAttempt(_quizId: string, _email: string): Promise<QuizAttemptSessionInfo> {
+      await new Promise(r => setTimeout(r, 300));
       return { startedAt: new Date().toISOString(), serverNow: new Date().toISOString(), timeLimitMinutes: 15 };
     },
 
-    async resolveAccess(quizId: string, providedEnrollment: string | null): Promise<QuizAccess> {
+    async resolveAccess(
+      quizId: string,
+      providedEnrollment: string | null,
+      _providedEmail?: string | null,
+    ): Promise<QuizAccess> {
+      await new Promise(r => setTimeout(r, 400));
       const store = readQuizStore();
       const quiz = findQuiz(store, quizId);
       if (!quiz) {
@@ -961,7 +967,8 @@ export function createLocalDemoQuizAccess(
       };
     },
 
-    async getQuizReview(quizId: string): Promise<QuizAttemptDetailQuestion[] | null> {
+    async getQuizReview(quizId: string, _email: string): Promise<QuizAttemptDetailQuestion[] | null> {
+      await new Promise(r => setTimeout(r, 500));
       const store = readQuizStore();
       const quiz = findQuiz(store, quizId);
       if (!quiz || !quiz.showAnswersAfterClose) return null;
@@ -985,7 +992,12 @@ export function createLocalDemoQuizAccess(
     },
 
 
-    async submitAttempt(quizId: string, answers: Record<string, number>): Promise<SubmitAttemptOutcome> {
+    async submitAttempt(
+      quizId: string,
+      answers: Record<string, number>,
+      _email: string,
+    ): Promise<SubmitAttemptOutcome> {
+      await new Promise(r => setTimeout(r, 600));
       const store = readQuizStore();
       const quiz = findQuiz(store, quizId);
       if (!quiz) {

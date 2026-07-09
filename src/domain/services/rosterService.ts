@@ -198,6 +198,7 @@ export type QuizAccess =
       attemptSession?: QuizAttemptSessionInfo;
     }
   | { status: 'enrollment-required' }
+  | { status: 'needs-enrollment' }
   | { status: 'denied'; reason: QuizAccessDeniedReason }
   | { status: 'already-attempted'; result: AttemptResult };
 

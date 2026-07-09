@@ -131,13 +131,13 @@ export interface QuizAccessRepository {
   /** Add a question to a quiz and return its id (Requirement 8.1). */
   addQuestion(quizId: string, question: QuestionInput): Promise<string>;
   /** Start a quiz attempt to issue a session with server time bounds */
-  startAttempt(quizId: string): Promise<QuizAttemptSessionInfo>;
-  /** Resolve student quiz access server-side (Requirements 2.5, 8.5, 8.6). */
-  resolveAccess(quizId: string, providedEnrollment: string | null): Promise<QuizAccess>;
+  startAttempt(quizId: string, email: string): Promise<QuizAttemptSessionInfo>;
+  /** Resolve whether a student can access this quiz, via email or enrollment number (task: Quiz Access Phase 2 & 4). */
+  resolveAccess(quizId: string, providedEnrollment: string | null, providedEmail?: string | null): Promise<QuizAccess>;
   /** List safe roster choices for the quiz's assigned section(s). */
   listRosterOptions(quizId: string, searchPrefix?: string): Promise<QuizRosterOption[]>;
   /** Submit and server-grade an attempt (Requirements 8.4, 8.8, 8.10, 8.11). */
-  submitAttempt(quizId: string, answers: Record<string, number>): Promise<SubmitAttemptOutcome>;
+  submitAttempt(quizId: string, answers: Record<string, number>, email: string): Promise<SubmitAttemptOutcome>;
   /** List saved quizzes owned by the current teacher. */
   listQuizzes(): Promise<SavedQuizSummary[]>;
   /** List student submissions for one quiz without exposing answer keys. */
@@ -159,7 +159,7 @@ export interface QuizAccessRepository {
   /** Get a student's answer sheet for a quiz. */
   getQuizAttemptDetail(quizId: string, studentId: string): Promise<QuizAttemptDetail | null>;
   /** Get a student's post-submit evaluated answer sheet for a quiz (if eligible). */
-  getQuizReview(quizId: string): Promise<QuizAttemptDetailQuestion[] | null>;
+  getQuizReview(quizId: string, email: string): Promise<QuizAttemptDetailQuestion[] | null>;
 }
 
 interface InsertedId {
@@ -413,10 +413,10 @@ export function createQuizAccess(
       return inserted?.id ?? '';
     },
 
-    async startAttempt(quizId: string): Promise<QuizAttemptSessionInfo> {
+    async startAttempt(quizId: string, email: string): Promise<QuizAttemptSessionInfo> {
       // Try to insert a session. The RPC or a simple insert.
       // We will use an RPC to ensure server-time is used.
-      const payload = unwrap(await client.rpc('start_quiz_attempt', { p_quiz_id: quizId }));
+      const payload = unwrap(await client.rpc('start_quiz_attempt', { p_quiz_id: quizId, p_provided_email: email }));
       const result = payload as { started_at: string; server_now: string; time_limit_minutes: number };
       return {
         startedAt: result.started_at,
@@ -428,11 +428,13 @@ export function createQuizAccess(
     async resolveAccess(
       quizId: string,
       providedEnrollment: string | null,
+      providedEmail?: string | null,
     ): Promise<QuizAccess> {
       const payload = unwrap(
         await client.rpc('request_quiz_access', {
           p_quiz_id: quizId,
           p_provided_enrollment: providedEnrollment,
+          p_provided_email: providedEmail ?? null,
         }),
       );
       return parseQuizAccess(payload);
@@ -454,11 +456,13 @@ export function createQuizAccess(
     async submitAttempt(
       quizId: string,
       answers: Record<string, number>,
+      email: string,
     ): Promise<SubmitAttemptOutcome> {
       const payload = unwrap(
         await client.rpc('submit_attempt', {
           p_quiz_id: quizId,
           p_answers: answers,
+          p_provided_email: email,
         }),
       );
       return parseSubmitOutcome(payload);
@@ -563,12 +567,8 @@ export function createQuizAccess(
       return typeof payload === 'object' && payload !== null ? (payload as QuizAttemptDetail) : null;
     },
 
-    async getQuizReview(quizId: string): Promise<QuizAttemptDetailQuestion[] | null> {
-      const payload = unwrap(
-        await client.rpc('quiz_review', {
-          p_quiz_id: quizId,
-        }),
-      );
+    async getQuizReview(quizId: string, email: string): Promise<QuizAttemptDetailQuestion[] | null> {
+      const payload = unwrap(await client.rpc('quiz_review', { p_quiz_id: quizId, p_provided_email: email }));
       return Array.isArray(payload) ? payload : null;
     },
   };

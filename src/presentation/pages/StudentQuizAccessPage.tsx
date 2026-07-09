@@ -22,8 +22,8 @@ export default function StudentQuizAccessPage() {
     [],
   );
   const resolveAccess = useCallback(
-    (quizId: string, providedEnrollment: string | null) =>
-      quizAccess.resolveAccess(quizId, providedEnrollment),
+    (quizId: string, providedEnrollment: string | null, providedEmail?: string | null) =>
+      quizAccess.resolveAccess(quizId, providedEnrollment, providedEmail),
     [quizAccess],
   );
   const loadRosterOptions = useCallback(
@@ -31,7 +31,7 @@ export default function StudentQuizAccessPage() {
     [quizAccess],
   );
   const startAttempt = useCallback(
-    (quizId: string) => quizAccess.startAttempt(quizId),
+    (quizId: string, email: string) => quizAccess.startAttempt(quizId, email),
     [quizAccess],
   );
 
@@ -52,11 +52,12 @@ export default function StudentQuizAccessPage() {
       resolveAccess={resolveAccess}
       loadRosterOptions={loadRosterOptions}
       startAttempt={startAttempt}
-      onGranted={(quiz: QuizPayloadNoAnswers, attemptSession: QuizAttemptSessionInfo) => (
+      onGranted={(quiz: QuizPayloadNoAnswers, attemptSession: QuizAttemptSessionInfo, email: string) => (
         <QuizAttemptView
           quiz={quiz}
           attemptSession={attemptSession}
-          submitAttempt={(quizId, answers) => quizAccess.submitAttempt(quizId, answers)}
+          email={email}
+          submitAttempt={(quizId, answers, emailToSubmit) => quizAccess.submitAttempt(quizId, answers, emailToSubmit)}
         />
       )}
     />

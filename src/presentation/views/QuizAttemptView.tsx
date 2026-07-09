@@ -56,6 +56,7 @@ import { useAuth } from "@presentation/auth/AuthContext";
 export type SubmitAttemptFn = (
   quizId: string,
   answers: Record<string, number>,
+  email: string,
 ) => Promise<SubmitAttemptOutcome>;
 
 export interface QuizAttemptViewProps {
@@ -64,7 +65,10 @@ export interface QuizAttemptViewProps {
   /** Server-authoritative timer session. */
   attemptSession: QuizAttemptSessionInfo;
   /** Submits the attempt server-side and returns the outcome. */
+  /** Submits the attempt server-side and returns the outcome. */
   submitAttempt: SubmitAttemptFn;
+  /** The email used to start the session */
+  email: string;
 }
 
 /** Phase machine for the attempt lifecycle. */
@@ -120,6 +124,7 @@ export default function QuizAttemptView({
   quiz,
   attemptSession,
   submitAttempt,
+  email,
 }: QuizAttemptViewProps) {
   const { actor } = useAuth();
   const draftKey = `quiz-draft:${quiz.id}:${attemptSession.startedAt}`;
@@ -161,7 +166,7 @@ export default function QuizAttemptView({
       setPhase({ kind: 'submitting', auto });
 
       try {
-        const outcome = await submitAttempt(quiz.id, currentAnswers);
+        const outcome = await submitAttempt(quiz.id, currentAnswers, email);
         switch (outcome.status) {
           case 'recorded':
             window.localStorage.removeItem(draftKey);
@@ -282,13 +287,6 @@ export default function QuizAttemptView({
     setAnswers((prev) => ({ ...prev, [questionId]: optionIndex }));
   }
 
-  function jumpToQuestion(questionId: string) {
-    document.getElementById(`question-${questionId}`)?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start',
-    });
-  }
-
   // Determine urgency class for the timer display.
   const timerUrgency =
     remainingSeconds <= 60
@@ -333,17 +331,20 @@ export default function QuizAttemptView({
 
   if (phase.kind === 'error') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
-        <div className="card w-full max-w-sm p-6 text-center">
-          <h1 className="text-lg font-semibold text-text">Submission failed</h1>
-          <p role="alert" className="mt-2 text-sm text-status-red">
-            {phase.message}
-          </p>
-          {phase.retryable && (
-            <Button variant="primary" onClick={retrySubmit} className="mt-4">
-              Retry submit
-            </Button>
-          )}
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#f0ebf8] px-4 py-10">
+        <div className="w-full max-w-3xl overflow-hidden rounded-lg bg-surface shadow-md">
+          <div className="h-2 w-full bg-[#5746e3]"></div>
+          <div className="p-6">
+            <h1 className="text-2xl font-normal text-text">Submission failed</h1>
+            <p role="alert" className="mt-2 text-sm text-status-red">
+              {phase.message}
+            </p>
+            {phase.retryable && (
+              <Button variant="primary" onClick={retrySubmit} className="mt-6 w-full max-w-xs" style={{ backgroundColor: '#5746e3', color: 'white', borderRadius: '4px' }}>
+                Retry submit
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -354,100 +355,83 @@ export default function QuizAttemptView({
   const isSubmitting = phase.kind === 'submitting';
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6">
-      {/* Sticky timer header */}
-      <header className="sticky top-0 z-10 flex items-center justify-between rounded-card border border-border bg-surface px-4 py-3 shadow-sm">
-        <div>
-          <h1 className="text-base font-semibold text-text">{quiz.title ?? 'Quiz'}</h1>
-          <p className="text-xs text-muted">
-            Answered {answeredCount}/{displayQuestions.length}
+    <div className="min-h-screen bg-[#f0ebf8] px-4 py-6">
+      <div className="mx-auto max-w-3xl">
+        {/* Sticky timer header */}
+        <header className="sticky top-4 z-10 mb-6 flex flex-col sm:flex-row sm:items-center justify-between rounded-lg border border-border bg-surface px-6 py-4 shadow-md transition-shadow">
+          <div>
+            <h1 className="text-lg font-normal text-text">{quiz.title ?? 'Quiz'}</h1>
+            <p className="text-sm text-soft mt-1">
+              Answered {answeredCount} of {displayQuestions.length}
+            </p>
+          </div>
+          <div className="mt-4 sm:mt-0 flex items-center gap-3 rounded-md bg-[#f0ebf8] px-4 py-2 text-[#5746e3]">
+            <span className="text-sm font-medium">Time remaining</span>
+            <span
+              className={`text-xl tabular-nums ${timerUrgency}`}
+              aria-hidden="true"
+            >
+              {formatTime(remainingSeconds)}
+            </span>
+            <span role="timer" aria-live="polite" className="sr-only">
+              {timerAnnouncement}
+            </span>
+          </div>
+        </header>
+
+        {/* Questions */}
+        <div className="flex flex-col gap-6">
+          {displayQuestions.map((question, qIndex) => (
+            <fieldset
+              key={question.id}
+              id={`question-${question.id}`}
+              className="rounded-lg bg-surface p-6 shadow-sm transition-shadow hover:shadow-md border border-border"
+              disabled={isSubmitting}
+            >
+              <div className="flex items-start gap-3">
+                <span className="flex-shrink-0 text-base text-text">{qIndex + 1}.</span>
+                <legend className="text-base font-normal text-text leading-relaxed">
+                  {question.text}
+                </legend>
+              </div>
+              <div className="mt-5 flex flex-col gap-4 pl-6">
+                {question.options.map((option, oIndex) => (
+                  <label
+                    key={oIndex}
+                    className="flex cursor-pointer items-center gap-3 text-sm text-text"
+                  >
+                    <input
+                      type="radio"
+                      name={`question-${question.id}`}
+                      value={oIndex}
+                      checked={answers[question.id] === oIndex}
+                      onChange={() => selectOption(question.id, oIndex)}
+                      disabled={isSubmitting}
+                      className="h-5 w-5 border-2 border-[#5746e3] text-[#5746e3] focus:ring-[#5746e3]"
+                    />
+                    <span className="leading-tight">{option}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ))}
+        </div>
+
+        {/* Submit button */}
+        <div className="mt-8 flex justify-between items-center bg-surface p-4 rounded-lg shadow-sm border border-border">
+          <p className="text-sm text-soft">
+            Make sure to review your answers before submitting.
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted">Time remaining</span>
-          <span
-            className={`text-lg tabular-nums ${timerUrgency}`}
-            aria-hidden="true"
-          >
-            {formatTime(remainingSeconds)}
-          </span>
-          <span role="timer" aria-live="polite" className="sr-only">
-            {timerAnnouncement}
-          </span>
-        </div>
-      </header>
-
-      <nav
-        className="mt-4 flex flex-wrap gap-2"
-        aria-label="Question navigation"
-      >
-        {displayQuestions.map((question, index) => (
           <button
-            key={question.id}
             type="button"
-            onClick={() => jumpToQuestion(question.id)}
-            className={`h-9 w-9 rounded-full border text-sm font-semibold ${
-              answers[question.id] !== undefined
-                ? 'border-accent bg-accent text-white'
-                : 'border-border bg-surface text-muted'
-            }`}
-            aria-label={`Go to question ${index + 1}`}
-          >
-            {index + 1}
-          </button>
-        ))}
-      </nav>
-
-      {/* Questions */}
-      <div className="mt-6 flex flex-col gap-6">
-        {displayQuestions.map((question, qIndex) => (
-          <fieldset
-            key={question.id}
-            id={`question-${question.id}`}
-            className="card p-5"
+            onClick={handleSubmit}
             disabled={isSubmitting}
+            className="rounded px-8 py-2.5 text-sm font-medium text-white transition-opacity disabled:opacity-50"
+            style={{ backgroundColor: '#5746e3' }}
           >
-            <legend className="text-sm font-semibold text-text">
-              Question {qIndex + 1}
-            </legend>
-            <p className="mt-2 text-sm text-text">{question.text}</p>
-            <div className="mt-3 flex flex-col gap-2">
-              {question.options.map((option, oIndex) => (
-                <label
-                  key={oIndex}
-                  className={`flex cursor-pointer items-center gap-3 rounded-button border px-3 py-2 text-sm transition-colors ${
-                    answers[question.id] === oIndex
-                      ? 'border-accent bg-accent-tint text-text'
-                      : 'border-border bg-surface text-text hover:bg-background'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name={`question-${question.id}`}
-                    value={oIndex}
-                    checked={answers[question.id] === oIndex}
-                    onChange={() => selectOption(question.id, oIndex)}
-                    disabled={isSubmitting}
-                    className="h-4 w-4 accent-accent"
-                  />
-                  <span>{option}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        ))}
-      </div>
-
-      {/* Submit button */}
-      <div className="mt-8 flex justify-center">
-        <Button
-          variant="primary"
-          onClick={handleSubmit}
-          loading={isSubmitting}
-          className="px-8"
-        >
-          {isSubmitting && (phase as any).auto ? 'Auto-submitting…' : 'Submit quiz'}
-        </Button>
+            {isSubmitting && (phase as any).auto ? 'Auto-submitting…' : 'Submit'}
+          </button>
+        </div>
       </div>
     </div>
   );
