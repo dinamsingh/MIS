@@ -35,6 +35,7 @@ import {
   type QuizAccess,
   type QuizAccessDeniedReason,
   type QuizPayloadNoAnswers,
+  type QuizAttemptSessionInfo,
 } from '@domain/services/rosterService';
 import { messages } from '@domain/shared/messages';
 import type { QuizRosterOption } from '@data/access/quizAccess';
@@ -46,7 +47,7 @@ export type ResolveQuizAccess = (
   providedEnrollment: string | null,
 ) => Promise<QuizAccess>;
 
-export type LoadQuizRosterOptions = (quizId: string) => Promise<QuizRosterOption[]>;
+export type LoadQuizRosterOptions = (quizId: string, searchPrefix?: string) => Promise<QuizRosterOption[]>;
 
 export interface StudentQuizAccessViewProps {
   /** The quiz the shareable link points to. */
@@ -55,8 +56,10 @@ export interface StudentQuizAccessViewProps {
   resolveAccess: ResolveQuizAccess;
   /** Loads the quiz section's safe roster choices for the enrollment prompt. */
   loadRosterOptions?: LoadQuizRosterOptions;
-  /** Renders the attempt UI once access is granted (task 21.2 supplies this). */
-  onGranted?: (quiz: QuizPayloadNoAnswers) => ReactNode;
+  /** Start a quiz attempt and return session info */
+  startAttempt?: (quizId: string) => Promise<QuizAttemptSessionInfo>;
+  /** Render the actual quiz taking interface when access is granted. */
+  onGranted: (quiz: QuizPayloadNoAnswers, session: QuizAttemptSessionInfo) => ReactNode;
 }
 
 /** Internal phase machine for the access/enrollment flow. */
@@ -65,7 +68,7 @@ type Phase =
   | { kind: 'enrollment-required'; submitting: boolean; error: string | null }
   | { kind: 'denied'; reason: QuizAccessDeniedReason }
   | { kind: 'already-attempted'; score: number; totalMarks: number }
-  | { kind: 'granted'; quiz: QuizPayloadNoAnswers; preview: boolean };
+  | { kind: 'granted'; quiz: QuizPayloadNoAnswers; session: QuizAttemptSessionInfo; preview: boolean };
 
 /**
  * Specific title/body copy per denial reason. Exported so other student-facing
@@ -102,6 +105,10 @@ export const DENIED_COPY: Record<QuizAccessDeniedReason, { title: string; body: 
     title: 'Quiz not available',
     body: 'This quiz is not open right now. It may not have started yet or the deadline has passed.',
   },
+  'time-expired': {
+    title: 'Quiz time expired',
+    body: 'The time allocated for this quiz has expired.',
+  },
   'teacher-account': {
     title: 'Teacher accounts cannot attempt quizzes',
     body: 'This Google account is registered as a teacher and cannot self-register as a student. Sign in with your personal student account instead.',
@@ -125,6 +132,7 @@ export default function StudentQuizAccessView({
   quizId,
   resolveAccess,
   loadRosterOptions,
+  startAttempt,
   onGranted,
 }: StudentQuizAccessViewProps) {
   const { actor, isLoading, signInWithGoogle } = useAuth();
@@ -139,7 +147,29 @@ export default function StudentQuizAccessView({
   const applyDecision = useCallback((decision: QuizAccess) => {
     switch (decision.status) {
       case 'granted':
-        setPhase({ kind: 'granted', quiz: decision.quiz, preview: decision.preview === true });
+        // If it's a preview or we already have a session, just proceed.
+        if (decision.preview || decision.attemptSession) {
+          setPhase({ 
+            kind: 'granted', 
+            quiz: decision.quiz, 
+            session: decision.attemptSession ?? { startedAt: '', serverNow: '', timeLimitMinutes: decision.quiz.timeLimitMinutes },
+            preview: decision.preview === true 
+          });
+        } else if (startAttempt) {
+          // If we need to start an attempt, do it now
+          startAttempt(quizId).then(session => {
+            setPhase({
+              kind: 'granted',
+              quiz: decision.quiz,
+              session: session,
+              preview: false
+            });
+          }).catch(() => {
+            setPhase({ kind: 'denied', reason: 'not-authenticated' });
+          });
+        } else {
+          setPhase({ kind: 'denied', reason: 'not-authenticated' });
+        }
         break;
       case 'enrollment-required':
         setPhase({ kind: 'enrollment-required', submitting: false, error: null });
@@ -427,13 +457,13 @@ export default function StudentQuizAccessView({
                   {phase.quiz.questions.length} questions · {phase.quiz.timeLimitMinutes} min
                 </p>
                 <ol className="mt-4 flex flex-col gap-5">
-                  {phase.quiz.questions.map((q, i) => (
+                  {phase.quiz.questions.map((q: any, i: number) => (
                     <li key={q.id} className="text-left">
                       <p className="text-sm font-semibold text-text">
                         {i + 1}. {q.text}
                       </p>
                       <ul className="mt-2 flex flex-col gap-1.5">
-                        {q.options.map((opt, oi) => (
+                        {q.options.map((opt: string, oi: number) => (
                           <li
                             key={oi}
                             className="rounded-button border border-border bg-surface px-3 py-2 text-sm text-soft"
@@ -453,7 +483,7 @@ export default function StudentQuizAccessView({
       return (
         <>
           {onGranted ? (
-            onGranted(phase.quiz)
+            onGranted(phase.quiz, phase.session)
           ) : (
             <AccessCard title="Access granted">
               <p>You may now attempt the quiz.</p>

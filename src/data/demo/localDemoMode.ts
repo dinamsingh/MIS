@@ -15,10 +15,12 @@ import {
   type QuizAccessRepository,
   type QuizInput,
   type QuestionInput,
-  type AttemptSummary,
   type SavedQuizSummary,
   type QuizResultRow,
   type QuizRosterOption,
+  type QuizAttemptDetail,
+  type QuizAttemptDetailQuestion,
+  type QuizQuestionStats,
 } from '@data/access/quizAccess';
 import type { SubmitAttemptOutcome } from '@data/access/parsers';
 import type { SyllabusAccess, UnitInput, TopicInput } from '@data/access/syllabusAccess';
@@ -80,6 +82,14 @@ export interface DemoAttendanceTrendPoint {
   readonly percent: number;
 }
 
+export interface DemoQuizAttempt {
+  readonly quizId: string;
+  readonly studentId: string;
+  readonly score: number;
+  readonly submittedAt: string;
+  readonly answers: Record<string, number>;
+}
+
 export interface DemoAssignmentItem {
   readonly id: string;
   readonly title: string;
@@ -89,6 +99,15 @@ export interface DemoAssignmentItem {
   readonly shareToken: string;
   readonly fileId: string | null;
   readonly createdAt: string;
+}
+
+export interface DemoQuizQuestion {
+  readonly id: string;
+  readonly text: string;
+  readonly options: string[];
+  readonly correctIndex: number;
+  readonly marks: number;
+  readonly position: number;
 }
 
 export interface DemoMaterialItem {
@@ -616,10 +635,6 @@ export function demoInternalMarksForStudent(studentId: string): number {
   return round1(store.snapshotsByStudent[studentId] ?? demoNumber(`${studentId}:internal`, 56, 92));
 }
 
-interface DemoQuizQuestion extends QuestionInput {
-  readonly id: string;
-}
-
 interface DemoQuizRecord {
   readonly id: string;
   readonly unitId: string;
@@ -633,10 +648,6 @@ interface DemoQuizRecord {
   readonly shuffleQuestions: boolean;
   readonly createdAt?: string;
   readonly questions: DemoQuizQuestion[];
-}
-
-interface DemoQuizAttempt extends AttemptSummary {
-  readonly submittedAt?: string;
 }
 
 interface DemoQuizStore {
@@ -743,6 +754,27 @@ export function createLocalDemoQuizAccess(
       return id;
     },
 
+    async createQuizWithQuestions(input: QuizInput, questions: QuestionInput[]): Promise<string> {
+      const store = readQuizStore();
+      const id = createDemoId('quiz');
+      const quiz: DemoQuizRecord = {
+        id,
+        unitId: input.unitId,
+        title: input.title,
+        sectionId: input.sectionId ?? null,
+        timeLimitMinutes: input.timeLimitMinutes ?? 15,
+        shareToken: input.shareToken,
+        activeFrom: input.activeFrom ?? null,
+        activeUntil: input.activeUntil ?? null,
+        showAnswersAfterClose: input.showAnswersAfterClose ?? false,
+        shuffleQuestions: input.shuffleQuestions ?? false,
+        createdAt: new Date().toISOString(),
+        questions: questions.map((q, i) => ({ ...q, id: createDemoId('question'), position: i + 1, marks: q.marks ?? 1 })),
+      };
+      writeQuizStore({ ...store, quizzes: { ...store.quizzes, [id]: quiz } });
+      return id;
+    },
+
     async addQuestion(quizId: string, question: QuestionInput) {
       const store = readQuizStore();
       const quiz = store.quizzes[quizId];
@@ -752,10 +784,14 @@ export function createLocalDemoQuizAccess(
       const id = createDemoId('question');
       const nextQuiz: DemoQuizRecord = {
         ...quiz,
-        questions: [...quiz.questions, { ...question, id }],
+        questions: [...quiz.questions, { ...question, id, position: quiz.questions.length + 1, marks: question.marks ?? 1 }],
       };
       writeQuizStore({ ...store, quizzes: { ...store.quizzes, [quizId]: nextQuiz } });
       return id;
+    },
+
+    async startAttempt() {
+      return { startedAt: new Date().toISOString(), serverNow: new Date().toISOString(), timeLimitMinutes: 15 };
     },
 
     async resolveAccess(quizId: string, providedEnrollment: string | null): Promise<QuizAccess> {
@@ -926,14 +962,6 @@ export function createLocalDemoQuizAccess(
     },
 
     async getQuizReview(quizId: string): Promise<QuizAttemptDetailQuestion[] | null> {
-      // For demo, we just use the same detail mock but verify the user is eligible
-      // We don't have the auth context here (local demo uses simple mocked auth), 
-      // but in a real app the studentId comes from the auth token. 
-      // In demo mode, we just return null because the review is usually fetched from student perspective,
-      // and demo mode mostly mocks teacher perspective. Wait, for student perspective, 
-      // demo mode needs to return the review for the current mock student.
-      // Since demo mode doesn't know the current student easily in getQuizReview (which takes no studentId),
-      // we'll just mock it to return the review for the first attempt found if any.
       const store = readQuizStore();
       const quiz = findQuiz(store, quizId);
       if (!quiz || !quiz.showAnswersAfterClose) return null;
@@ -969,9 +997,11 @@ export function createLocalDemoQuizAccess(
         return answers[question.id] === question.correctIndex ? sum + (question.marks ?? 1) : sum;
       }, 0);
       const attempt: DemoQuizAttempt = {
+        quizId: quiz.id,
         studentId: 'demo-student',
         score,
         submittedAt: new Date().toISOString(),
+        answers,
       };
       writeQuizStore({
         ...store,
@@ -1078,9 +1108,11 @@ function demoAttemptsForQuiz(
   return students
     .filter((student) => demoNumber(`${quiz.id}:${student.id}:attempted`, 0, 1) > 0.22)
     .map((student) => ({
+      quizId: quiz.id,
       studentId: student.id,
       score: demoInt(`${quiz.id}:${student.id}:score`, Math.ceil(maxScore * 0.45), maxScore),
       submittedAt: demoAttemptSubmittedAt(quiz.id, student.id),
+      answers: {},
     }));
 }
 

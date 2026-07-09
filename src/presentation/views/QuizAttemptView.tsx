@@ -137,7 +137,7 @@ export default function QuizAttemptView({
     if (!quiz.shuffleQuestions) return quiz.questions;
     
     // Stable seed per student per quiz
-    const actorId = actor.kind === 'student' ? actor.email : actor.kind === 'teacher' ? actor.id : 'anon';
+    const actorId = actor.kind === 'student' ? actor.email : actor.kind === 'teacher' ? actor.userId : 'anon';
     const seed = `${actorId}-${quiz.id}`;
     const rng = seededRandom(seed);
     const qs = [...quiz.questions];

@@ -23,6 +23,7 @@ import type {
   SavedQuizSummary,
   QuizQuestionStats,
   QuizAttemptDetail,
+  QuizRosterOption,
 } from '@data/access/quizAccess';
 import { messages } from '@domain/shared/messages';
 import { formatSectionLabel } from '@presentation/format/sectionLabel';
@@ -50,7 +51,7 @@ export interface QuizUnitOption {
 /** Operations this view needs from the quiz data-access wrapper. */
 export type QuizCreationRepository = Pick<
   QuizAccessRepository,
-  'createQuiz' | 'addQuestion' | 'listQuizzes' | 'listQuizResults' | 'deleteQuiz' | 'resetAttempt'
+  'createQuiz' | 'addQuestion' | 'listQuizzes' | 'listQuizResults' | 'deleteQuiz' | 'resetAttempt' | 'listQuizNonAttempters' | 'getQuizQuestionStats' | 'getQuizAttemptDetail' | 'getQuizReview'
 >;
 
 export interface QuizCreationViewProps {

@@ -11,7 +11,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase as defaultClient } from '../supabase';
-import type { QuizAccess } from '../../domain/services/rosterService';
+import type { QuizAccess, QuizAttemptSessionInfo } from '../../domain/services/rosterService';
 import { totalAvailableMarks } from '../../domain/services/quizService';
 import { parseQuizAccess, parseSubmitOutcome, type SubmitAttemptOutcome } from './parsers';
 import { expectOk, unwrap, unwrapList } from './support';
@@ -126,8 +126,12 @@ export interface QuizAttemptDetail {
 export interface QuizAccessRepository {
   /** Create a quiz and return its id (Requirements 8.1, 8.2, 8.3). */
   createQuiz(input: QuizInput): Promise<string>;
+  /** Create a quiz with its questions in a single transaction (AI Generator) */
+  createQuizWithQuestions(quiz: QuizInput, questions: QuestionInput[]): Promise<string>;
   /** Add a question to a quiz and return its id (Requirement 8.1). */
   addQuestion(quizId: string, question: QuestionInput): Promise<string>;
+  /** Start a quiz attempt to issue a session with server time bounds */
+  startAttempt(quizId: string): Promise<QuizAttemptSessionInfo>;
   /** Resolve student quiz access server-side (Requirements 2.5, 8.5, 8.6). */
   resolveAccess(quizId: string, providedEnrollment: string | null): Promise<QuizAccess>;
   /** List safe roster choices for the quiz's assigned section(s). */
@@ -360,6 +364,41 @@ export function createQuizAccess(
       return inserted?.id ?? '';
     },
 
+    async createQuizWithQuestions(input: QuizInput, questions: QuestionInput[]): Promise<string> {
+      // Create quiz first
+      const row = {
+        unit_id: input.unitId,
+        title: input.title,
+        ...(input.sectionId !== undefined ? { section_id: input.sectionId } : {}),
+        time_limit_minutes: input.timeLimitMinutes ?? null,
+        share_token: input.shareToken,
+        active_from: input.activeFrom ?? null,
+        active_until: input.activeUntil ?? null,
+        show_answers_after_close: input.showAnswersAfterClose ?? false,
+        shuffle_questions: input.shuffleQuestions ?? false,
+      };
+      const inserted = unwrap(
+        await client.from('quizzes').insert(row).select('id').single(),
+      ) as InsertedId | null;
+      
+      const quizId = inserted?.id ?? '';
+      if (!quizId) return quizId;
+
+      // Add questions
+      if (questions.length > 0) {
+        const questionRows = questions.map((q, i) => ({
+          quiz_id: quizId,
+          text: q.text,
+          options: q.options,
+          correct_index: q.correctIndex,
+          marks: q.marks ?? 1,
+          position: i + 1,
+        }));
+        await client.from('quiz_questions').insert(questionRows);
+      }
+      return quizId;
+    },
+
     async addQuestion(quizId: string, question: QuestionInput): Promise<string> {
       const row = {
         quiz_id: quizId,
@@ -372,6 +411,18 @@ export function createQuizAccess(
         await client.from('questions').insert(row).select('id').single(),
       ) as InsertedId | null;
       return inserted?.id ?? '';
+    },
+
+    async startAttempt(quizId: string): Promise<QuizAttemptSessionInfo> {
+      // Try to insert a session. The RPC or a simple insert.
+      // We will use an RPC to ensure server-time is used.
+      const payload = unwrap(await client.rpc('start_quiz_attempt', { p_quiz_id: quizId }));
+      const result = payload as { started_at: string; server_now: string; time_limit_minutes: number };
+      return {
+        startedAt: result.started_at,
+        serverNow: result.server_now,
+        timeLimitMinutes: result.time_limit_minutes,
+      };
     },
 
     async resolveAccess(

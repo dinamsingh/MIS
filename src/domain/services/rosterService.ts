@@ -150,6 +150,8 @@ export type QuizAccessDeniedReason =
   | 'not-registered'
   | 'not-active'
   | 'time-expired'
+  | 'not-authenticated'
+  | 'quiz-not-found'
   /** The signed-in email belongs to a teacher account, which can never
    * self-register as a student (identity separation, migration 0027). */
   | 'teacher-account';
