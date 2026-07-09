@@ -13,6 +13,7 @@
 import type {
   QuizAccess,
   QuizAccessDeniedReason,
+  QuizAttemptSessionInfo,
   QuizPayloadNoAnswers,
   SubmitAttemptDeniedReason,
 } from '../../domain/services/rosterService';
@@ -28,7 +29,8 @@ function parseAttemptResult(value: unknown): AttemptResult {
   const record = asRecord(value);
   const score = record && typeof record.score === 'number' ? record.score : 0;
   const totalMarks = record && typeof record.totalMarks === 'number' ? record.totalMarks : 0;
-  return { score, totalMarks };
+  const canReview = record && typeof record.canReview === 'boolean' ? record.canReview : false;
+  return { score, totalMarks, canReview };
 }
 
 /** Parse the answer-free quiz payload returned on a granted access decision. */
@@ -45,11 +47,31 @@ function parseQuizPayload(value: unknown): QuizPayloadNoAnswers {
   });
   return {
     id: String(record.id ?? ''),
+    ...(typeof record.title === 'string' ? { title: record.title } : {}),
+    ...(typeof record.instructions === 'string' || record.instructions === null
+      ? { instructions: record.instructions as string | null }
+      : {}),
     unitId: String(record.unitId ?? ''),
     timeLimitMinutes:
       typeof record.timeLimitMinutes === 'number' ? record.timeLimitMinutes : 0,
-    shareToken: String(record.shareToken ?? ''),
+    ...(typeof record.shareToken === 'string' ? { shareToken: record.shareToken } : {}),
+    ...(typeof record.shuffleQuestions === 'boolean'
+      ? { shuffleQuestions: record.shuffleQuestions }
+      : {}),
     questions,
+  };
+}
+
+function parseAttemptSession(value: unknown): QuizAttemptSessionInfo | undefined {
+  const record = asRecord(value);
+  if (!record) {
+    return undefined;
+  }
+  return {
+    startedAt: String(record.startedAt ?? ''),
+    serverNow: String(record.serverNow ?? ''),
+    timeLimitMinutes:
+      typeof record.timeLimitMinutes === 'number' ? record.timeLimitMinutes : 0,
   };
 }
 
@@ -61,6 +83,7 @@ const QUIZ_DENIAL_REASONS = new Set<QuizAccessDeniedReason>([
   'wrong-section',
   'not-registered',
   'not-active',
+  'time-expired',
   'teacher-account',
 ]);
 
@@ -80,14 +103,17 @@ export function parseQuizAccess(value: unknown): QuizAccess {
   const status = record?.status;
 
   switch (status) {
-    case 'granted':
+    case 'granted': {
+      const attemptSession = parseAttemptSession(record?.attemptSession);
       return {
         status: 'granted',
         quiz: parseQuizPayload(record?.quiz),
         // Only include `preview` when the server explicitly set it, so a normal
         // student grant still deep-equals `{ status, quiz }` (parser tests).
         ...(record?.preview === true ? { preview: true } : {}),
+        ...(attemptSession ? { attemptSession } : {}),
       };
+    }
     case 'enrollment-required':
       return { status: 'enrollment-required' };
     case 'already-attempted':
@@ -107,6 +133,7 @@ const SUBMIT_DENIAL_REASONS = new Set<SubmitAttemptDeniedReason>([
   'quiz-not-found',
   'not-registered',
   'teacher-account',
+  'time-expired',
 ]);
 
 function parseSubmitDeniedReason(value: unknown): SubmitAttemptDeniedReason {
@@ -126,6 +153,33 @@ export type SubmitAttemptOutcome =
   | { readonly status: 'recorded'; readonly result: AttemptResult }
   | { readonly status: 'already-attempted'; readonly result: AttemptResult }
   | { readonly status: 'denied'; readonly reason: SubmitAttemptDeniedReason };
+
+export type StartAttemptOutcome =
+  | ({ readonly status: 'started' } & QuizAttemptSessionInfo)
+  | { readonly status: 'already-attempted'; readonly result: AttemptResult }
+  | { readonly status: 'denied'; readonly reason: QuizAccessDeniedReason };
+
+export function parseStartAttemptOutcome(value: unknown): StartAttemptOutcome {
+  const record = asRecord(value);
+  const status = record?.status;
+
+  switch (status) {
+    case 'started':
+      return {
+        status: 'started',
+        startedAt: String(record?.startedAt ?? ''),
+        serverNow: String(record?.serverNow ?? ''),
+        timeLimitMinutes:
+          typeof record?.timeLimitMinutes === 'number' ? record.timeLimitMinutes : 0,
+      };
+    case 'already-attempted':
+      return { status: 'already-attempted', result: parseAttemptResult(record?.result) };
+    case 'denied':
+      return { status: 'denied', reason: parseQuizDeniedReason(record?.reason) };
+    default:
+      return { status: 'denied', reason: 'not-registered' };
+  }
+}
 
 /**
  * Parse the `submit_attempt` payload into a {@link SubmitAttemptOutcome}. An

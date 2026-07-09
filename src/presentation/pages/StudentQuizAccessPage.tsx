@@ -10,7 +10,7 @@ import QuizAttemptView from '@presentation/views/QuizAttemptView';
 import { createQuizAccess } from '@data/access/quizAccess';
 import { createLocalDemoQuizAccess, isLocalDemoMode } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
-import type { QuizPayloadNoAnswers } from '@domain/services/rosterService';
+import type { QuizAttemptSessionInfo, QuizPayloadNoAnswers } from '@domain/services/rosterService';
 import { useCallback, useMemo } from 'react';
 
 const supabaseQuizAccess = createQuizAccess(supabase);
@@ -27,7 +27,11 @@ export default function StudentQuizAccessPage() {
     [quizAccess],
   );
   const loadRosterOptions = useCallback(
-    (quizId: string) => quizAccess.listRosterOptions(quizId),
+    (quizId: string, searchPrefix?: string) => quizAccess.listRosterOptions(quizId, searchPrefix),
+    [quizAccess],
+  );
+  const startAttempt = useCallback(
+    (quizId: string) => quizAccess.startAttempt(quizId),
     [quizAccess],
   );
 
@@ -47,9 +51,11 @@ export default function StudentQuizAccessPage() {
       quizId={token}
       resolveAccess={resolveAccess}
       loadRosterOptions={loadRosterOptions}
-      onGranted={(quiz: QuizPayloadNoAnswers) => (
+      startAttempt={startAttempt}
+      onGranted={(quiz: QuizPayloadNoAnswers, attemptSession: QuizAttemptSessionInfo) => (
         <QuizAttemptView
           quiz={quiz}
+          attemptSession={attemptSession}
           submitAttempt={(quizId, answers) => quizAccess.submitAttempt(quizId, answers)}
         />
       )}

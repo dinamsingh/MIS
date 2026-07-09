@@ -629,6 +629,8 @@ interface DemoQuizRecord {
   readonly shareToken: string;
   readonly activeFrom?: string | null;
   readonly activeUntil?: string | null;
+  readonly showAnswersAfterClose: boolean;
+  readonly shuffleQuestions: boolean;
   readonly createdAt?: string;
   readonly questions: DemoQuizQuestion[];
 }
@@ -668,6 +670,7 @@ function quizPayload(quiz: DemoQuizRecord): QuizPayloadNoAnswers {
     unitId: quiz.unitId,
     timeLimitMinutes: quiz.timeLimitMinutes,
     shareToken: quiz.shareToken,
+    shuffleQuestions: quiz.shuffleQuestions,
     questions: quiz.questions.map((question) => ({
       id: question.id,
       text: question.text,
@@ -705,6 +708,8 @@ function toDemoSavedQuiz(quiz: DemoQuizRecord, attempts: readonly DemoQuizAttemp
     shareToken: quiz.shareToken,
     activeFrom: quiz.activeFrom ?? null,
     activeUntil: quiz.activeUntil ?? null,
+    showAnswersAfterClose: quiz.showAnswersAfterClose,
+    shuffleQuestions: quiz.shuffleQuestions,
     questionCount: quiz.questions.length,
     responseCount: attempts.length,
     totalMarks: totalQuizMarks(quiz),
@@ -729,6 +734,8 @@ export function createLocalDemoQuizAccess(
         shareToken: input.shareToken,
         activeFrom: input.activeFrom ?? null,
         activeUntil: input.activeUntil ?? null,
+        showAnswersAfterClose: input.showAnswersAfterClose ?? false,
+        shuffleQuestions: input.shuffleQuestions ?? false,
         createdAt: new Date().toISOString(),
         questions: [],
       };
@@ -781,11 +788,18 @@ export function createLocalDemoQuizAccess(
       const attempts = store.attemptsByQuiz[quiz.id] ?? [];
       const studentAttempt = attempts.find((a) => a.studentId === studentId);
       if (studentAttempt) {
+        let canReview = false;
+        if (quiz.showAnswersAfterClose) {
+          if (!quiz.activeUntil || new Date(quiz.activeUntil) < new Date()) {
+            canReview = true;
+          }
+        }
         return {
           status: 'already-attempted',
           result: {
             score: studentAttempt.score,
             totalMarks: totalQuizMarks(quiz),
+            canReview,
           },
         };
       }
@@ -796,14 +810,21 @@ export function createLocalDemoQuizAccess(
       return { status: 'granted', quiz: quizPayload(quiz) };
     },
 
-    async listRosterOptions(quizId: string): Promise<QuizRosterOption[]> {
+    async listRosterOptions(quizId: string, searchPrefix?: string): Promise<QuizRosterOption[]> {
       const quiz = findQuiz(readQuizStore(), quizId);
       if (!quiz) {
         return [];
       }
+      
+      const prefix = (searchPrefix || '').trim().toLowerCase();
+      if (prefix.length < 3) {
+        return [];
+      }
+      
       return getStudents()
         .filter((student) => !quiz.sectionId || student.sectionId === quiz.sectionId)
-        .filter((student) => student.enrollmentNumber !== undefined)
+        .filter((student) => student.enrollmentNumber !== undefined && student.enrollmentNumber.toLowerCase().startsWith(prefix))
+        .slice(0, 5)
         .map((student) => ({
           enrollmentNumber: student.enrollmentNumber ?? '',
           name: student.name,
@@ -818,6 +839,123 @@ export function createLocalDemoQuizAccess(
             : null,
         }));
     },
+
+    async listQuizNonAttempters(quizId: string): Promise<QuizRosterOption[]> {
+      const store = readQuizStore();
+      const quiz = findQuiz(store, quizId);
+      if (!quiz) {
+        return [];
+      }
+      const attempts = store.attemptsByQuiz[quizId] || [];
+      const submittedIds = new Set(attempts.map((a) => a.studentId));
+      return getStudents()
+        .filter((student) => !quiz.sectionId || student.sectionId === quiz.sectionId)
+        .filter((student) => student.enrollmentNumber !== undefined && !submittedIds.has(student.id))
+        .map((student) => ({
+          enrollmentNumber: student.enrollmentNumber ?? '',
+          name: student.name,
+          section: student.sectionId || student.sectionName
+            ? {
+                id: student.sectionId ?? student.sectionName ?? 'demo-section',
+                name: student.sectionName ?? student.sectionId ?? 'Demo section',
+                batch: null,
+                semester: null,
+                department: null,
+              }
+            : null,
+        }));
+    },
+
+    async getQuizQuestionStats(quizId: string): Promise<QuizQuestionStats[]> {
+      const store = readQuizStore();
+      const quiz = findQuiz(store, quizId);
+      if (!quiz) return [];
+      
+      const attempts = store.attemptsByQuiz[quizId] || [];
+      const totalAttempts = attempts.length;
+      
+      return quiz.questions.map((q) => {
+        const pickCounts: Record<string, number> = {};
+        for (const attempt of attempts) {
+          const picked = attempt.answers[q.id];
+          if (picked !== undefined) {
+            pickCounts[picked] = (pickCounts[picked] || 0) + 1;
+          }
+        }
+        return {
+          questionId: q.id,
+          text: q.text,
+          options: q.options,
+          correctIndex: q.correctIndex,
+          marks: q.marks ?? 1,
+          position: q.position ?? 0,
+          totalAttempts,
+          pickCounts,
+        };
+      }).sort((a, b) => a.position - b.position);
+    },
+
+    async getQuizAttemptDetail(quizId: string, studentId: string): Promise<QuizAttemptDetail | null> {
+      const store = readQuizStore();
+      const quiz = findQuiz(store, quizId);
+      if (!quiz) return null;
+      
+      const attempt = (store.attemptsByQuiz[quizId] || []).find(a => a.studentId === studentId);
+      if (!attempt) return null;
+      
+      const student = getStudents().find(s => s.id === studentId);
+      if (!student) return null;
+      
+      const questions = quiz.questions.map((q) => ({
+        questionId: q.id,
+        text: q.text,
+        options: q.options,
+        correctIndex: q.correctIndex,
+        marks: q.marks ?? 1,
+        position: q.position ?? 0,
+        studentAnswerIndex: attempt.answers[q.id] ?? null,
+      })).sort((a, b) => a.position - b.position);
+      
+      return {
+        studentName: student.name,
+        enrollmentNumber: student.enrollmentNumber ?? null,
+        score: attempt.score,
+        submittedAt: attempt.submittedAt || new Date().toISOString(),
+        questions,
+      };
+    },
+
+    async getQuizReview(quizId: string): Promise<QuizAttemptDetailQuestion[] | null> {
+      // For demo, we just use the same detail mock but verify the user is eligible
+      // We don't have the auth context here (local demo uses simple mocked auth), 
+      // but in a real app the studentId comes from the auth token. 
+      // In demo mode, we just return null because the review is usually fetched from student perspective,
+      // and demo mode mostly mocks teacher perspective. Wait, for student perspective, 
+      // demo mode needs to return the review for the current mock student.
+      // Since demo mode doesn't know the current student easily in getQuizReview (which takes no studentId),
+      // we'll just mock it to return the review for the first attempt found if any.
+      const store = readQuizStore();
+      const quiz = findQuiz(store, quizId);
+      if (!quiz || !quiz.showAnswersAfterClose) return null;
+      
+      if (deriveQuizStatus(quiz.activeFrom ?? null, quiz.activeUntil ?? null) === 'active') {
+        return null;
+      }
+      
+      const attempt = (store.attemptsByQuiz[quizId] || [])[0];
+      if (!attempt) return null;
+      
+      return quiz.questions.map((q) => ({
+        questionId: q.id,
+        text: q.text,
+        options: q.options,
+        correctIndex: q.correctIndex,
+        marks: q.marks ?? 1,
+        position: q.position ?? 0,
+        studentAnswerIndex: attempt.answers[q.id] ?? null,
+      })).sort((a, b) => a.position - b.position);
+    },
+
 
     async submitAttempt(quizId: string, answers: Record<string, number>): Promise<SubmitAttemptOutcome> {
       const store = readQuizStore();

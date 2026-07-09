@@ -177,6 +177,16 @@ async function persistShareRecord(record: ShareRecord, sectionId: string | null)
   return shareRecordFromRow(data as AssignmentShareRow);
 }
 
+async function deleteShareRecord(recordId: string): Promise<void> {
+  if (isLocalDemoMode()) {
+    const nextHistory = readShareHistory().filter(r => r.id !== recordId);
+    saveShareHistory(nextHistory);
+    return;
+  }
+  const { error } = await supabase.from('assignment_shares').delete().eq('id', recordId);
+  if (error) throw new Error(error.message);
+}
+
 function buildShareMessage(record: ShareRecord): string {
   return [
     `Assignment: ${record.title}`,
@@ -343,7 +353,7 @@ export default function AssignmentSharePage() {
       setHistory(nextHistory);
       setActiveRecord(savedRecord);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed. Dobara try karein.');
+      setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -455,7 +465,7 @@ export default function AssignmentSharePage() {
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs font-semibold text-muted">
-              File upload hone ke baad copy message button active hoga.
+              The copy message button will become active after the file is uploaded.
             </p>
             <button
               type="button"
@@ -509,7 +519,7 @@ export default function AssignmentSharePage() {
           <div className="mt-3 rounded-control border border-border bg-background p-3">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted">WhatsApp Message</p>
             <p className="mt-1.5 line-clamp-4 whitespace-pre-line text-xs font-medium leading-5 text-soft">
-              {shareMessage || 'Upload ke baad yahan ready-to-copy message dikhega.'}
+              {shareMessage || 'The ready-to-copy message will appear here after uploading.'}
             </p>
           </div>
 
@@ -541,24 +551,40 @@ export default function AssignmentSharePage() {
           </p>
         ) : history.length === 0 ? (
           <p className="mt-4 rounded-control border border-border bg-background p-4 text-sm font-semibold text-muted">
-            Abhi koi assignment share prepare nahi hua.
+            No assignment shares have been prepared yet.
           </p>
         ) : (
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {history.map((record) => (
-              <button
+              <div
                 key={record.id}
-                type="button"
                 onClick={() => {
                   setActiveRecord(record);
                   setCopied(false);
                 }}
-                className="rounded-control border border-border bg-background p-4 text-left shadow-soft transition-colors hover:border-accent/40 hover:bg-accent-tint/30"
+                className="group relative cursor-pointer rounded-control border border-border bg-background p-4 text-left shadow-soft transition-colors hover:border-accent/40 hover:bg-accent-tint/30"
               >
-                <p className="truncate text-sm font-black text-text">{record.title}</p>
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (!window.confirm('Delete this assignment share?')) return;
+                    try {
+                      await deleteShareRecord(record.id);
+                      setHistory(h => h.filter(x => x.id !== record.id));
+                      if (activeRecord?.id === record.id) setActiveRecord(null);
+                    } catch (err) {
+                      alert(err instanceof Error ? err.message : 'Delete failed');
+                    }
+                  }}
+                  className="absolute right-3 top-3 opacity-0 transition-opacity hover:bg-status-red/20 group-hover:opacity-100 rounded bg-status-red/10 px-2 py-1 text-[10px] font-bold text-status-red"
+                >
+                  Delete
+                </button>
+                <p className="truncate pr-12 text-sm font-black text-text">{record.title}</p>
                 <p className="mt-1 truncate text-xs font-semibold text-muted">{record.subjectName} - {record.unitName}</p>
                 <p className="mt-3 text-xs font-semibold text-soft">{record.fileName} - {fileSizeLabel(record.sizeBytes)}</p>
-              </button>
+              </div>
             ))}
           </div>
         )}

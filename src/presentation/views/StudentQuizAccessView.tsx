@@ -190,36 +190,53 @@ export default function StudentQuizAccessView({
   }, [actor.kind, isLoading, quizId, resolveAccess, applyDecision]);
 
   useEffect(() => {
-    if (phase.kind !== 'enrollment-required' || !loadRosterOptions) {
+    if (phase.kind !== 'enrollment-required') {
       return;
     }
+    
+    // If teacher hasn't provided loadRosterOptions, force manual mode.
+    if (!loadRosterOptions) {
+      setManualMode(true);
+      return;
+    }
+
+    const prefix = enrollmentInput.trim();
+    if (prefix.length < 3) {
+      setRosterOptions([]);
+      setIsLoadingRoster(false);
+      return;
+    }
+
     let active = true;
     setIsLoadingRoster(true);
     setRosterLoadFailed(false);
-    setManualMode(false);
-    setEnrollmentInput('');
-    void loadRosterOptions(quizId)
-      .then((options) => {
-        if (active) {
-          setRosterOptions(options);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setRosterOptions([]);
-          setRosterLoadFailed(true);
-          setManualMode(true);
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setIsLoadingRoster(false);
-        }
-      });
+    
+    const timeoutId = setTimeout(() => {
+      void loadRosterOptions(quizId, prefix)
+        .then((options) => {
+          if (active) {
+            setRosterOptions(options);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setRosterOptions([]);
+            setRosterLoadFailed(true);
+            setManualMode(true);
+          }
+        })
+        .finally(() => {
+          if (active) {
+            setIsLoadingRoster(false);
+          }
+        });
+    }, 300);
+
     return () => {
       active = false;
+      clearTimeout(timeoutId);
     };
-  }, [phase.kind, quizId, loadRosterOptions]);
+  }, [phase.kind, quizId, loadRosterOptions, enrollmentInput]);
 
   async function submitEnrollment(value: string) {
     const trimmed = value.trim();
@@ -283,37 +300,51 @@ export default function StudentQuizAccessView({
       const inputClass =
         'w-full rounded-button border border-border bg-surface px-3 py-2 text-sm text-text ' +
         'placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30';
-      const showDropdown = !manualMode && rosterOptions.length > 0;
+      const showDropdown = !manualMode;
       return (
         <AccessCard title="Enter your enrollment number">
           <p>
-            Apna naam select karo. Enrollment number automatically verify ho jaayega aur next time
-            yaad rahega.
+            Enter your enrollment number to access this quiz. This will be verified.
           </p>
           <form className="mt-4 flex flex-col gap-3 text-left" onSubmit={handleEnrollmentSubmit} noValidate>
-            {isLoadingRoster ? (
-              <div className="rounded-button border border-border bg-surface-muted/40 px-3 py-2 text-sm text-muted">
-                Student list load ho rahi hai...
-              </div>
-            ) : showDropdown ? (
+            {showDropdown ? (
               <>
-                <label htmlFor="student-roster-option" className="text-sm font-medium text-text">
-                  Student name
+                <label htmlFor="student-search" className="text-sm font-medium text-text">
+                  Enrollment number
                 </label>
-                <select
-                  id="student-roster-option"
-                  value={enrollmentInput}
-                  onChange={(e) => setEnrollmentInput(e.target.value)}
-                  className={inputClass}
-                >
-                  <option value="">Select your name</option>
-                  {rosterOptions.map((option) => (
-                    <option key={option.enrollmentNumber} value={option.enrollmentNumber}>
-                      {option.name} - {option.enrollmentNumber}
-                      {option.section ? ` (${formatSectionLabel(option.section)})` : ''}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <input
+                    id="student-search"
+                    type="text"
+                    value={enrollmentInput}
+                    onChange={(e) => setEnrollmentInput(e.target.value)}
+                    className={inputClass}
+                    placeholder="E.g. 0131CS..."
+                    autoComplete="off"
+                  />
+                  {isLoadingRoster && enrollmentInput.trim().length >= 3 && (
+                    <div className="absolute right-3 top-2.5">
+                      <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-accent border-r-transparent" />
+                    </div>
+                  )}
+                  {rosterOptions.length > 0 && enrollmentInput.trim().length >= 3 && (
+                    <ul className="absolute left-0 right-0 top-full mt-1 z-10 max-h-48 overflow-y-auto rounded-md border border-border bg-surface shadow-lg">
+                      {rosterOptions.map((option) => (
+                        <li 
+                          key={option.enrollmentNumber} 
+                          className="px-3 py-2 text-sm text-text hover:bg-surface-muted cursor-pointer"
+                          onClick={() => {
+                            setEnrollmentInput(option.enrollmentNumber);
+                            setRosterOptions([]);
+                          }}
+                        >
+                          {option.name} - {option.enrollmentNumber}
+                          {option.section ? ` (${formatSectionLabel(option.section)})` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
                 <button
                   type="button"
                   className="self-start text-xs font-medium text-accent hover:underline"
@@ -340,8 +371,8 @@ export default function StudentQuizAccessView({
                   placeholder="0131CS241000"
                 />
                 {rosterLoadFailed && (
-                  <p className="text-xs text-muted">
-                    Student list load nahi ho paayi. Enrollment manually enter kar sakte ho.
+                  <p className="text-xs text-status-amber">
+                    Student list check nahi ho payi. Sahi number manually submit karo.
                   </p>
                 )}
               </>

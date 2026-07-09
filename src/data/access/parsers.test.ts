@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseQuizAccess, parseSubmitOutcome } from './parsers';
+import { parseQuizAccess, parseStartAttemptOutcome, parseSubmitOutcome } from './parsers';
 
 describe('parseQuizAccess', () => {
   it('parses a granted decision with an answer-free quiz payload', () => {
@@ -61,10 +61,32 @@ describe('parseQuizAccess', () => {
       'enrollment-already-bound',
       'wrong-section',
       'not-active',
+      'time-expired',
     ] as const) {
       expect(parseQuizAccess({ status: 'denied', reason })).toEqual({
         status: 'denied',
         reason,
+      });
+    }
+  });
+
+  it('parses a granted decision with an existing attempt session', () => {
+    const access = parseQuizAccess({
+      status: 'granted',
+      quiz: { id: 'quiz-1', questions: [] },
+      attemptSession: {
+        startedAt: '2026-07-09T10:00:00.000Z',
+        serverNow: '2026-07-09T10:05:00.000Z',
+        timeLimitMinutes: 15,
+      },
+    });
+
+    expect(access.status).toBe('granted');
+    if (access.status === 'granted') {
+      expect(access.attemptSession).toEqual({
+        startedAt: '2026-07-09T10:00:00.000Z',
+        serverNow: '2026-07-09T10:05:00.000Z',
+        timeLimitMinutes: 15,
       });
     }
   });
@@ -119,6 +141,10 @@ describe('parseSubmitOutcome', () => {
       status: 'denied',
       reason: 'not-authenticated',
     });
+    expect(parseSubmitOutcome({ status: 'denied', reason: 'time-expired' })).toEqual({
+      status: 'denied',
+      reason: 'time-expired',
+    });
   });
 
   it('falls back to not-registered for an unrecognized reason value', () => {
@@ -129,6 +155,31 @@ describe('parseSubmitOutcome', () => {
     expect(parseSubmitOutcome({ status: 'denied' })).toEqual({
       status: 'denied',
       reason: 'not-registered',
+    });
+  });
+});
+
+describe('parseStartAttemptOutcome', () => {
+  it('parses a started timer session', () => {
+    expect(
+      parseStartAttemptOutcome({
+        status: 'started',
+        startedAt: '2026-07-09T10:00:00.000Z',
+        serverNow: '2026-07-09T10:01:00.000Z',
+        timeLimitMinutes: 20,
+      }),
+    ).toEqual({
+      status: 'started',
+      startedAt: '2026-07-09T10:00:00.000Z',
+      serverNow: '2026-07-09T10:01:00.000Z',
+      timeLimitMinutes: 20,
+    });
+  });
+
+  it('preserves denied reasons from the start RPC', () => {
+    expect(parseStartAttemptOutcome({ status: 'denied', reason: 'time-expired' })).toEqual({
+      status: 'denied',
+      reason: 'time-expired',
     });
   });
 });

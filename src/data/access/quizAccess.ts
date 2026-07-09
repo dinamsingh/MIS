@@ -30,6 +30,8 @@ export interface QuizInput {
   readonly activeFrom?: string | null;
   /** ISO timestamp the quiz closes (null = never). */
   readonly activeUntil?: string | null;
+  readonly showAnswersAfterClose?: boolean;
+  readonly shuffleQuestions?: boolean;
 }
 
 /** Fields accepted when adding a question to a quiz. */
@@ -58,6 +60,8 @@ export interface SavedQuizSummary {
   readonly shareToken: string;
   readonly activeFrom: string | null;
   readonly activeUntil: string | null;
+  readonly showAnswersAfterClose: boolean;
+  readonly shuffleQuestions: boolean;
   readonly questionCount: number;
   readonly responseCount: number;
   readonly totalMarks: number;
@@ -89,6 +93,35 @@ export interface QuizRosterOption {
   readonly section: QuizResultSection | null;
 }
 
+export interface QuizQuestionStats {
+  readonly questionId: string;
+  readonly text: string;
+  readonly options: string[];
+  readonly correctIndex: number;
+  readonly marks: number;
+  readonly position: number;
+  readonly totalAttempts: number;
+  readonly pickCounts: Record<string, number>;
+}
+
+export interface QuizAttemptDetailQuestion {
+  readonly questionId: string;
+  readonly text: string;
+  readonly options: string[];
+  readonly correctIndex: number;
+  readonly marks: number;
+  readonly position: number;
+  readonly studentAnswerIndex: number | null;
+}
+
+export interface QuizAttemptDetail {
+  readonly studentName: string;
+  readonly enrollmentNumber: string | null;
+  readonly score: number;
+  readonly submittedAt: string;
+  readonly questions: QuizAttemptDetailQuestion[];
+}
+
 /** Supabase-backed quiz operations. */
 export interface QuizAccessRepository {
   /** Create a quiz and return its id (Requirements 8.1, 8.2, 8.3). */
@@ -98,7 +131,7 @@ export interface QuizAccessRepository {
   /** Resolve student quiz access server-side (Requirements 2.5, 8.5, 8.6). */
   resolveAccess(quizId: string, providedEnrollment: string | null): Promise<QuizAccess>;
   /** List safe roster choices for the quiz's assigned section(s). */
-  listRosterOptions(quizId: string): Promise<QuizRosterOption[]>;
+  listRosterOptions(quizId: string, searchPrefix?: string): Promise<QuizRosterOption[]>;
   /** Submit and server-grade an attempt (Requirements 8.4, 8.8, 8.10, 8.11). */
   submitAttempt(quizId: string, answers: Record<string, number>): Promise<SubmitAttemptOutcome>;
   /** List saved quizzes owned by the current teacher. */
@@ -115,6 +148,14 @@ export interface QuizAccessRepository {
    * touch the student's attempts in other quizzes/subjects.
    */
   resetAttempt(quizId: string, studentId: string): Promise<void>;
+  /** List students in the target section who have not attempted the quiz. */
+  listQuizNonAttempters(quizId: string): Promise<QuizRosterOption[]>;
+  /** Get question-level analytics for a quiz. */
+  getQuizQuestionStats(quizId: string): Promise<QuizQuestionStats[]>;
+  /** Get a student's answer sheet for a quiz. */
+  getQuizAttemptDetail(quizId: string, studentId: string): Promise<QuizAttemptDetail | null>;
+  /** Get a student's post-submit evaluated answer sheet for a quiz (if eligible). */
+  getQuizReview(quizId: string): Promise<QuizAttemptDetailQuestion[] | null>;
 }
 
 interface InsertedId {
@@ -151,6 +192,8 @@ interface SavedQuizRow {
   readonly share_token: string;
   readonly active_from: string | null;
   readonly active_until: string | null;
+  readonly show_answers_after_close?: boolean;
+  readonly shuffle_questions?: boolean;
   readonly created_at: string | null;
   readonly syllabus_units: SyllabusUnitJoinRow | SyllabusUnitJoinRow[] | null;
   readonly questions: QuizQuestionCountRow[] | null;
@@ -262,6 +305,8 @@ function toSavedQuiz(row: SavedQuizRow): SavedQuizSummary {
     shareToken: row.share_token,
     activeFrom: row.active_from,
     activeUntil: row.active_until,
+    showAnswersAfterClose: row.show_answers_after_close ?? false,
+    shuffleQuestions: row.shuffle_questions ?? false,
     questionCount: questions.length,
     responseCount,
     totalMarks: quizTotalMarks(questions),
@@ -302,12 +347,12 @@ export function createQuizAccess(
         unit_id: input.unitId,
         title: input.title,
         ...(input.sectionId !== undefined ? { section_id: input.sectionId } : {}),
-        ...(input.timeLimitMinutes !== undefined
-          ? { time_limit_minutes: input.timeLimitMinutes }
-          : {}),
+        time_limit_minutes: input.timeLimitMinutes ?? null,
         share_token: input.shareToken,
-        ...(input.activeFrom !== undefined ? { active_from: input.activeFrom } : {}),
-        ...(input.activeUntil !== undefined ? { active_until: input.activeUntil } : {}),
+        active_from: input.activeFrom ?? null,
+        active_until: input.activeUntil ?? null,
+        show_answers_after_close: input.showAnswersAfterClose ?? false,
+        shuffle_questions: input.shuffleQuestions ?? false,
       };
       const inserted = unwrap(
         await client.from('quizzes').insert(row).select('id').single(),
@@ -342,13 +387,15 @@ export function createQuizAccess(
       return parseQuizAccess(payload);
     },
 
-    async listRosterOptions(quizId: string): Promise<QuizRosterOption[]> {
-      const payload = unwrap(
-        await client.rpc('list_quiz_roster_options', {
-          p_quiz_id: quizId,
-        }),
-      );
-      return (Array.isArray(payload) ? payload : [])
+    async listRosterOptions(quizId: string, searchPrefix?: string): Promise<QuizRosterOption[]> {
+      const { data, error } = await client.rpc('list_quiz_roster_options', {
+        p_quiz_id: quizId,
+        p_search_prefix: searchPrefix ?? '',
+      });
+      if (error) {
+        throw new Error(`list_quiz_roster_options failed: ${error.message}`);
+      }
+      return (Array.isArray(data) ? data : [])
         .map(toRosterOption)
         .filter((option): option is QuizRosterOption => option !== null);
     },
@@ -434,6 +481,44 @@ export function createQuizAccess(
           p_student_id: studentId,
         }),
       );
+    },
+    async listQuizNonAttempters(quizId: string): Promise<QuizRosterOption[]> {
+      const payload = unwrap(
+        await client.rpc('list_quiz_non_attempters', {
+          p_quiz_id: quizId,
+        }),
+      );
+      return (Array.isArray(payload) ? payload : [])
+        .map(toRosterOption)
+        .filter((option): option is QuizRosterOption => option !== null);
+    },
+
+    async getQuizQuestionStats(quizId: string): Promise<QuizQuestionStats[]> {
+      const payload = unwrap(
+        await client.rpc('quiz_question_stats', {
+          p_quiz_id: quizId,
+        }),
+      );
+      return Array.isArray(payload) ? payload : [];
+    },
+
+    async getQuizAttemptDetail(quizId: string, studentId: string): Promise<QuizAttemptDetail | null> {
+      const payload = unwrap(
+        await client.rpc('quiz_attempt_detail', {
+          p_quiz_id: quizId,
+          p_student_id: studentId,
+        }),
+      );
+      return typeof payload === 'object' && payload !== null ? (payload as QuizAttemptDetail) : null;
+    },
+
+    async getQuizReview(quizId: string): Promise<QuizAttemptDetailQuestion[] | null> {
+      const payload = unwrap(
+        await client.rpc('quiz_review', {
+          p_quiz_id: quizId,
+        }),
+      );
+      return Array.isArray(payload) ? payload : null;
     },
   };
 }

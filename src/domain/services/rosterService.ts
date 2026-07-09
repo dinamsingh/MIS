@@ -120,11 +120,22 @@ export function createRosterService(): RosterService {
  * function). This is the minimal shape the access decision needs to return; the
  * data-access layer populates it from the stored quiz.
  */
+
+/**
+ * The quiz payload handed to a student once access is granted. It intentionally
+ * carries no correct-answer data — grading happens server-side so the answer
+ * key never reaches the client (see `quizService` / the `submit_attempt` DB
+ * function). This is the minimal shape the access decision needs to return; the
+ * data-access layer populates it from the stored quiz.
+ */
 export interface QuizPayloadNoAnswers {
   readonly id: string;
+  readonly title?: string;
+  readonly instructions?: string | null;
   readonly unitId: string;
   readonly timeLimitMinutes: number;
-  readonly shareToken: string;
+  readonly shareToken?: string;
+  readonly shuffleQuestions?: boolean;
   readonly questions: ReadonlyArray<{
     readonly id: string;
     readonly text: string;
@@ -133,13 +144,12 @@ export interface QuizPayloadNoAnswers {
 }
 
 export type QuizAccessDeniedReason =
-  | 'not-authenticated'
-  | 'quiz-not-found'
   | 'enrollment-not-found'
   | 'enrollment-already-bound'
   | 'wrong-section'
   | 'not-registered'
   | 'not-active'
+  | 'time-expired'
   /** The signed-in email belongs to a teacher account, which can never
    * self-register as a student (identity separation, migration 0027). */
   | 'teacher-account';
@@ -152,8 +162,14 @@ export type QuizAccessDeniedReason =
  */
 export type SubmitAttemptDeniedReason = Extract<
   QuizAccessDeniedReason,
-  'not-authenticated' | 'quiz-not-found' | 'not-registered' | 'teacher-account'
+  'not-authenticated' | 'quiz-not-found' | 'not-registered' | 'teacher-account' | 'time-expired'
 >;
+
+export interface QuizAttemptSessionInfo {
+  readonly startedAt: string;
+  readonly serverNow: string;
+  readonly timeLimitMinutes: number;
+}
 
 /**
  * The outcome of resolving a student's request to attempt a quiz.
@@ -173,7 +189,12 @@ export type SubmitAttemptDeniedReason = Extract<
 export type QuizAccess =
   // `preview` (optional) is true when the caller is the quiz's owning teacher
   // opening their own quiz to preview it (roster gate bypassed, no attempt).
-  | { status: 'granted'; quiz: QuizPayloadNoAnswers; preview?: boolean }
+  | {
+      status: 'granted';
+      quiz: QuizPayloadNoAnswers;
+      preview?: boolean;
+      attemptSession?: QuizAttemptSessionInfo;
+    }
   | { status: 'enrollment-required' }
   | { status: 'denied'; reason: QuizAccessDeniedReason }
   | { status: 'already-attempted'; result: AttemptResult };

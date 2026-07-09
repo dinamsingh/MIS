@@ -468,8 +468,8 @@ export const StudentDirectoryModal = memo(function StudentDirectoryModal({
   onClose,
 }: StudentDirectoryModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="student-directory-title">
-      <div className="flex max-h-[86vh] w-full max-w-5xl animate-foundation-scale-in flex-col overflow-hidden rounded-dialog border border-border bg-surface shadow-overlay">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="student-directory-title" onClick={onClose}>
+      <div className="flex max-h-[86vh] w-full max-w-5xl animate-foundation-scale-in flex-col overflow-hidden rounded-dialog border border-border bg-surface shadow-overlay" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
           <div>
             <h2 id="student-directory-title" className="text-lg font-semibold text-text">Student Directory</h2>

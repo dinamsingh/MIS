@@ -116,7 +116,7 @@ export default function AiQuizGeneratorPage() {
 
       const quizTitle =
         title.trim().length > 0 ? title.trim() : `${selectedUnit?.name ?? 'Quiz'} (AI)`;
-      const quizId = await quizAccess.createQuiz({
+      await quizAccess.createQuizWithQuestions({
         unitId,
         title: quizTitle,
         sectionId: selectedSectionId,
@@ -124,15 +124,12 @@ export default function AiQuizGeneratorPage() {
         shareToken,
         activeFrom: toIso(activeFrom),
         activeUntil: toIso(activeUntil),
-      });
-      for (const q of questions) {
-        await quizAccess.addQuestion(quizId, {
+      }, questions.map((q) => ({
           text: q.text,
           options: q.options,
           correctIndex: q.correctIndex,
           marks: q.marks,
-        });
-      }
+      })));
       const shareLink = `${window.location.origin}/quiz/${shareToken}`;
       setPhase({ kind: 'saved', shareLink, count: questions.length });
     } catch (e) {

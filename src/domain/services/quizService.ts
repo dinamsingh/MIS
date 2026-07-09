@@ -55,6 +55,7 @@ export interface Quiz {
 export interface AttemptResult {
   readonly score: number;
   readonly totalMarks: number;
+  readonly canReview?: boolean;
 }
 
 /**
