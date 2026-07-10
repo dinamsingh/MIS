@@ -67,6 +67,13 @@ export interface SavedQuizSummary {
   readonly totalMarks: number;
   readonly averageScore: number | null;
   readonly status: QuizStatus;
+  /**
+   * The sections this quiz is explicitly targeted at (via `quiz_target_sections`),
+   * or — when that junction table has no rows for this quiz — the single legacy
+   * `sectionId` resolved to a section, as its own one-element array. An empty
+   * array means the quiz is unrestricted (open to the whole subject).
+   */
+  readonly sections: QuizResultSection[];
 }
 
 export interface QuizResultSection {
@@ -160,6 +167,10 @@ export interface QuizAccessRepository {
   getQuizAttemptDetail(quizId: string, studentId: string): Promise<QuizAttemptDetail | null>;
   /** Get a student's post-submit evaluated answer sheet for a quiz (if eligible). */
   getQuizReview(quizId: string, email: string): Promise<QuizAttemptDetailQuestion[] | null>;
+  /** List the sections the calling teacher teaches a given subject in (multi-section assignment checklist). */
+  listTeacherSectionsForSubject(subjectId: string): Promise<QuizResultSection[]>;
+  /** Replace a quiz's target-section rows (multi-section assignment). Empty array clears them (legacy/unrestricted behavior). */
+  setQuizTargetSections(quizId: string, sectionIds: string[]): Promise<void>;
 }
 
 interface InsertedId {
@@ -202,6 +213,12 @@ interface SavedQuizRow {
   readonly syllabus_units: SyllabusUnitJoinRow | SyllabusUnitJoinRow[] | null;
   readonly questions: QuizQuestionCountRow[] | null;
   readonly quiz_attempts: QuizAttemptCountRow[] | null;
+  readonly sections: StudentSectionRow | StudentSectionRow[] | null;
+  readonly quiz_target_sections: QuizTargetSectionJoinRow[] | null;
+}
+
+interface QuizTargetSectionJoinRow {
+  readonly sections: StudentSectionRow | StudentSectionRow[] | null;
 }
 
 interface ResultQuestionRow {
@@ -294,6 +311,30 @@ function unitDisplayName(unit: SyllabusUnitJoinRow | null, fallback: string): st
   return unit.unit_no !== null ? `Unit ${unit.unit_no}: ${name}` : name;
 }
 
+function toSectionResult(row: StudentSectionRow | null): QuizResultSection | null {
+  if (!row) {
+    return null;
+  }
+  return {
+    id: row.id,
+    name: row.name,
+    batch: row.batch,
+    semester: row.semester,
+    department: row.department,
+  };
+}
+
+function toQuizSections(row: SavedQuizRow): QuizResultSection[] {
+  const targeted = (row.quiz_target_sections ?? [])
+    .map((join) => toSectionResult(firstJoin(join.sections)))
+    .filter((section): section is QuizResultSection => section !== null);
+  if (targeted.length > 0) {
+    return targeted;
+  }
+  const legacy = toSectionResult(firstJoin(row.sections));
+  return legacy ? [legacy] : [];
+}
+
 function toSavedQuiz(row: SavedQuizRow): SavedQuizSummary {
   const questions = row.questions ?? [];
   const attempts = row.quiz_attempts ?? [];
@@ -316,6 +357,7 @@ function toSavedQuiz(row: SavedQuizRow): SavedQuizSummary {
     totalMarks: quizTotalMarks(questions),
     averageScore: responseCount > 0 ? totalScore / responseCount : null,
     status: deriveQuizStatus(row.active_from, row.active_until),
+    sections: toQuizSections(row),
   };
 }
 
@@ -485,7 +527,7 @@ export function createQuizAccess(
         await client
           .from('quizzes')
           .select(
-            'id, title, unit_id, section_id, time_limit_minutes, share_token, active_from, active_until, created_at, syllabus_units(id, name, unit_no), questions(id, marks), quiz_attempts(id, score)',
+            'id, title, unit_id, section_id, time_limit_minutes, share_token, active_from, active_until, created_at, syllabus_units(id, name, unit_no), questions(id, marks), quiz_attempts(id, score), sections(id, name, batch, semester, department), quiz_target_sections(sections(id, name, batch, semester, department))',
           )
           .order('created_at', { ascending: false }),
       ) as SavedQuizRow[];
@@ -586,6 +628,39 @@ export function createQuizAccess(
       // to satisfy the shared interface used by callers (unused here).
       const payload = unwrap(await client.rpc('quiz_review', { p_quiz_id: quizId }));
       return Array.isArray(payload) ? payload : null;
+    },
+
+    async listTeacherSectionsForSubject(subjectId: string): Promise<QuizResultSection[]> {
+      const payload = unwrap(
+        await client.rpc('list_teacher_sections_for_subject', {
+          p_subject_id: subjectId,
+        }),
+      );
+      return (Array.isArray(payload) ? payload : [])
+        .map((value) => {
+          const record = asRecord(value);
+          const id = stringOrNull(record?.id);
+          if (id === null) {
+            return null;
+          }
+          return {
+            id,
+            name: stringOrNull(record?.name) ?? id,
+            batch: stringOrNull(record?.batch),
+            semester: stringOrNull(record?.semester),
+            department: stringOrNull(record?.department),
+          };
+        })
+        .filter((section): section is QuizResultSection => section !== null);
+    },
+
+    async setQuizTargetSections(quizId: string, sectionIds: string[]): Promise<void> {
+      unwrap(
+        await client.rpc('set_quiz_target_sections', {
+          p_quiz_id: quizId,
+          p_section_ids: sectionIds,
+        }),
+      );
     },
   };
 }

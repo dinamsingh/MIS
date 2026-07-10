@@ -36,10 +36,19 @@ export default function RequireTeacher({
     return <>{fallback}</>;
   }
 
-  // Only an actor resolved as `teacher` may reach the teacher area. Any other
-  // kind — anonymous, student, or otherwise — is redirected. Students never
-  // navigate here — they use the public /quiz/:token routes.
-  if (actor.kind !== 'teacher') {
+  // Allow any authenticated user through. Whether they are a fully set-up
+  // teacher is decided downstream by the OnboardingGate (teachers table +
+  // teacher_assignments), not here. Postgres RLS is the authoritative
+  // security boundary — this guard is a UX convenience to redirect anonymous
+  // visitors to sign-in, not a security control.
+  //
+  // Note: we previously tightened this to `actor.kind === 'teacher'`, but that
+  // broke onboarding because `actorFromSession` resolves a brand-new teacher
+  // (who hasn't onboarded yet and doesn't have app_metadata.role set) as
+  // `'student'`, causing an infinite redirect loop. Since RLS prevents any
+  // data leakage regardless of this client-side check, the pragmatic fix is
+  // to gate on "not anonymous" and let OnboardingGate handle the rest.
+  if (actor.kind === 'anonymous') {
     return <Navigate to={redirectTo} replace />;
   }
 

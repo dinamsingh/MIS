@@ -327,24 +327,24 @@ export default function QuizAttemptView({
 
   if (phase.kind === 'scored') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
-        <div className="card w-full max-w-sm p-6 text-center">
-          <h1 className="text-lg font-semibold text-text">
+      <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10 pb-[env(safe-area-inset-bottom)]">
+        <div className="card w-full max-w-sm text-center">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-status-green/10 text-2xl text-status-green" aria-hidden="true">
+            ✓
+          </span>
+          <h1 className="mt-4 text-lg font-semibold text-text">
             {phase.auto ? 'Time up — your answers were submitted automatically' : 'Quiz submitted'}
           </h1>
-          <p className="mt-2 text-sm text-soft">Your score has been recorded.</p>
-          <p className="mt-4 text-2xl font-bold text-accent">
-            {phase.score} / {phase.totalMarks}
-          </p>
+          <p className="mt-1 text-sm text-soft">Your score has been recorded.</p>
+          <div className="mt-4 rounded-control border border-border bg-surface-muted px-4 py-3">
+            <p className="text-2xl font-semibold text-accent">
+              {phase.score} <span className="text-base font-normal text-muted">/ {phase.totalMarks}</span>
+            </p>
+          </div>
           <p className="mt-4 text-xs text-muted">This session will close in 5 minutes.</p>
-          <button
-            type="button"
-            onClick={() => void signOut()}
-            className="mt-4 rounded px-6 py-2 text-sm font-medium text-white transition-opacity"
-            style={{ backgroundColor: '#5746e3' }}
-          >
+          <Button variant="primary" onClick={() => void signOut()} className="mt-4 w-full">
             Done
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -352,24 +352,24 @@ export default function QuizAttemptView({
 
   if (phase.kind === 'already-attempted') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
-        <div className="card w-full max-w-sm p-6 text-center">
-          <h1 className="text-lg font-semibold text-text">Attempt already submitted</h1>
-          <p role="alert" className="mt-2 text-sm text-soft">
+      <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10 pb-[env(safe-area-inset-bottom)]">
+        <div className="card w-full max-w-sm text-center">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-status-green/10 text-2xl text-status-green" aria-hidden="true">
+            ✓
+          </span>
+          <h1 className="mt-4 text-lg font-semibold text-text">Attempt already submitted</h1>
+          <p role="alert" className="mt-1 text-sm text-soft">
             {messages.auth.alreadyAttempted}
           </p>
-          <p className="mt-4 text-2xl font-bold text-accent">
-            {phase.score} / {phase.totalMarks}
-          </p>
+          <div className="mt-4 rounded-control border border-border bg-surface-muted px-4 py-3">
+            <p className="text-2xl font-semibold text-accent">
+              {phase.score} <span className="text-base font-normal text-muted">/ {phase.totalMarks}</span>
+            </p>
+          </div>
           <p className="mt-4 text-xs text-muted">This session will close in 5 minutes.</p>
-          <button
-            type="button"
-            onClick={() => void signOut()}
-            className="mt-4 rounded px-6 py-2 text-sm font-medium text-white transition-opacity"
-            style={{ backgroundColor: '#5746e3' }}
-          >
+          <Button variant="primary" onClick={() => void signOut()} className="mt-4 w-full">
             Done
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -377,20 +377,20 @@ export default function QuizAttemptView({
 
   if (phase.kind === 'error') {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#f0ebf8] px-4 py-10">
-        <div className="w-full max-w-3xl overflow-hidden rounded-lg bg-surface shadow-md">
-          <div className="h-2 w-full bg-[#5746e3]"></div>
-          <div className="p-6">
-            <h1 className="text-2xl font-normal text-text">Submission failed</h1>
-            <p role="alert" className="mt-2 text-sm text-status-red">
-              {phase.message}
-            </p>
-            {phase.retryable && (
-              <Button variant="primary" onClick={retrySubmit} className="mt-6 w-full max-w-xs" style={{ backgroundColor: '#5746e3', color: 'white', borderRadius: '4px' }}>
-                Retry submit
-              </Button>
-            )}
-          </div>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-10 pb-[env(safe-area-inset-bottom)]">
+        <div className="card w-full max-w-md text-center">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-status-red/10 text-2xl text-status-red" aria-hidden="true">
+            ✕
+          </span>
+          <h1 className="mt-4 text-lg font-semibold text-text">Submission failed</h1>
+          <p role="alert" className="mt-2 text-sm text-status-red">
+            {phase.message}
+          </p>
+          {phase.retryable && (
+            <Button variant="primary" onClick={retrySubmit} className="mt-5 w-full">
+              Retry submit
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -400,23 +400,30 @@ export default function QuizAttemptView({
 
   const isSubmitting = phase.kind === 'submitting';
 
+  const progressPercent = displayQuestions.length > 0 ? Math.round((answeredCount / displayQuestions.length) * 100) : 0;
+
   return (
-    <div className="min-h-screen bg-[#f0ebf8] px-4 py-6">
+    <div className="min-h-screen bg-background px-4 py-6 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto max-w-3xl">
         {/* Sticky timer header */}
-        <header className="sticky top-4 z-10 mb-6 flex flex-col sm:flex-row sm:items-center justify-between rounded-lg border border-border bg-surface px-6 py-4 shadow-md transition-shadow">
-          <div>
-            <h1 className="text-lg font-normal text-text">{quiz.title ?? 'Quiz'}</h1>
-            <p className="text-sm text-soft mt-1">
-              Answered {answeredCount} of {displayQuestions.length}
-            </p>
+        <header className="motion-border sticky top-4 z-10 mb-6 flex flex-col gap-3 rounded-card border border-border bg-surface px-6 py-4 shadow-soft sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-semibold text-text">{quiz.title ?? 'Quiz'}</h1>
+            <div className="mt-2 flex items-center gap-2">
+              <div className="h-1.5 w-32 overflow-hidden rounded-full bg-surface-muted">
+                <div
+                  className="h-full rounded-full bg-accent transition-all duration-300 ease-standard"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted">
+                {answeredCount} of {displayQuestions.length} answered
+              </p>
+            </div>
           </div>
-          <div className="mt-4 sm:mt-0 flex items-center gap-3 rounded-md bg-[#f0ebf8] px-4 py-2 text-[#5746e3]">
-            <span className="text-sm font-medium">Time remaining</span>
-            <span
-              className={`text-xl tabular-nums ${timerUrgency}`}
-              aria-hidden="true"
-            >
+          <div className="flex items-center gap-3 rounded-control bg-accent-tint px-4 py-2 text-accent">
+            <span className="text-xs font-semibold uppercase tracking-wide">Time left</span>
+            <span className={`text-xl tabular-nums ${timerUrgency}`} aria-hidden="true">
               {formatTime(remainingSeconds)}
             </span>
             <span role="timer" aria-live="polite" className="sr-only">
@@ -426,57 +433,65 @@ export default function QuizAttemptView({
         </header>
 
         {/* Questions */}
-        <div className="flex flex-col gap-6">
-          {displayQuestions.map((question, qIndex) => (
-            <fieldset
-              key={question.id}
-              id={`question-${question.id}`}
-              className="rounded-lg bg-surface p-6 shadow-sm transition-shadow hover:shadow-md border border-border"
-              disabled={isSubmitting}
-            >
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 text-base text-text">{qIndex + 1}.</span>
-                <legend className="text-base font-normal text-text leading-relaxed">
-                  {question.text}
-                </legend>
-              </div>
-              <div className="mt-5 flex flex-col gap-4 pl-6">
-                {question.options.map((option, oIndex) => (
-                  <label
-                    key={oIndex}
-                    className="flex cursor-pointer items-center gap-3 text-sm text-text"
+        <div className="flex flex-col gap-4">
+          {displayQuestions.map((question, qIndex) => {
+            const isAnswered = answers[question.id] !== undefined;
+            return (
+              <fieldset
+                key={question.id}
+                id={`question-${question.id}`}
+                className="motion-border rounded-card border border-border bg-surface p-5 shadow-soft transition-[border-color,box-shadow] duration-200 ease-standard"
+                disabled={isSubmitting}
+              >
+                <div className="flex items-start gap-3">
+                  <span
+                    className={
+                      isAnswered
+                        ? 'flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-surface'
+                        : 'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border text-xs font-semibold text-muted'
+                    }
                   >
-                    <input
-                      type="radio"
-                      name={`question-${question.id}`}
-                      value={oIndex}
-                      checked={answers[question.id] === oIndex}
-                      onChange={() => selectOption(question.id, oIndex)}
-                      disabled={isSubmitting}
-                      className="h-5 w-5 border-2 border-[#5746e3] text-[#5746e3] focus:ring-[#5746e3]"
-                    />
-                    <span className="leading-tight">{option}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          ))}
+                    {qIndex + 1}
+                  </span>
+                  <legend className="text-sm font-medium leading-relaxed text-text break-words">{question.text}</legend>
+                </div>
+                <div className="mt-4 flex flex-col gap-2 pl-9">
+                  {question.options.map((option, oIndex) => {
+                    const selected = answers[question.id] === oIndex;
+                    return (
+                      <label
+                        key={oIndex}
+                        className={
+                          selected
+                            ? 'motion-interactive flex min-h-[44px] cursor-pointer items-center gap-3 rounded-control border border-accent bg-accent-tint px-3 py-2 text-sm text-text'
+                            : 'motion-interactive flex min-h-[44px] cursor-pointer items-center gap-3 rounded-control border border-border bg-surface px-3 py-2 text-sm text-text hover:bg-surface-muted'
+                        }
+                      >
+                        <input
+                          type="radio"
+                          name={`question-${question.id}`}
+                          value={oIndex}
+                          checked={selected}
+                          onChange={() => selectOption(question.id, oIndex)}
+                          disabled={isSubmitting}
+                          className="h-4 w-4 shrink-0 accent-accent"
+                        />
+                        <span className="leading-tight break-words">{option}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            );
+          })}
         </div>
 
         {/* Submit button */}
-        <div className="mt-8 flex justify-between items-center bg-surface p-4 rounded-lg shadow-sm border border-border">
-          <p className="text-sm text-soft">
-            Make sure to review your answers before submitting.
-          </p>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="rounded px-8 py-2.5 text-sm font-medium text-white transition-opacity disabled:opacity-50"
-            style={{ backgroundColor: '#5746e3' }}
-          >
-            {isSubmitting && (phase as any).auto ? 'Auto-submitting…' : 'Submit'}
-          </button>
+        <div className="motion-border mt-6 flex flex-col items-start gap-3 rounded-card border border-border bg-surface p-4 shadow-soft sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-soft">Make sure to review your answers before submitting.</p>
+          <Button variant="primary" onClick={handleSubmit} loading={isSubmitting && !(phase as { auto?: boolean }).auto} disabled={isSubmitting} className="w-full sm:w-auto">
+            {isSubmitting && (phase as { auto?: boolean }).auto ? 'Auto-submitting…' : 'Submit'}
+          </Button>
         </div>
       </div>
     </div>

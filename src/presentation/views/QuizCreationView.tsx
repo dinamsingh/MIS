@@ -20,6 +20,7 @@ import type {
   QuestionInput,
   QuizAccessRepository,
   QuizResultRow,
+  QuizResultSection,
   SavedQuizSummary,
   QuizQuestionStats,
   QuizAttemptDetail,
@@ -51,7 +52,18 @@ export interface QuizUnitOption {
 /** Operations this view needs from the quiz data-access wrapper. */
 export type QuizCreationRepository = Pick<
   QuizAccessRepository,
-  'createQuiz' | 'addQuestion' | 'listQuizzes' | 'listQuizResults' | 'deleteQuiz' | 'resetAttempt' | 'listQuizNonAttempters' | 'getQuizQuestionStats' | 'getQuizAttemptDetail' | 'getQuizReview'
+  | 'createQuiz'
+  | 'addQuestion'
+  | 'listQuizzes'
+  | 'listQuizResults'
+  | 'deleteQuiz'
+  | 'resetAttempt'
+  | 'listQuizNonAttempters'
+  | 'getQuizQuestionStats'
+  | 'getQuizAttemptDetail'
+  | 'getQuizReview'
+  | 'listTeacherSectionsForSubject'
+  | 'setQuizTargetSections'
 >;
 
 export interface QuizCreationViewProps {
@@ -191,6 +203,10 @@ export default function QuizCreationView({
   const [timeLimit, setTimeLimit] = useState<number>(DEFAULT_TIME_LIMIT_MINUTES);
   const [showAnswersAfterClose, setShowAnswersAfterClose] = useState(false);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
+  const [multiSectionEnabled, setMultiSectionEnabled] = useState(false);
+  const [teacherSections, setTeacherSections] = useState<QuizResultSection[]>([]);
+  const [loadingTeacherSections, setLoadingTeacherSections] = useState(false);
+  const [selectedSectionIds, setSelectedSectionIds] = useState<Set<string>>(new Set());
   const [questions, setQuestions] = useState<QuestionDraft[]>(() => [emptyQuestion()]);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -205,6 +221,7 @@ export default function QuizCreationView({
   // Per-quiz results dialog state.
   const [resultsQuiz, setResultsQuiz] = useState<SavedQuizSummary | null>(null);
   const [resultsActiveTab, setResultsActiveTab] = useState<'submitted' | 'pending' | 'insights'>('submitted');
+  const [resultsSectionFilter, setResultsSectionFilter] = useState<string | null>(null);
   const [resultsByQuiz, setResultsByQuiz] = useState<Record<string, QuizResultRow[]>>({});
   const [nonAttemptersByQuiz, setNonAttemptersByQuiz] = useState<Record<string, QuizRosterOption[]>>({});
   const [statsByQuiz, setStatsByQuiz] = useState<Record<string, QuizQuestionStats[]>>({});
@@ -261,8 +278,45 @@ export default function QuizCreationView({
     setTimeLimit(DEFAULT_TIME_LIMIT_MINUTES);
     setShowAnswersAfterClose(false);
     setShuffleQuestions(false);
+    setMultiSectionEnabled(false);
+    setSelectedSectionIds(new Set());
     setQuestions([emptyQuestion()]);
   };
+
+  async function handleToggleMultiSection(enabled: boolean) {
+    setMultiSectionEnabled(enabled);
+    if (!enabled || (subjectId ?? '') === '') {
+      return;
+    }
+    setLoadingTeacherSections(true);
+    try {
+      const sections = await quizAccess.listTeacherSectionsForSubject(subjectId as string);
+      setTeacherSections(sections);
+      setSelectedSectionIds((prev) => {
+        if (prev.size > 0) {
+          return prev;
+        }
+        const current = sectionId && sections.some((section) => section.id === sectionId) ? sectionId : null;
+        return current ? new Set([current]) : new Set();
+      });
+    } catch {
+      setTeacherSections([]);
+    } finally {
+      setLoadingTeacherSections(false);
+    }
+  }
+
+  function toggleSelectedSection(id: string) {
+    setSelectedSectionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -288,6 +342,9 @@ export default function QuizCreationView({
       for (const question of validation.questions) {
         await quizAccess.addQuestion(quizId, question);
       }
+      if (multiSectionEnabled && selectedSectionIds.size > 0) {
+        await quizAccess.setQuizTargetSections(quizId, Array.from(selectedSectionIds));
+      }
       resetForm();
       setShowForm(false);
       setNotice('Quiz publish ho gaya ✓');
@@ -302,6 +359,9 @@ export default function QuizCreationView({
   async function openResultsModal(quiz: SavedQuizSummary) {
     setResultsQuiz(quiz);
     setResultsActiveTab('submitted');
+    const defaultSection =
+      sectionId && quiz.sections.some((section) => section.id === sectionId) ? sectionId : null;
+    setResultsSectionFilter(defaultSection);
     await refreshResults(quiz.id);
   }
 
@@ -504,6 +564,7 @@ export default function QuizCreationView({
               <thead>
                 <tr className="border-b border-border bg-surface-muted/40">
                   <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Quiz</th>
+                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Section</th>
                   <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Status</th>
                   <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Questions</th>
                   <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Responses</th>
@@ -520,6 +581,13 @@ export default function QuizCreationView({
                         <p className="mt-0.5 text-xs text-muted">
                           {formatWindow(quiz.activeFrom, quiz.activeUntil)} · {quiz.timeLimitMinutes} min
                         </p>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted">
+                        {quiz.sections.length === 0 ? (
+                          <span className="italic text-muted">All sections</span>
+                        ) : (
+                          quiz.sections.map((section) => section.name).join(', ')
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <Badge tone={STATUS_TONE[quiz.status]} size="sm">
@@ -618,7 +686,39 @@ export default function QuizCreationView({
                     />
                     Shuffle questions per student
                   </label>
+                  <label className="flex items-center gap-2 text-sm text-text cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={multiSectionEnabled}
+                      onChange={(e) => void handleToggleMultiSection(e.target.checked)}
+                      className="rounded border-border text-accent focus:ring-accent/30"
+                    />
+                    Assign to multiple sections
+                  </label>
                 </div>
+                {multiSectionEnabled && (
+                  <div className="mt-2 flex flex-col gap-2 rounded-control border border-border bg-surface-muted/30 p-3">
+                    {loadingTeacherSections ? (
+                      <p className="text-xs text-muted">Loading your sections…</p>
+                    ) : teacherSections.length === 0 ? (
+                      <p className="text-xs text-muted">
+                        No sections found for this subject — the quiz will fall back to the currently-selected section.
+                      </p>
+                    ) : (
+                      teacherSections.map((section) => (
+                        <label key={section.id} className="flex items-center gap-2 text-sm text-text cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedSectionIds.has(section.id)}
+                            onChange={() => toggleSelectedSection(section.id)}
+                            className="rounded border-border text-accent focus:ring-accent/30"
+                          />
+                          {formatSectionLabel(section)}
+                        </label>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -846,6 +946,28 @@ export default function QuizCreationView({
                     <p className="text-sm text-muted py-8 text-center">{messages.emptyState.noQuizAttempts}</p>
                   ) : (
                     <div className="space-y-3">
+                      {resultsQuiz.sections.length > 1 && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-medium text-muted">Section:</span>
+                          <Button
+                            size="sm"
+                            variant={resultsSectionFilter === null ? 'secondary' : 'ghost'}
+                            onClick={() => setResultsSectionFilter(null)}
+                          >
+                            All
+                          </Button>
+                          {resultsQuiz.sections.map((section) => (
+                            <Button
+                              key={section.id}
+                              size="sm"
+                              variant={resultsSectionFilter === section.id ? 'secondary' : 'ghost'}
+                              onClick={() => setResultsSectionFilter(section.id)}
+                            >
+                              {section.name}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
                       <div className="flex justify-end gap-2">
                         <Button size="sm" variant={resultsSortOrder === 'score' ? 'secondary' : 'ghost'} onClick={() => setResultsSortOrder('score')}>Sort by Score</Button>
                         <Button size="sm" variant={resultsSortOrder === 'name' ? 'secondary' : 'ghost'} onClick={() => setResultsSortOrder('name')}>Sort by Name</Button>
@@ -863,7 +985,9 @@ export default function QuizCreationView({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border">
-                            {[...(resultsByQuiz[resultsQuiz.id] ?? [])].sort((a, b) => {
+                            {[...(resultsByQuiz[resultsQuiz.id] ?? [])]
+                              .filter((r) => resultsSectionFilter === null || r.section?.id === resultsSectionFilter)
+                              .sort((a, b) => {
                               if (resultsSortOrder === 'score') return b.score - a.score;
                               return a.studentName.localeCompare(b.studentName);
                             }).map((r) => (

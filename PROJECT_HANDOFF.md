@@ -11,16 +11,31 @@
 
 ## 0. Quick Status (READ THIS FIRST)
 
-- **Last updated:** 2026-07-06
-- **Active branch:** `feature/onboarding` (multi-teacher + onboarding + syllabus work; pushed to origin up to the agentation commit). NOT yet merged to `main`.
-- **Latest commit (pushed):** `133d38e` — "feat(dev): wire dev-only Agentation annotation tool at app root".
-  **Uncommitted (working tree):** Syllabus Tracker + unification + AI Quiz + **sem-5 syllabus & electives** — migrations `0018`–`0021`, `syllabusTrackerAccess.ts`, reworked syllabus views, `functions/api/generate-quiz.ts`, `AiQuizGeneratorPage.tsx`, seeds `sem4_syllabus_seed.sql`, `sem4_java_lab_seed.sql`, `sem5_syllabus_seed.sql`; onboarding elective grouping (`ElectiveGroupRow.tsx`, `SemAccordion.tsx`, `types.ts`, `onboarding.ts`). (Pending commit — user to confirm.)
-- **Build/tests:** ✅ green — `npx tsc --noEmit` clean, `npx vitest run` 206 tests pass, `npx vite build` succeeds.
-- **Model shift this session:** moved from single-teacher to **MULTI-TEACHER**. Identity is now membership-based
-  (`is_teacher()` = has a row in `teachers`), NOT the hardcoded `VITE_TEACHER_EMAIL`. See §11.
-- **Where work stopped / resume point:** Syllabus Tracker is code-complete; user is uploading remaining
-  semesters' curriculum later. Optional follow-up: wire dashboard "syllabus progress %" to the new
-  master+progress model (currently still reads legacy topics). See §6.
+- **Last updated:** 2026-07-10
+- **Active branch:** `main` (all quiz security + UX work pushed directly to main per user instruction)
+- **Latest commit (pushed):** `75b03b3` — "Harden quiz access security: student OTP verification, session guards, RPC param fixes"
+  **Uncommitted (working tree):** Multi-section quiz assignment feature + student quiz UI improvements + migration 0040/0041 (ready to commit/push after user reviews)
+- **Build/tests:** ✅ green — `npx tsc --noEmit` clean, `npx vitest run` 221 tests pass, `npx vite build` succeeds.
+- **Where work stopped / resume point:** Quiz system fully redesigned (security + UX + multi-section). Two new migrations pending user run in Supabase (0040 + 0041). Frontend complete and verified locally. Next: commit the remaining local changes and push, then have user run 0040 + 0041 in Supabase SQL Editor.
+
+### ⚠️ Action items the human still needs to do (run in Supabase SQL editor, in order)
+1. ✅ `0039_quiz_access_hardening.sql` — teacher-account block restored + atomic roster binding (ALREADY RUN by user)
+2. ⏳ `0040_quiz_multi_section_assignment.sql` — `quiz_target_sections` junction table + `set_quiz_target_sections` / `list_teacher_sections_for_subject` RPCs + widened section-gate in `request_quiz_access` / `start_quiz_attempt`. RUN THIS.
+3. ⏳ `0041_roster_search_contains.sql` — changes `list_quiz_roster_options` search from prefix-only to contains-match (so students can type last 3 digits to find themselves). RUN THIS after 0040.
+
+### Quiz Security Redesign (this session — 2026-07-10)
+Major changes made in this session:
+- **Student OTP verification** — students must verify email ownership via Supabase Magic Link OTP before accessing any quiz (prevents impersonation)
+- **5-minute post-submit session expiry** — after quiz submission, student's authenticated session auto-expires in 5 minutes (configurable), with "Done" button for immediate sign-out and best-effort `beforeunload` cleanup
+- **RequireTeacher guard fix** — only `actor.kind === 'teacher'` passes now (previously any authenticated actor including students could access teacher URLs)
+- **RPC parameter mismatch fix** — frontend was sending `p_provided_email` to `submit_attempt`/`start_quiz_attempt`/`quiz_review` which don't accept that parameter (they use `auth.email()` from session); these calls now correctly omit the unused parameter
+- **Teacher-account block restored** — migration 0037 accidentally dropped the `teacher-account` denial check from `request_quiz_access`; 0039 restores it
+- **Atomic roster/enrollment binding** — race condition where two students could claim the same enrollment simultaneously is now prevented via atomic `UPDATE ... WHERE (email IS NULL)` + a case-insensitive unique index
+- **OTP resend cooldown** — 60-second client-side cooldown prevents students from spamming the OTP endpoint
+- **enrollment-required status mismatch bug fixed** — server returns `'enrollment-required'` but frontend only handled `'needs-enrollment'`; now handles both
+- **Multi-section quiz assignment** — teacher can assign one quiz to multiple sections (instead of just one or all), with a checkbox-and-checklist UI at creation time
+- **Student quiz UI premium redesign** — removed all hardcoded purple colors (#5746e3), replaced with app design tokens (warm gold/dark palette), added step tracker, progress bar, selected-option highlighting, mobile-friendly tap targets (min-h-44px), iOS safe-area padding, enrollment autocomplete dropdown (type last 3 digits to search)
+- **Pre-existing test failures fixed** — `canReview` field always-present bug in parsers.ts, roster CSV email-column format drift in rosterImportService.test.ts (9 tests were failing before this session, now all 221 pass)
 
 ### ⚠️ Action items the human still needs to do (run in Supabase SQL editor, in order)
 Migrations from this session that must be applied:

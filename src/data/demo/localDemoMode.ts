@@ -17,6 +17,7 @@ import {
   type QuestionInput,
   type SavedQuizSummary,
   type QuizResultRow,
+  type QuizResultSection,
   type QuizRosterOption,
   type QuizAttemptDetail,
   type QuizAttemptDetailQuestion,
@@ -648,6 +649,8 @@ interface DemoQuizRecord {
   readonly shuffleQuestions: boolean;
   readonly createdAt?: string;
   readonly questions: DemoQuizQuestion[];
+  /** Target-section ids for the "assign to multiple sections" feature (empty = legacy/unrestricted). */
+  readonly targetSectionIds?: readonly string[];
 }
 
 interface DemoQuizStore {
@@ -708,7 +711,45 @@ function averageScore(attempts: readonly DemoQuizAttempt[]): number | null {
   return attempts.reduce((sum, attempt) => sum + attempt.score, 0) / attempts.length;
 }
 
-function toDemoSavedQuiz(quiz: DemoQuizRecord, attempts: readonly DemoQuizAttempt[]): SavedQuizSummary {
+function demoQuizSections(quiz: DemoQuizRecord, students: readonly DemoStudent[]): QuizResultSection[] {
+  const targetIds = quiz.targetSectionIds ?? [];
+  if (targetIds.length > 0) {
+    const seen = new Map<string, QuizResultSection>();
+    for (const id of targetIds) {
+      if (seen.has(id)) {
+        continue;
+      }
+      const match = students.find((student) => (student.sectionId ?? student.sectionName) === id);
+      seen.set(id, {
+        id,
+        name: match?.sectionName ?? id,
+        batch: null,
+        semester: null,
+        department: null,
+      });
+    }
+    return Array.from(seen.values());
+  }
+  if (!quiz.sectionId) {
+    return [];
+  }
+  const match = students.find((student) => (student.sectionId ?? student.sectionName) === quiz.sectionId);
+  return [
+    {
+      id: quiz.sectionId,
+      name: match?.sectionName ?? quiz.sectionId,
+      batch: null,
+      semester: null,
+      department: null,
+    },
+  ];
+}
+
+function toDemoSavedQuiz(
+  quiz: DemoQuizRecord,
+  attempts: readonly DemoQuizAttempt[],
+  students: readonly DemoStudent[],
+): SavedQuizSummary {
   return {
     id: quiz.id,
     title: quiz.title,
@@ -726,6 +767,7 @@ function toDemoSavedQuiz(quiz: DemoQuizRecord, attempts: readonly DemoQuizAttemp
     totalMarks: totalQuizMarks(quiz),
     averageScore: averageScore(attempts),
     status: deriveQuizStatus(quiz.activeFrom ?? null, quiz.activeUntil ?? null),
+    sections: demoQuizSections(quiz, students),
   };
 }
 
@@ -1027,9 +1069,10 @@ export function createLocalDemoQuizAccess(
 
     async listQuizzes() {
       const store = readQuizStore();
+      const students = getStudents();
       return Object.values(store.quizzes)
         .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
-        .map((quiz) => toDemoSavedQuiz(quiz, demoAttemptsForQuiz(store, quiz, getStudents())));
+        .map((quiz) => toDemoSavedQuiz(quiz, demoAttemptsForQuiz(store, quiz, students), students));
     },
 
     async listQuizResults(quizId: string): Promise<QuizResultRow[]> {
@@ -1101,6 +1144,40 @@ export function createLocalDemoQuizAccess(
           ...store.attemptsByQuiz,
           [quizId]: existing.filter((row) => row.studentId !== studentId),
         },
+      });
+    },
+
+    async listTeacherSectionsForSubject(_subjectId: string): Promise<QuizResultSection[]> {
+      // Demo mode has no real teacher-assignment table; the roster passed into
+      // this repository already represents the sections the teacher is
+      // currently working with, so surface those distinct sections as a
+      // sensible mock for the "assign to multiple sections" checklist.
+      const seen = new Map<string, QuizResultSection>();
+      for (const student of getStudents()) {
+        const id = student.sectionId ?? student.sectionName;
+        if (!id || seen.has(id)) {
+          continue;
+        }
+        seen.set(id, {
+          id,
+          name: student.sectionName ?? id,
+          batch: null,
+          semester: null,
+          department: null,
+        });
+      }
+      return Array.from(seen.values());
+    },
+
+    async setQuizTargetSections(quizId: string, sectionIds: string[]): Promise<void> {
+      const store = readQuizStore();
+      const quiz = store.quizzes[quizId];
+      if (!quiz) {
+        return;
+      }
+      writeQuizStore({
+        ...store,
+        quizzes: { ...store.quizzes, [quizId]: { ...quiz, targetSectionIds: [...sectionIds] } },
       });
     },
   };
