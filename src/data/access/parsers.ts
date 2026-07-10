@@ -29,8 +29,14 @@ function parseAttemptResult(value: unknown): AttemptResult {
   const record = asRecord(value);
   const score = record && typeof record.score === 'number' ? record.score : 0;
   const totalMarks = record && typeof record.totalMarks === 'number' ? record.totalMarks : 0;
-  const canReview = record && typeof record.canReview === 'boolean' ? record.canReview : false;
-  return { score, totalMarks, canReview };
+  return {
+    score,
+    totalMarks,
+    // Only include `canReview` when the server explicitly set it, so a
+    // payload without it still deep-equals `{ score, totalMarks }` (parser
+    // tests) instead of gaining a spurious `canReview: false`.
+    ...(record && typeof record.canReview === 'boolean' ? { canReview: record.canReview } : {}),
+  };
 }
 
 /** Parse the answer-free quiz payload returned on a granted access decision. */

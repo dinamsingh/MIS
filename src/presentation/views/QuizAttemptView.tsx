@@ -126,7 +126,7 @@ export default function QuizAttemptView({
   submitAttempt,
   email,
 }: QuizAttemptViewProps) {
-  const { actor } = useAuth();
+  const { actor, signOut } = useAuth();
   const draftKey = `quiz-draft:${quiz.id}:${attemptSession.startedAt}`;
   const [remainingSeconds, setRemainingSeconds] = useState(() =>
     remainingFromSession(attemptSession),
@@ -264,6 +264,34 @@ export default function QuizAttemptView({
     return () => clearInterval(intervalId);
   }, [phase.kind]);
 
+  // Post-result session expiry — once the student has finished (or already
+  // finished) the quiz, their authenticated (post-OTP) session should not stay
+  // open indefinitely. Start a single 5-minute timer that signs them out, plus
+  // a best-effort sign-out on tab close. The timer is the reliable fallback:
+  // `beforeunload` handlers are not guaranteed to complete async work before
+  // the browser tears down the page, so it's a nice-to-have, not the guarantee.
+  const isResultPhase = phase.kind === 'scored' || phase.kind === 'already-attempted';
+  useEffect(() => {
+    if (!isResultPhase) return;
+
+    const timeoutId = window.setTimeout(() => {
+      void signOut();
+    }, 5 * 60 * 1000);
+
+    const handleBeforeUnload = () => {
+      // Best-effort only — browsers do not guarantee this async call
+      // completes before the page unloads. The 5-minute timer above is what
+      // actually guarantees the session eventually ends.
+      void signOut();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isResultPhase, signOut]);
+
   /** Handle manual submit. */
   function handleSubmit() {
     if (phase.kind !== 'in-progress') return;
@@ -308,6 +336,15 @@ export default function QuizAttemptView({
           <p className="mt-4 text-2xl font-bold text-accent">
             {phase.score} / {phase.totalMarks}
           </p>
+          <p className="mt-4 text-xs text-muted">This session will close in 5 minutes.</p>
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            className="mt-4 rounded px-6 py-2 text-sm font-medium text-white transition-opacity"
+            style={{ backgroundColor: '#5746e3' }}
+          >
+            Done
+          </button>
         </div>
       </div>
     );
@@ -324,6 +361,15 @@ export default function QuizAttemptView({
           <p className="mt-4 text-2xl font-bold text-accent">
             {phase.score} / {phase.totalMarks}
           </p>
+          <p className="mt-4 text-xs text-muted">This session will close in 5 minutes.</p>
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            className="mt-4 rounded px-6 py-2 text-sm font-medium text-white transition-opacity"
+            style={{ backgroundColor: '#5746e3' }}
+          >
+            Done
+          </button>
         </div>
       </div>
     );

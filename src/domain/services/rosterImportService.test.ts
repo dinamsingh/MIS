@@ -10,8 +10,8 @@ describe('parseRosterCsv', () => {
 
     expect(result.rejected).toHaveLength(0);
     expect(result.valid).toEqual([
-      { enrollmentNumber: '0131CS241000', name: 'Aarav Mehta' },
-      { enrollmentNumber: '0131CS241001', name: 'Diya Sharma' },
+      { enrollmentNumber: '0131CS241000', name: 'Aarav Mehta', email: null },
+      { enrollmentNumber: '0131CS241001', name: 'Diya Sharma', email: null },
     ]);
   });
 
@@ -20,7 +20,7 @@ describe('parseRosterCsv', () => {
 
     const result = parseRosterCsv(csv);
 
-    expect(result.valid).toEqual([{ enrollmentNumber: '0131CS241000', name: 'Aarav Mehta' }]);
+    expect(result.valid).toEqual([{ enrollmentNumber: '0131CS241000', name: 'Aarav Mehta', email: null }]);
     expect(result.rejected).toHaveLength(0);
   });
 
@@ -38,15 +38,29 @@ describe('parseRosterCsv', () => {
 
     const result = parseRosterCsv(csv);
 
-    expect(result.valid).toEqual([{ enrollmentNumber: '0131CS241000', name: 'Aarav Mehta' }]);
+    expect(result.valid).toEqual([{ enrollmentNumber: '0131CS241000', name: 'Aarav Mehta', email: null }]);
   });
 
-  it('preserves commas inside the name by splitting on the first comma only', () => {
-    const csv = '0131CS241000,Mehta, Aarav';
+  it('supports an optional third column as the email', () => {
+    const csv = '0131CS241000,Aarav Mehta,aarav@college.edu';
 
     const result = parseRosterCsv(csv);
 
-    expect(result.valid).toEqual([{ enrollmentNumber: '0131CS241000', name: 'Mehta, Aarav' }]);
+    expect(result.valid).toEqual([
+      { enrollmentNumber: '0131CS241000', name: 'Aarav Mehta', email: 'aarav@college.edu' },
+    ]);
+  });
+
+  it('splits on the first two commas only, so a name cannot itself contain a comma when a third column follows', () => {
+    // The format is enrollment,name,email — a comma in the name would be
+    // misread as the name/email boundary, so names must not contain commas.
+    const csv = '0131CS241000,Mehta Aarav,aarav@college.edu';
+
+    const result = parseRosterCsv(csv);
+
+    expect(result.valid).toEqual([
+      { enrollmentNumber: '0131CS241000', name: 'Mehta Aarav', email: 'aarav@college.edu' },
+    ]);
   });
 
   it('rejects an invalid enrollment number with the invalid-enrollment reason', () => {
@@ -90,7 +104,7 @@ describe('parseRosterCsv', () => {
 
     const result = parseRosterCsv(csv);
 
-    expect(result.valid).toEqual([{ enrollmentNumber: '0131CS241000', name: 'Aarav Mehta' }]);
+    expect(result.valid).toEqual([{ enrollmentNumber: '0131CS241000', name: 'Aarav Mehta', email: null }]);
     expect(result.rejected).toHaveLength(1);
     expect(result.rejected[0]).toMatchObject({ line: 3, reason: 'duplicate' });
   });

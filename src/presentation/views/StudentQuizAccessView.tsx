@@ -28,7 +28,7 @@
  * view performs no I/O of its own beyond initiating Google OAuth.
  */
 
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useAuth } from '@presentation/auth/AuthContext';
 import {
   isValidEnrollmentNumber,
@@ -65,6 +65,7 @@ export interface StudentQuizAccessViewProps {
 /** Internal phase machine for the access/enrollment flow. */
 type Phase =
   | { kind: 'email-required'; submitting: boolean; error: string | null }
+  | { kind: 'otp-required'; email: string; submitting: boolean; error: string | null }
   | { kind: 'resolving' }
   | { kind: 'enrollment-required'; email: string; submitting: boolean; error: string | null }
   | { kind: 'denied'; reason: QuizAccessDeniedReason }
@@ -125,10 +126,47 @@ export default function StudentQuizAccessView({
   startAttempt,
   onGranted,
 }: StudentQuizAccessViewProps) {
-  const { actor } = useAuth(); // Only for teacher preview check
+  const { actor, sendStudentEmailOtp, verifyStudentEmailOtp } = useAuth();
   const [phase, setPhase] = useState<Phase>({ kind: 'email-required', submitting: false, error: null });
   const [emailInput, setEmailInput] = useState('');
+  const [otpInput, setOtpInput] = useState('');
   const [enrollmentInput, setEnrollmentInput] = useState('');
+  // Resend cooldown (in seconds) — prevents a student from spamming the OTP
+  // endpoint by repeatedly clicking "Resend code", which would otherwise
+  // flood their own inbox with codes. Supabase applies its own server-side
+  // rate limit too; this is a client-side UX guard on top of that.
+  const RESEND_COOLDOWN_SECONDS = 60;
+  const [resendSecondsLeft, setResendSecondsLeft] = useState(0);
+  const resendIntervalRef = useRef<number | null>(null);
+
+  const startResendCooldown = useCallback(() => {
+    if (resendIntervalRef.current !== null) {
+      window.clearInterval(resendIntervalRef.current);
+    }
+    setResendSecondsLeft(RESEND_COOLDOWN_SECONDS);
+    resendIntervalRef.current = window.setInterval(() => {
+      setResendSecondsLeft((prev) => {
+        if (prev <= 1) {
+          if (resendIntervalRef.current !== null) {
+            window.clearInterval(resendIntervalRef.current);
+            resendIntervalRef.current = null;
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
+
+  // Clean up the interval on unmount so it never fires after the component
+  // is gone.
+  useEffect(() => {
+    return () => {
+      if (resendIntervalRef.current !== null) {
+        window.clearInterval(resendIntervalRef.current);
+      }
+    };
+  }, []);
 
   const applyDecision = useCallback((decision: QuizAccess, email: string) => {
     switch (decision.status) {
@@ -153,7 +191,13 @@ export default function StudentQuizAccessView({
           setPhase({ kind: 'denied', reason: 'not-authenticated' });
         }
         break;
+      case 'enrollment-required':
       case 'needs-enrollment':
+        // The server (all `request_quiz_access` migrations) returns
+        // 'enrollment-required' for a first-time student whose enrollment
+        // number isn't known yet. 'needs-enrollment' is kept as an alias in
+        // case any caller still emits it, but it is never actually returned
+        // by the current server-side function.
         setPhase({ kind: 'enrollment-required', email, submitting: false, error: null });
         break;
       case 'already-attempted':
@@ -207,13 +251,89 @@ export default function StudentQuizAccessView({
     }
     setPhase({ kind: 'email-required', submitting: true, error: null });
     try {
-      // First attempt to resolve access with just the email (Phase 4 changes)
-      // The backend will check if this email exists in the roster
-      const decision = await resolveAccess(quizId, null, trimmed);
-      applyDecision(decision, trimmed);
+      // Verify the student actually owns this email via a one-time code
+      // before resolving roster access with it.
+      const result = await sendStudentEmailOtp(trimmed);
+      if (result.ok) {
+        setOtpInput('');
+        startResendCooldown();
+        setPhase({ kind: 'otp-required', email: trimmed, submitting: false, error: null });
+      } else {
+        setPhase({
+          kind: 'email-required',
+          submitting: false,
+          error: result.error.message,
+        });
+      }
     } catch {
       setPhase({
         kind: 'email-required',
+        submitting: false,
+        error: messages.error.generic,
+      });
+    }
+  }
+
+  /** Resend the OTP to the same email, subject to the client-side cooldown. */
+  async function resendOtp(email: string) {
+    if (resendSecondsLeft > 0) {
+      return;
+    }
+    setPhase({ kind: 'otp-required', email, submitting: false, error: null });
+    try {
+      const result = await sendStudentEmailOtp(email);
+      if (result.ok) {
+        setOtpInput('');
+        startResendCooldown();
+        setPhase({ kind: 'otp-required', email, submitting: false, error: null });
+      } else {
+        setPhase({
+          kind: 'otp-required',
+          email,
+          submitting: false,
+          error: result.error.message,
+        });
+      }
+    } catch {
+      setPhase({
+        kind: 'otp-required',
+        email,
+        submitting: false,
+        error: messages.error.generic,
+      });
+    }
+  }
+
+  async function submitOtp(email: string, code: string) {
+    const trimmed = code.trim();
+    if (trimmed === '') {
+      setPhase({
+        kind: 'otp-required',
+        email,
+        submitting: false,
+        error: 'Please enter the code sent to your email.',
+      });
+      return;
+    }
+    setPhase({ kind: 'otp-required', email, submitting: true, error: null });
+    try {
+      const verified = await verifyStudentEmailOtp(email, trimmed);
+      if (!verified.ok) {
+        setPhase({
+          kind: 'otp-required',
+          email,
+          submitting: false,
+          error: verified.error.message,
+        });
+        return;
+      }
+      // Email ownership confirmed — now resolve roster access as before.
+      const decision = await resolveAccess(quizId, null, email);
+      applyDecision(decision, email);
+    } catch {
+      setPhase({
+        kind: 'otp-required',
+        email,
         submitting: false,
         error: messages.error.generic,
       });
@@ -248,6 +368,13 @@ export default function StudentQuizAccessView({
   function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void submitEmail(emailInput);
+  }
+
+  function handleOtpSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (phase.kind === 'otp-required') {
+      void submitOtp(phase.email, otpInput);
+    }
   }
 
   function handleEnrollmentSubmit(event: FormEvent<HTMLFormElement>) {
@@ -319,6 +446,65 @@ export default function StudentQuizAccessView({
                 disabled={phase.submitting || emailInput.trim() === ''}
               >
                 {phase.submitting ? 'Checking…' : 'Next'}
+              </button>
+            </div>
+          </form>
+        </div>
+      );
+    }
+
+    case 'otp-required': {
+      return (
+        <div className="flex min-h-screen flex-col items-center justify-center bg-[#f0ebf8] px-4 py-10">
+          <div className={formCardClass}>
+            <div className="h-2 w-full bg-[#5746e3]"></div>
+            <div className="p-6">
+              <h1 className="text-3xl font-normal text-text">Computer Org. &amp; Architecture</h1>
+              <p className="mt-3 text-sm text-text">
+                We sent a verification code to <strong>{phase.email}</strong>. Enter it below to confirm
+                it's really you.
+              </p>
+            </div>
+          </div>
+
+          <form className="mt-4 flex w-full max-w-3xl flex-col gap-4 text-left" onSubmit={handleOtpSubmit} noValidate>
+            <div className="rounded-lg bg-surface p-6 shadow-md">
+              <label htmlFor="otp-code" className="block text-sm font-medium text-text">
+                Verification code <span className="text-status-red">*</span>
+              </label>
+              <input
+                id="otp-code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={otpInput}
+                onChange={(e) => setOtpInput(e.target.value)}
+                className={inputClass + " mt-4"}
+                placeholder="123456"
+              />
+              {phase.error !== null && (
+                <p role="alert" className="mt-2 text-xs font-medium text-status-red">
+                  {phase.error}
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-between items-center mt-2">
+              <button
+                type="submit"
+                className="rounded px-6 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50"
+                style={{ backgroundColor: '#5746e3' }}
+                disabled={phase.submitting || otpInput.trim() === ''}
+              >
+                {phase.submitting ? 'Verifying…' : 'Verify'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void resendOtp(phase.email)}
+                disabled={phase.submitting || resendSecondsLeft > 0}
+                className="text-sm font-medium text-[#5746e3] transition-colors disabled:opacity-50 disabled:text-muted"
+              >
+                {resendSecondsLeft > 0 ? `Resend code in ${resendSecondsLeft}s` : 'Resend code'}
               </button>
             </div>
           </form>

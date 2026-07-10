@@ -36,11 +36,10 @@ export default function RequireTeacher({
     return <>{fallback}</>;
   }
 
-  // Any authenticated user may reach the teacher area. Whether they are a
-  // fully set-up teacher is decided per-user by the onboarding gate (teachers
-  // table + teacher_assignments), not by a single hardcoded email. Students
-  // never navigate here — they use the public /quiz/:token routes.
-  if (actor.kind === 'anonymous') {
+  // Only an actor resolved as `teacher` may reach the teacher area. Any other
+  // kind — anonymous, student, or otherwise — is redirected. Students never
+  // navigate here — they use the public /quiz/:token routes.
+  if (actor.kind !== 'teacher') {
     return <Navigate to={redirectTo} replace />;
   }
 

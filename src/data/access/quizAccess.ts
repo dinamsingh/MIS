@@ -413,10 +413,14 @@ export function createQuizAccess(
       return inserted?.id ?? '';
     },
 
-    async startAttempt(quizId: string, email: string): Promise<QuizAttemptSessionInfo> {
-      // Try to insert a session. The RPC or a simple insert.
-      // We will use an RPC to ensure server-time is used.
-      const payload = unwrap(await client.rpc('start_quiz_attempt', { p_quiz_id: quizId, p_provided_email: email }));
+    async startAttempt(quizId: string, _email: string): Promise<QuizAttemptSessionInfo> {
+      // The live `start_quiz_attempt` function resolves the student's identity
+      // from the authenticated session (`auth.uid()`/`auth.email()`), not from
+      // a parameter — it does not accept `p_provided_email`. `email` is kept in
+      // this method's signature only to satisfy the shared interface used by
+      // callers (it is unused here; the session established via student OTP
+      // verification is what the server actually reads).
+      const payload = unwrap(await client.rpc('start_quiz_attempt', { p_quiz_id: quizId }));
       const result = payload as { started_at: string; server_now: string; time_limit_minutes: number };
       return {
         startedAt: result.started_at,
@@ -428,13 +432,18 @@ export function createQuizAccess(
     async resolveAccess(
       quizId: string,
       providedEnrollment: string | null,
-      providedEmail?: string | null,
+      _providedEmail?: string | null,
     ): Promise<QuizAccess> {
+      // The live `request_quiz_access` function resolves identity from the
+      // authenticated session (`auth.uid()`/`auth.email()`), not from a
+      // parameter — it does not accept `p_provided_email`. `providedEmail` is
+      // kept in this method's signature only to satisfy the shared interface
+      // used by callers (unused here; the session established via student OTP
+      // verification is what the server actually reads).
       const payload = unwrap(
         await client.rpc('request_quiz_access', {
           p_quiz_id: quizId,
           p_provided_enrollment: providedEnrollment,
-          p_provided_email: providedEmail ?? null,
         }),
       );
       return parseQuizAccess(payload);
@@ -456,13 +465,16 @@ export function createQuizAccess(
     async submitAttempt(
       quizId: string,
       answers: Record<string, number>,
-      email: string,
+      _email: string,
     ): Promise<SubmitAttemptOutcome> {
+      // The live `submit_attempt` function resolves identity from the
+      // authenticated session, not from a parameter — it does not accept
+      // `p_provided_email`. `email` is kept in this method's signature only to
+      // satisfy the shared interface used by callers (unused here).
       const payload = unwrap(
         await client.rpc('submit_attempt', {
           p_quiz_id: quizId,
           p_answers: answers,
-          p_provided_email: email,
         }),
       );
       return parseSubmitOutcome(payload);
@@ -567,8 +579,12 @@ export function createQuizAccess(
       return typeof payload === 'object' && payload !== null ? (payload as QuizAttemptDetail) : null;
     },
 
-    async getQuizReview(quizId: string, email: string): Promise<QuizAttemptDetailQuestion[] | null> {
-      const payload = unwrap(await client.rpc('quiz_review', { p_quiz_id: quizId, p_provided_email: email }));
+    async getQuizReview(quizId: string, _email: string): Promise<QuizAttemptDetailQuestion[] | null> {
+      // The live `quiz_review` function resolves identity from the
+      // authenticated session, not from a parameter — it does not accept
+      // `p_provided_email`. `email` is kept in this method's signature only
+      // to satisfy the shared interface used by callers (unused here).
+      const payload = unwrap(await client.rpc('quiz_review', { p_quiz_id: quizId }));
       return Array.isArray(payload) ? payload : null;
     },
   };

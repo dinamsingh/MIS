@@ -43,6 +43,10 @@ export interface AuthContextValue {
   sendEmailOtp(email: string): Promise<Result<void, AuthError>>;
   /** Verify the emailed OTP and establish the session. */
   verifyEmailOtp(email: string, token: string): Promise<Result<Actor, AuthError>>;
+  /** Send a one-time login code to a student email (self-registers on first use). */
+  sendStudentEmailOtp(email: string): Promise<Result<void, AuthError>>;
+  /** Verify a student's emailed OTP and establish the session. */
+  verifyStudentEmailOtp(email: string, token: string): Promise<Result<Actor, AuthError>>;
   /** Start Google OAuth for a teacher or student (Req 1.3, 2.3). */
   signInWithGoogle(intent: LoginIntent, options?: GoogleSignInOptions): Promise<Result<void, AuthError>>;
   /** Terminate the active session (Req 1.6). */
@@ -108,6 +112,8 @@ export function AuthProvider({ service = defaultAuthService, children }: AuthPro
       signInTeacherPassword: (email, password) => service.signInTeacherPassword(email, password),
       sendEmailOtp: (email) => service.sendEmailOtp(email),
       verifyEmailOtp: (email, token) => service.verifyEmailOtp(email, token),
+      sendStudentEmailOtp: (email) => service.sendStudentEmailOtp(email),
+      verifyStudentEmailOtp: (email, token) => service.verifyStudentEmailOtp(email, token),
       signInWithGoogle: (intent, options) => service.signInWithGoogle(intent, options),
       signOut: () => service.signOut(),
     }),

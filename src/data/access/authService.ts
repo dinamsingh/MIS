@@ -145,6 +145,14 @@ export interface AuthService {
   /** Verify the emailed OTP code and, on success, establish the session. */
   verifyEmailOtp(email: string, token: string): Promise<Result<Actor, AuthError>>;
   /**
+   * Send a one-time login code to a student email. Unlike {@link sendEmailOtp},
+   * this uses `shouldCreateUser: true` — students are never pre-provisioned
+   * Supabase Auth users, so any email may self-register by requesting a code.
+   */
+  sendStudentEmailOtp(email: string): Promise<Result<void, AuthError>>;
+  /** Verify a student's emailed OTP code and, on success, establish the session. */
+  verifyStudentEmailOtp(email: string, token: string): Promise<Result<Actor, AuthError>>;
+  /**
    * Start Google OAuth for a teacher or student (Req 1.3, 2.3, 2.4). This
    * redirects the browser to Google; the session is established on return and
    * surfaced via {@link AuthService.getCurrentActor} / {@link AuthService.subscribe}.
@@ -231,6 +239,54 @@ export function createAuthService(
     },
 
     async verifyEmailOtp(email: string, token: string): Promise<Result<Actor, AuthError>> {
+      const { data, error } = await client.auth.verifyOtp({
+        email: email.trim(),
+        token: token.trim(),
+        type: 'email',
+      });
+      if (error || !data.session) {
+        return err<AuthError>({
+          code: 'otp_invalid',
+          message: 'That code is invalid or expired. Please try again.',
+        });
+      }
+      return ok(actorFromSession(data.session, config));
+    },
+
+    async sendStudentEmailOtp(email: string): Promise<Result<void, AuthError>> {
+      const trimmed = email.trim();
+      if (trimmed.length === 0) {
+        return err<AuthError>({ code: 'invalid_email', message: 'Enter your college email.' });
+      }
+      const { error } = await client.auth.signInWithOtp({
+        email: trimmed,
+        // Students self-register — any email may request a code.
+        options: { shouldCreateUser: true },
+      });
+      if (error) {
+        const status = (error as unknown as { status?: number }).status;
+        const msg = error.message?.toLowerCase() ?? '';
+        if (status && status >= 500) {
+          return err<AuthError>({
+            code: 'server_unavailable',
+            message: 'Server temporarily unavailable. Try again in a moment, or use password login below.',
+          });
+        }
+        if (msg.includes('rate limit')) {
+          return err<AuthError>({
+            code: 'rate_limited',
+            message: 'Too many attempts. Please wait a few minutes before trying again.',
+          });
+        }
+        return err<AuthError>({
+          code: 'otp_send_failed',
+          message: 'This email is not registered, or the code could not be sent. Contact your admin.',
+        });
+      }
+      return ok(undefined);
+    },
+
+    async verifyStudentEmailOtp(email: string, token: string): Promise<Result<Actor, AuthError>> {
       const { data, error } = await client.auth.verifyOtp({
         email: email.trim(),
         token: token.trim(),
