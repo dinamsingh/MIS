@@ -440,7 +440,7 @@ export function createQuizAccess(
           marks: q.marks ?? 1,
           position: i + 1,
         }));
-        await client.from('quiz_questions').insert(questionRows);
+        await client.from('questions').insert(questionRows);
       }
       return quizId;
     },
