@@ -64,6 +64,8 @@ export type QuizCreationRepository = Pick<
   | 'getQuizReview'
   | 'listTeacherSectionsForSubject'
   | 'setQuizTargetSections'
+  | 'updateQuizWithQuestions'
+  | 'listQuizQuestions'
 >;
 
 export interface QuizCreationViewProps {
@@ -212,6 +214,8 @@ export default function QuizCreationView({
   const [isSaving, setIsSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  /** When editing an existing quiz (no submissions), holds its id. null = creating new. */
+  const [editingQuizId, setEditingQuizId] = useState<string | null>(null);
 
   // Saved quizzes (subject-scoped).
   const [savedQuizzes, setSavedQuizzes] = useState<SavedQuizSummary[]>([]);
@@ -281,6 +285,7 @@ export default function QuizCreationView({
     setMultiSectionEnabled(false);
     setSelectedSectionIds(new Set());
     setQuestions([emptyQuestion()]);
+    setEditingQuizId(null);
   };
 
   async function handleToggleMultiSection(enabled: boolean) {
@@ -329,21 +334,34 @@ export default function QuizCreationView({
     const quizTitle = selectedUnit?.name ?? 'Unit quiz';
     setIsSaving(true);
     try {
-      const shareToken = generateShareToken();
-      const quizId = await quizAccess.createQuiz({
-        unitId,
-        title: quizTitle,
-        sectionId: sectionId ?? null,
-        timeLimitMinutes: timeLimit,
-        shareToken,
-        showAnswersAfterClose,
-        shuffleQuestions,
-      });
-      for (const question of validation.questions) {
-        await quizAccess.addQuestion(quizId, question);
-      }
-      if (multiSectionEnabled && selectedSectionIds.size > 0) {
-        await quizAccess.setQuizTargetSections(quizId, Array.from(selectedSectionIds));
+      if (editingQuizId) {
+        // Update existing quiz (only allowed when no submissions exist)
+        await quizAccess.updateQuizWithQuestions(editingQuizId, {
+          unitId,
+          title: quizTitle,
+          timeLimitMinutes: timeLimit,
+        }, validation.questions);
+        if (multiSectionEnabled && selectedSectionIds.size > 0) {
+          await quizAccess.setQuizTargetSections(editingQuizId, Array.from(selectedSectionIds));
+        }
+      } else {
+        // Create new quiz
+        const shareToken = generateShareToken();
+        const quizId = await quizAccess.createQuiz({
+          unitId,
+          title: quizTitle,
+          sectionId: sectionId ?? null,
+          timeLimitMinutes: timeLimit,
+          shareToken,
+          showAnswersAfterClose,
+          shuffleQuestions,
+        });
+        for (const question of validation.questions) {
+          await quizAccess.addQuestion(quizId, question);
+        }
+        if (multiSectionEnabled && selectedSectionIds.size > 0) {
+          await quizAccess.setQuizTargetSections(quizId, Array.from(selectedSectionIds));
+        }
       }
       resetForm();
       setShowForm(false);
@@ -460,6 +478,38 @@ export default function QuizCreationView({
       setNotice('Share link copy ho gaya ✓');
     } catch {
       setNotice(null);
+    }
+  }
+
+  async function handleEditQuiz(quiz: SavedQuizSummary) {
+    if (quiz.responseCount > 0) {
+      return; // Cannot edit a quiz that has submissions
+    }
+    setBusyKey(`edit-${quiz.id}`);
+    try {
+      const loadedQuestions = await quizAccess.listQuizQuestions(quiz.id);
+      setEditingQuizId(quiz.id);
+      setUnitId(quiz.unitId);
+      setTimeLimit(quiz.timeLimitMinutes);
+      setShowAnswersAfterClose(quiz.showAnswersAfterClose);
+      setShuffleQuestions(quiz.shuffleQuestions);
+      setQuestions(
+        loadedQuestions.length > 0
+          ? loadedQuestions.map((q) => ({
+              key: nextQuestionKey(),
+              text: q.text,
+              options: [...q.options],
+              correctIndex: q.correctIndex,
+              marks: q.marks ?? DEFAULT_QUESTION_MARKS,
+            }))
+          : [emptyQuestion()],
+      );
+      setShowForm(true);
+      setNotice(null);
+    } catch {
+      setQuizzesError('Could not load quiz questions for editing.');
+    } finally {
+      setBusyKey(null);
     }
   }
 
@@ -603,6 +653,11 @@ export default function QuizCreationView({
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
+                          {quiz.responseCount === 0 && (
+                            <Button size="sm" variant="ghost" loading={busyKey === `edit-${quiz.id}`} onClick={() => void handleEditQuiz(quiz)}>
+                              Edit
+                            </Button>
+                          )}
                           <Button size="sm" variant="ghost" onClick={() => void handleCopyLink(quiz.shareToken)}>
                             Copy link
                           </Button>
@@ -640,7 +695,7 @@ export default function QuizCreationView({
       {showForm && (
         <Card className="flex flex-col gap-6">
           <h3 className="text-base font-semibold text-text">
-            New quiz{subjectName ? ` · ${subjectName}` : ''}{sectionName ? ` · ${sectionName}` : ''}
+            {editingQuizId ? 'Edit quiz' : 'New quiz'}{subjectName ? ` · ${subjectName}` : ''}{sectionName ? ` · ${sectionName}` : ''}
           </h3>
 
           <form className="flex flex-col gap-6" onSubmit={handleSubmit} noValidate>
@@ -833,7 +888,7 @@ export default function QuizCreationView({
             )}
 
             <Button type="submit" variant="primary" loading={isSaving} className="self-start">
-              Publish quiz
+              {editingQuizId ? 'Save changes' : 'Publish quiz'}
             </Button>
           </form>
         </Card>

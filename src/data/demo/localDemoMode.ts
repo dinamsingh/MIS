@@ -1180,6 +1180,38 @@ export function createLocalDemoQuizAccess(
         quizzes: { ...store.quizzes, [quizId]: { ...quiz, targetSectionIds: [...sectionIds] } },
       });
     },
+
+    async updateQuizWithQuestions(quizId: string, quiz: Partial<QuizInput>, questions: QuestionInput[]): Promise<void> {
+      const store = readQuizStore();
+      const existing = store.quizzes[quizId];
+      if (!existing) return;
+      const updated: DemoQuizRecord = {
+        ...existing,
+        title: quiz.title ?? existing.title,
+        timeLimitMinutes: quiz.timeLimitMinutes ?? existing.timeLimitMinutes,
+        questions: questions.map((q, i) => ({
+          ...q,
+          id: createDemoId('question'),
+          position: i + 1,
+          marks: q.marks ?? 1,
+        })),
+      };
+      writeQuizStore({ ...store, quizzes: { ...store.quizzes, [quizId]: updated } });
+    },
+
+    async listQuizQuestions(quizId: string): Promise<QuestionInput[]> {
+      const store = readQuizStore();
+      const quiz = store.quizzes[quizId];
+      if (!quiz) return [];
+      return quiz.questions
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+        .map((q) => ({
+          text: q.text,
+          options: q.options,
+          correctIndex: q.correctIndex,
+          marks: q.marks ?? 1,
+        }));
+    },
   };
 }
 

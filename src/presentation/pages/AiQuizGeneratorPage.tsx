@@ -9,11 +9,12 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { createQuizAccess } from '@data/access/quizAccess';
+import { createQuizAccess, type QuizResultSection } from '@data/access/quizAccess';
 import { supabase } from '@data/supabase';
 import { generateQuizQuestions } from '@data/access/aiQuizClient';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 import { Button } from '@presentation/components/ui';
+import { formatSectionLabel } from '@presentation/format/sectionLabel';
 import {
   loadUnitsForSubject,
   loadTopicNamesForUnit,
@@ -52,6 +53,11 @@ export default function AiQuizGeneratorPage() {
   const [timeLimit, setTimeLimit] = useState(15);
   const [activeFrom, setActiveFrom] = useState('');
   const [activeUntil, setActiveUntil] = useState('');
+
+  const [multiSectionEnabled, setMultiSectionEnabled] = useState(false);
+  const [teacherSections, setTeacherSections] = useState<QuizResultSection[]>([]);
+  const [loadingTeacherSections, setLoadingTeacherSections] = useState(false);
+  const [selectedSectionIds, setSelectedSectionIds] = useState<Set<string>>(new Set());
 
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +122,7 @@ export default function AiQuizGeneratorPage() {
 
       const quizTitle =
         title.trim().length > 0 ? title.trim() : `${selectedUnit?.name ?? 'Quiz'} (AI)`;
-      await quizAccess.createQuizWithQuestions({
+      const quizId = await quizAccess.createQuizWithQuestions({
         unitId,
         title: quizTitle,
         sectionId: selectedSectionId,
@@ -130,6 +136,9 @@ export default function AiQuizGeneratorPage() {
           correctIndex: q.correctIndex,
           marks: q.marks,
       })));
+      if (multiSectionEnabled && selectedSectionIds.size > 0) {
+        await quizAccess.setQuizTargetSections(quizId, Array.from(selectedSectionIds));
+      }
       const shareLink = `${window.location.origin}/quiz/${shareToken}`;
       setPhase({ kind: 'saved', shareLink, count: questions.length });
     } catch (e) {
@@ -242,6 +251,70 @@ export default function AiQuizGeneratorPage() {
             onChange={(e) => setActiveUntil(e.target.value)}
           />
         </label>
+
+        {/* Multi-section assignment */}
+        <div className="sm:col-span-2 flex flex-col gap-2">
+          <label className="flex items-center gap-2 text-sm font-medium text-text cursor-pointer">
+            <input
+              type="checkbox"
+              checked={multiSectionEnabled}
+              onChange={(e) => {
+                const enabled = e.target.checked;
+                setMultiSectionEnabled(enabled);
+                if (enabled && selectedSubjectId) {
+                  setLoadingTeacherSections(true);
+                  void quizAccess.listTeacherSectionsForSubject(selectedSubjectId).then((sections) => {
+                    setTeacherSections(sections);
+                    setSelectedSectionIds((prev) => {
+                      if (prev.size > 0) return prev;
+                      const current = selectedSectionId && sections.some((s) => s.id === selectedSectionId) ? selectedSectionId : null;
+                      return current ? new Set([current]) : new Set();
+                    });
+                  }).catch(() => {
+                    setTeacherSections([]);
+                  }).finally(() => {
+                    setLoadingTeacherSections(false);
+                  });
+                }
+              }}
+              className="rounded border-border text-accent focus:ring-accent/30"
+            />
+            Assign to multiple sections
+          </label>
+          {multiSectionEnabled && (
+            <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface-muted/30 p-3">
+              {loadingTeacherSections ? (
+                <p className="text-xs text-muted">Loading your sections…</p>
+              ) : teacherSections.length === 0 ? (
+                <p className="text-xs text-muted">
+                  No sections found for this subject — the quiz will fall back to the currently-selected section.
+                </p>
+              ) : (
+                teacherSections.map((section) => (
+                  <label key={section.id} className="flex items-center gap-2 text-sm text-text cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedSectionIds.has(section.id)}
+                      onChange={() => {
+                        setSelectedSectionIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(section.id)) {
+                            next.delete(section.id);
+                          } else {
+                            next.add(section.id);
+                          }
+                          return next;
+                        });
+                      }}
+                      className="rounded border-border text-accent focus:ring-accent/30"
+                    />
+                    {formatSectionLabel(section)}
+                  </label>
+                ))
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="sm:col-span-2">
           <Button

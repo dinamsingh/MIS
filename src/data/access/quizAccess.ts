@@ -171,6 +171,10 @@ export interface QuizAccessRepository {
   listTeacherSectionsForSubject(subjectId: string): Promise<QuizResultSection[]>;
   /** Replace a quiz's target-section rows (multi-section assignment). Empty array clears them (legacy/unrestricted behavior). */
   setQuizTargetSections(quizId: string, sectionIds: string[]): Promise<void>;
+  /** Update a quiz and its questions in a single transaction (no submissions must exist). */
+  updateQuizWithQuestions(quizId: string, quiz: Partial<QuizInput>, questions: QuestionInput[]): Promise<void>;
+  /** List the questions for a quiz (for pre-filling an edit form). */
+  listQuizQuestions(quizId: string): Promise<QuestionInput[]>;
 }
 
 interface InsertedId {
@@ -661,6 +665,42 @@ export function createQuizAccess(
           p_section_ids: sectionIds,
         }),
       );
+    },
+
+    async updateQuizWithQuestions(quizId: string, quiz: Partial<QuizInput>, questions: QuestionInput[]): Promise<void> {
+      unwrap(
+        await client.rpc('update_quiz_with_questions', {
+          p_quiz_id: quizId,
+          p_quiz: {
+            title: quiz.title ?? null,
+            instructions: null,
+            timeLimitMinutes: quiz.timeLimitMinutes ?? null,
+          },
+          p_questions: questions.map((q, i) => ({
+            text: q.text,
+            options: q.options,
+            correctIndex: q.correctIndex,
+            marks: q.marks ?? 1,
+            position: i + 1,
+          })),
+        }),
+      );
+    },
+
+    async listQuizQuestions(quizId: string): Promise<QuestionInput[]> {
+      const rows = unwrapList(
+        await client
+          .from('questions')
+          .select('text, options, correct_index, marks, position')
+          .eq('quiz_id', quizId)
+          .order('position', { ascending: true }),
+      ) as { text: string; options: string[]; correct_index: number; marks: number; position: number }[];
+      return rows.map((row) => ({
+        text: row.text,
+        options: Array.isArray(row.options) ? row.options : [],
+        correctIndex: row.correct_index,
+        marks: row.marks ?? 1,
+      }));
     },
   };
 }
