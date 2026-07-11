@@ -527,7 +527,7 @@ export function createQuizAccess(
         await client
           .from('quizzes')
           .select(
-            'id, title, unit_id, section_id, time_limit_minutes, share_token, active_from, active_until, created_at, syllabus_units(id, name, unit_no), questions(id, marks), quiz_attempts(id, score), sections(id, name, batch, semester, department), quiz_target_sections(sections(id, name, batch, semester, department))',
+            'id, title, unit_id, section_id, time_limit_minutes, share_token, active_from, active_until, created_at, syllabus_units(id, name, unit_no), questions(id, marks), quiz_attempts(id, score), sections!section_id(id, name, batch, semester, department), quiz_target_sections(sections(id, name, batch, semester, department))',
           )
           .order('created_at', { ascending: false }),
       ) as SavedQuizRow[];
