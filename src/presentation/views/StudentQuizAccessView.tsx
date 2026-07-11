@@ -792,11 +792,15 @@ export default function StudentQuizAccessView({
                 className="mt-5 w-full"
                 onClick={() => {
                   if (startAttempt) {
-                    startAttempt(quizId, phase.email)
+                    // Use the actual quiz.id (from resolveAccess response), not
+                    // the URL share-token — start_quiz_attempt(uuid) looks up by
+                    // primary key, not by share_token.
+                    startAttempt(phase.quiz.id, phase.email)
                       .then((session) => {
                         setPhase({ ...phase, session });
                       })
-                      .catch(() => {
+                      .catch((err) => {
+                        console.error('[StartQuiz] startAttempt failed:', err);
                         setPhase({ kind: 'denied', reason: 'not-authenticated' });
                       });
                   }
