@@ -14,6 +14,7 @@ import { messages } from '@domain/shared/messages';
 import type { Section } from '@data/access/rows';
 import {
   activeAssignments,
+  isStaleAssignment,
   type AssignmentWithContext,
   type BatchState,
 } from '@domain/services/teacherAssignmentService';
@@ -725,25 +726,59 @@ export function assignmentsToSelection(
 /**
  * Load the current teacher's saved assignments as editable SelectionState, so
  * the Profile page can seed the subject editor with their existing choices.
+ *
+ * Excludes stale assignments (Requirement 11.2/11.6 continuation, bugfix:
+ * batch-promotion-selector-mixing): without this filter, a row left over from
+ * before the teacher's batch was promoted would be silently re-inserted on
+ * every save (it is invisible in `SemAccordion`, which only renders the
+ * batch's CURRENT-semester subjects, so the editor can never remove what it
+ * never shows) — the row would survive forever, permanently keeping the
+ * stale-assignment banner lit and leaking the old semester's subject into
+ * the global subject selector for that section (`loadAssignedSyllabusSubjects`
+ * queries by batch+section only, not semester).
  */
 export async function fetchCurrentSelection(): Promise<import('../types').SelectionState> {
   if (isLocalDemoMode()) {
-    return assignmentsToSelection(readDemoRecord().assignments);
+    const demoBatchStates: BatchState[] = MOCK_BATCHES.map((b) => ({ batchId: b.id, currentSem: b.currentSem }));
+    const active = readDemoRecord().assignments.filter(
+      (a) => !isStaleAssignment({ assignmentId: '', batchId: a.batchId, subjectSem: a.semester ?? 0 }, demoBatchStates),
+    );
+    return assignmentsToSelection(active);
   }
   const teacherId = await requireTeacherId();
-  const { data, error } = await supabase
-    .from('teacher_assignments')
-    .select('subject_id, batch_id, section, is_lab')
-    .eq('teacher_id', teacherId);
-  if (error) {
-    throw new Error(error.message);
+  const [assignmentRes, batches] = await Promise.all([
+    supabase.from('teacher_assignments').select('subject_id, batch_id, section, is_lab').eq('teacher_id', teacherId),
+    fetchAllBatches(),
+  ]);
+  if (assignmentRes.error) {
+    throw new Error(assignmentRes.error.message);
   }
-  const rows = (data as Array<{
+  const assignmentRows = assignmentRes.data as Array<{
     subject_id: string;
     batch_id: string;
     section: AssignmentInput['section'];
     is_lab: boolean;
-  }>).map((r) => ({
+  }>;
+  const subjectIds = Array.from(new Set(assignmentRows.map((row) => row.subject_id)));
+  const subjectSemById = new Map<string, number>();
+  if (subjectIds.length > 0) {
+    const subjectRes = await supabase.from('syllabus_subjects').select('id, sem').in('id', subjectIds);
+    if (subjectRes.error) {
+      throw new Error(subjectRes.error.message);
+    }
+    for (const row of subjectRes.data as Array<{ id: string; sem: number }>) {
+      subjectSemById.set(row.id, row.sem);
+    }
+  }
+  const batchStates: BatchState[] = batches.map((b) => ({ batchId: b.id, currentSem: b.currentSem }));
+  const activeRows = assignmentRows.filter(
+    (row) =>
+      !isStaleAssignment(
+        { assignmentId: '', batchId: row.batch_id, subjectSem: subjectSemById.get(row.subject_id) ?? 0 },
+        batchStates,
+      ),
+  );
+  const rows = activeRows.map((r) => ({
     subjectId: r.subject_id,
     batchId: r.batch_id,
     section: r.section,

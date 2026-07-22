@@ -4,7 +4,15 @@
  * Server-side AI quiz generation. The Gemini API key lives ONLY here (as the
  * `GEMINI_API_KEY` environment secret) and is never exposed to the browser.
  *
+ * Auth-gated (bugfix: unauthenticated-quiz-generation-api): the caller must
+ * send their Supabase access token (`Authorization: Bearer <token>`) and be a
+ * teacher, verified server-side via the `is_teacher()` RPC on a JWT-scoped
+ * client — never trusted from a client-supplied claim. Without this, anyone
+ * on the internet could call this endpoint directly and consume the Gemini
+ * quota / run up cost, since the endpoint had no authorization check at all.
+ *
  * Request  (JSON): { subjectName, unitName, topics: string[], numQuestions, difficulty }
+ * Header:          Authorization: Bearer <caller's Supabase access token>
  * Response (JSON): { questions: [{ text, options[4], correctIndex, marks }], rejected }
  *
  * The prompt + response validation are shared with the app via the pure
@@ -14,6 +22,7 @@
  * a vite proxy; the plain `npm run dev` server does not execute Pages Functions.
  */
 
+import { createClient } from '@supabase/supabase-js';
 import {
   buildQuizPrompt,
   clampQuestionCount,
@@ -25,6 +34,8 @@ import {
 
 interface Env {
   GEMINI_API_KEY: string;
+  SUPABASE_URL: string;
+  SUPABASE_ANON_KEY: string;
 }
 
 // Gemini model. 1.5-* retired; this key has free-tier quota on 2.5-flash
@@ -54,6 +65,34 @@ export const onRequestPost = async (context: {
 
   if (!env.GEMINI_API_KEY) {
     return json({ error: 'AI is not configured on the server (missing GEMINI_API_KEY).' }, 503);
+  }
+
+  // --- Authenticate + authorize the caller (never trust a client claim) ---
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
+    return json({ error: 'This server is not configured for quiz generation (missing Supabase env vars).' }, 503);
+  }
+  const authHeader = request.headers.get('authorization') ?? request.headers.get('Authorization') ?? '';
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  const accessToken = bearerMatch?.[1]?.trim();
+  if (!accessToken) {
+    return json({ error: 'Not authorized.' }, 403);
+  }
+
+  const callerClient = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  let isTeacher = false;
+  try {
+    const { data, error } = await callerClient.rpc('is_teacher');
+    isTeacher = !error && data === true;
+  } catch {
+    isTeacher = false;
+  }
+
+  if (!isTeacher) {
+    return json({ error: 'Not authorized.' }, 403);
   }
 
   let body: Partial<GenerateQuizRequest>;

@@ -2,8 +2,13 @@
  * Client for the server-side AI quiz generator (Cloudflare Pages Function at
  * POST /api/generate-quiz). The AI key lives on the server; this client only
  * sends the unit context and receives validated questions back.
+ *
+ * Sends the caller's Supabase access token as a bearer header (bugfix:
+ * unauthenticated-quiz-generation-api) — the server verifies it and checks
+ * `is_teacher()` before doing any AI work.
  */
 
+import { supabase } from '../supabase';
 import type {
   GenerateQuizRequest,
   GeneratedQuestion,
@@ -21,11 +26,20 @@ export interface GenerateQuizResult {
 export async function generateQuizQuestions(
   req: GenerateQuizRequest,
 ): Promise<GenerateQuizResult> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) {
+    throw new Error('You must be signed in to generate a quiz.');
+  }
+
   let response: Response;
   try {
     response = await fetch('/api/generate-quiz', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${accessToken}`,
+      },
       body: JSON.stringify(req),
     });
   } catch {

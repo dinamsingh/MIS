@@ -1,6 +1,6 @@
 import { isLocalDemoMode } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
-import { DEMO_STORAGE_KEY, MOCK_SUBJECTS } from '../../features/onboarding/api/onboarding';
+import { DEMO_STORAGE_KEY, MOCK_BATCHES, MOCK_SUBJECTS } from '../../features/onboarding/api/onboarding';
 import { readDemoValue } from '@data/demo/localDemoMode';
 import type { Section as AppSection } from '@data/access/rows';
 import type {
@@ -96,7 +96,13 @@ async function loadAssignedSyllabusSubjects(
       assignments: [],
     });
     const selectedIds = new Set(selectedSubjectIdsForAssignments(record.assignments, section));
-    return MOCK_SUBJECTS.filter((subject) => selectedIds.has(subject.id)).map((subject) => ({
+    // Scope to the batch's CURRENT semester (bugfix: batch-promotion-selector-mixing) —
+    // mirrors the live-mode filter below so a stale demo assignment from
+    // before a batch promotion cannot leak an old semester's subject in.
+    const currentSem = MOCK_BATCHES.find((b) => b.id === section.batch)?.currentSem ?? null;
+    return MOCK_SUBJECTS.filter(
+      (subject) => selectedIds.has(subject.id) && (currentSem === null || subject.sem === currentSem),
+    ).map((subject) => ({
       id: subject.id,
       name: subjectLabel(subject),
     }));
@@ -123,13 +129,31 @@ async function loadAssignedSyllabusSubjects(
     return [];
   }
 
+  // Scope to the batch's CURRENT semester (bugfix: batch-promotion-selector-mixing).
+  // `teacher_assignments` can still hold a row from before the batch was
+  // promoted (see fetchCurrentSelection's staleness filter) — without this,
+  // a subject from the section's OLD semester would appear in the selector
+  // alongside the new semester's subject for the same batch+section.
+  const { data: batchRow } = await supabase
+    .from('batches')
+    .select('current_sem')
+    .eq('id', section.batch)
+    .single();
+  const currentSem = (batchRow as { current_sem: number } | null)?.current_sem ?? null;
+
   const { data: subjectRows } = await supabase
     .from('syllabus_subjects')
-    .select('id, code, name')
+    .select('id, code, name, sem')
     .in('id', selectedIds)
     .order('code');
 
-  return ((subjectRows ?? []) as SyllabusSubjectRow[]).map((subject) => ({
+  const filtered = currentSem === null
+    ? ((subjectRows ?? []) as Array<SyllabusSubjectRow & { sem: number }>)
+    : ((subjectRows ?? []) as Array<SyllabusSubjectRow & { sem: number }>).filter(
+        (subject) => subject.sem === currentSem,
+      );
+
+  return filtered.map((subject) => ({
     id: subject.id,
     name: subjectLabel(subject),
   }));
