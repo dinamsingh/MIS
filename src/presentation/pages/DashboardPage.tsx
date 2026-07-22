@@ -4,6 +4,7 @@ import DashboardView, {
   type DashboardSummary,
   type AttendanceTrendPoint,
 } from '@presentation/views/DashboardView';
+import StaleAssignmentBanner from '../../features/onboarding/components/StaleAssignmentBanner';
 import { useDataCache } from '@presentation/hooks';
 import {
   buildDemoAttendanceTrend,
@@ -172,11 +173,14 @@ export default function DashboardPage() {
   );
 
   return (
-    <DashboardView
-      key={selectedSection?.id ?? 'none'}
-      dataProvider={dataProvider}
-      subjectNames={resolved.subjectNames}
-      sectionNames={resolved.sectionNames}
-    />
+    <div className="flex flex-col gap-4">
+      <StaleAssignmentBanner />
+      <DashboardView
+        key={selectedSection?.id ?? 'none'}
+        dataProvider={dataProvider}
+        subjectNames={resolved.subjectNames}
+        sectionNames={resolved.sectionNames}
+      />
+    </div>
   );
 }

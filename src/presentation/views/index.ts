@@ -101,3 +101,7 @@ export {
   type TeacherManagementViewProps,
   type Teacher,
 } from './TeacherManagementView';
+export {
+  default as MyScheduleView,
+  type MyScheduleViewProps,
+} from './MyScheduleView';

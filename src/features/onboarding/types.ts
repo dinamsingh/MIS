@@ -50,6 +50,13 @@ export interface SyllabusSubject {
 export interface OnboardingProfile {
   readonly name: string;
   readonly email: string;
+  /**
+   * True when an admin auto-created this teacher's Supabase Auth account
+   * with a temporary password (`teachers.must_reset_password`) and the
+   * teacher has not yet chosen their own password. Drives whether the
+   * onboarding wizard inserts the forced "Set your password" step.
+   */
+  readonly mustResetPassword: boolean;
 }
 
 /**

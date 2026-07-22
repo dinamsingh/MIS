@@ -365,7 +365,7 @@ export default function QuizCreationView({
       }
       resetForm();
       setShowForm(false);
-      setNotice('Quiz publish ho gaya ✓');
+      setNotice('Quiz published successfully ✓');
       await loadQuizzes();
     } catch {
       setFormError(messages.error.saveFailed);
@@ -385,22 +385,27 @@ export default function QuizCreationView({
 
   async function refreshResults(quizId: string) {
     setLoadingResults(true);
-    try {
-      const [rows, nonAttempters, stats] = await Promise.all([
-        quizAccess.listQuizResults(quizId),
-        quizAccess.listQuizNonAttempters(quizId),
-        quizAccess.getQuizQuestionStats(quizId),
-      ]);
-      setResultsByQuiz((prev) => ({ ...prev, [quizId]: rows }));
-      setNonAttemptersByQuiz((prev) => ({ ...prev, [quizId]: nonAttempters }));
-      setStatsByQuiz((prev) => ({ ...prev, [quizId]: stats }));
-    } catch {
-      setResultsByQuiz((prev) => ({ ...prev, [quizId]: [] }));
-      setNonAttemptersByQuiz((prev) => ({ ...prev, [quizId]: [] }));
-      setStatsByQuiz((prev) => ({ ...prev, [quizId]: [] }));
-    } finally {
-      setLoadingResults(false);
+    // Load the three panels INDEPENDENTLY (allSettled): a failure in one RPC
+    // (e.g. non-attempters or question-stats) must NOT blank out the submitted
+    // results list. Previously a single Promise.all rejection wiped all three.
+    const [rowsRes, nonAttemptersRes, statsRes] = await Promise.allSettled([
+      quizAccess.listQuizResults(quizId),
+      quizAccess.listQuizNonAttempters(quizId),
+      quizAccess.getQuizQuestionStats(quizId),
+    ]);
+    if (rowsRes.status === 'rejected') {
+      console.error('[Results] listQuizResults failed:', rowsRes.reason);
     }
+    if (nonAttemptersRes.status === 'rejected') {
+      console.error('[Results] listQuizNonAttempters failed:', nonAttemptersRes.reason);
+    }
+    if (statsRes.status === 'rejected') {
+      console.error('[Results] getQuizQuestionStats failed:', statsRes.reason);
+    }
+    setResultsByQuiz((prev) => ({ ...prev, [quizId]: rowsRes.status === 'fulfilled' ? rowsRes.value : [] }));
+    setNonAttemptersByQuiz((prev) => ({ ...prev, [quizId]: nonAttemptersRes.status === 'fulfilled' ? nonAttemptersRes.value : [] }));
+    setStatsByQuiz((prev) => ({ ...prev, [quizId]: statsRes.status === 'fulfilled' ? statsRes.value : [] }));
+    setLoadingResults(false);
   }
 
   async function openAttemptDetail(quizId: string, studentId: string) {
@@ -475,7 +480,7 @@ export default function QuizCreationView({
   async function handleCopyLink(shareToken: string) {
     try {
       await navigator.clipboard?.writeText(buildShareLink(shareToken));
-      setNotice('Share link copy ho gaya ✓');
+      setNotice('Share link copied ✓');
     } catch {
       setNotice(null);
     }
@@ -515,7 +520,7 @@ export default function QuizCreationView({
 
   async function handleDeleteQuiz(quiz: SavedQuizSummary) {
     const ok = window.confirm(
-      `Delete "${quiz.unitName}"?\n\nIska quiz, uske questions aur saare submissions delete ho jaayenge. Ye wapas nahi aayega.`,
+      `Delete "${quiz.unitName}"?\n\nThe quiz, its questions, and all submissions will be deleted. This cannot be undone.`,
     );
     if (!ok) return;
     setBusyKey(`del-${quiz.id}`);
@@ -532,7 +537,7 @@ export default function QuizCreationView({
 
   async function handleRemoveAttempt(quizId: string, row: QuizResultRow) {
     const ok = window.confirm(
-      `Remove ${row.studentName}'s attempt?\n\nSirf iss quiz ka unka attempt hatega, taaki wo dobara de sakein. Baaki subjects/quizzes pe koi asar nahi.`,
+      `Remove ${row.studentName}'s attempt?\n\nOnly their attempt for this quiz will be removed, so they can retake it. Other subjects and quizzes remain unaffected.`,
     );
     if (!ok) return;
     setBusyKey(`att-${quizId}-${row.studentId}`);
@@ -602,11 +607,11 @@ export default function QuizCreationView({
           </div>
         ) : !hasSubject ? (
           <p className="px-5 py-10 text-center text-sm text-muted">
-            Top bar se ek subject select karo — us subject ke quizzes yahan dikhenge.
+            Select a subject from the top bar — quizzes for that subject will appear here.
           </p>
         ) : savedQuizzes.length === 0 ? (
           <p className="px-5 py-10 text-center text-sm text-muted">
-            Is subject me abhi koi quiz nahi. "New quiz" ya "AI Generate" se banao.
+            No quizzes for this subject yet. Create one using "New quiz" or "AI Generate".
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -1041,7 +1046,14 @@ export default function QuizCreationView({
                           </thead>
                           <tbody className="divide-y divide-border">
                             {[...(resultsByQuiz[resultsQuiz.id] ?? [])]
-                              .filter((r) => resultsSectionFilter === null || r.section?.id === resultsSectionFilter)
+                              // Section filter only applies to genuinely multi-section quizzes,
+                              // and never hides rows whose section didn't resolve (r.section null).
+                              .filter((r) =>
+                                resultsQuiz.sections.length <= 1 ||
+                                resultsSectionFilter === null ||
+                                !r.section ||
+                                r.section.id === resultsSectionFilter,
+                              )
                               .sort((a, b) => {
                               if (resultsSortOrder === 'score') return b.score - a.score;
                               return a.studentName.localeCompare(b.studentName);

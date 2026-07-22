@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { buildAssignments, deriveBatchesForSession } from './onboarding';
-import type { Batch, SelectionState, SyllabusSubject } from '../types';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { writeDemoValue } from '@data/demo/localDemoMode';
+import { buildAssignments, deriveBatchesForSession, DEMO_STORAGE_KEY, fetchOnboardedSections } from './onboarding';
+import type { Batch, OnboardingRecord, SelectionState, SyllabusSubject } from '../types';
 
 const subjects: readonly SyllabusSubject[] = [
   {
@@ -38,6 +39,54 @@ describe('deriveBatchesForSession', () => {
       ['2024-28', 6],
       ['2023-27', 8],
     ]);
+  });
+});
+
+describe('fetchOnboardedSections', () => {
+  beforeEach(() => {
+    vi.stubEnv('VITE_DEMO_MODE', 'true');
+  });
+
+  afterEach(() => {
+    window.localStorage.removeItem(DEMO_STORAGE_KEY);
+    vi.unstubAllEnvs();
+  });
+
+  it('excludes a stale assignment (subject sem behind the batch current sem) from the derived sections', async () => {
+    // Batch '2024-28' is currently at sem 5 (see MOCK_BATCHES). An assignment
+    // made for sem 3 of that batch is now stale (Requirement 11.1/11.2) and
+    // must not produce a selectable section, while a current sem-5
+    // assignment on the same batch still does.
+    const record: OnboardingRecord = {
+      onboarded: true,
+      profile: { name: 'Demo Teacher', email: 'teacher@example.com', mustResetPassword: false },
+      assignments: [
+        { subjectId: 'sub-stale', batchId: '2024-28', section: 'A', isLab: false, semester: 3 },
+        { subjectId: 'sub-current', batchId: '2024-28', section: 'B', isLab: false, semester: 5 },
+      ],
+    };
+    writeDemoValue<OnboardingRecord>(DEMO_STORAGE_KEY, record);
+
+    const sections = await fetchOnboardedSections();
+
+    expect(sections.some((s) => s.id === '2024-28-A')).toBe(false);
+    expect(sections.some((s) => s.id === '2024-28-B')).toBe(true);
+  });
+
+  it('keeps every non-stale assignment producing a section (no regression)', async () => {
+    const record: OnboardingRecord = {
+      onboarded: true,
+      profile: { name: 'Demo Teacher', email: 'teacher@example.com', mustResetPassword: false },
+      assignments: [
+        { subjectId: 'sub-current-a', batchId: '2024-28', section: 'A', isLab: false, semester: 5 },
+        { subjectId: 'sub-current-b', batchId: '2025-29', section: 'C', isLab: false, semester: 3 },
+      ],
+    };
+    writeDemoValue<OnboardingRecord>(DEMO_STORAGE_KEY, record);
+
+    const sections = await fetchOnboardedSections();
+
+    expect(sections.map((s) => s.id).sort()).toEqual(['2024-28-A', '2025-29-C']);
   });
 });
 

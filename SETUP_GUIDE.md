@@ -120,6 +120,24 @@ $$;
 
 ---
 
+## Step 6.1: First Admin Bootstrap Karna (Admin Console ke liye)
+
+`0043_admin_role.sql` migration run karne ke baad, `public.admins` table khaali hoti hai — aur har admin-only RPC (`add_admin`, `remove_admin`, etc.) `is_admin()` check karta hai, jo khaali table pe hamesha `false` return karega. Isliye pehla admin row ek baar SQL Editor se manually insert karna hai:
+
+1. SQL Editor me ek naya query khol
+2. Ye paste kar (**apna email daal** `TERA-EMAIL@gmail.com` ki jagah — same email jo Step 4 me use kiya tha):
+
+```sql
+insert into public.admins (email) values ('TERA-EMAIL@gmail.com');
+```
+
+3. **Run** kar
+
+> ⚠️ Ye one-time bootstrap hai — is insert ke baad, saare aage ke admin add/remove Admin Console ke `add_admin()`/`remove_admin()` RPCs se hi karne hain, direct SQL se nahi
+> ⚠️ Kam se kam ek admin row hamesha rehna chahiye — last admin ko delete/remove karne ki koshish trigger level pe block ho jaayegi
+
+---
+
 ## Step 7: `.env` File Update Karna
 
 Project root me `.env` file khol (already bani hui hai) aur apni values daal:

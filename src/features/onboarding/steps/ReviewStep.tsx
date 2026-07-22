@@ -15,6 +15,12 @@ interface ReviewStepProps {
   readonly saving: boolean;
   readonly onBack: () => void;
   readonly onFinish: () => void;
+  /**
+   * Forwarded to `Stepper` — show the "Password" step when true. Also swaps
+   * the finish button's label from "Finish setup" to "Continue →" since a
+   * password step follows this one in that case.
+   */
+  readonly includePassword?: boolean;
 }
 
 export default function ReviewStep({
@@ -24,6 +30,7 @@ export default function ReviewStep({
   saving,
   onBack,
   onFinish,
+  includePassword = false,
 }: ReviewStepProps) {
   // Batches that actually have at least one selected subject.
   const groups = batchesWithSubjects
@@ -47,11 +54,11 @@ export default function ReviewStep({
 
   return (
     <div className="flex flex-col gap-6">
-      <Stepper current="review" />
+      <Stepper current="review" includePassword={includePassword} />
 
       <div>
         <h1 className="text-2xl font-bold text-text">Ek baar dekh lijiye</h1>
-        <p className="mt-1 text-sm text-soft">Sab sahi lag raha hai? Toh setup complete karein.</p>
+        <p className="mt-1 text-sm text-soft">Does everything look correct? Then complete the setup.</p>
         <span className="mt-3 inline-flex rounded-full bg-accent-tint px-3 py-1 text-xs font-semibold uppercase text-accent">
           {currentSession} session
         </span>
@@ -59,7 +66,7 @@ export default function ReviewStep({
 
       {!hasSelections ? (
         <p className="rounded-control border border-border bg-surface-muted px-4 py-6 text-center text-sm text-muted">
-          Abhi tak koi subject select nahi hua. Wapas jaakar chuniye.
+          No subject selected yet. Go back and select one.
         </p>
       ) : (
         <div className="flex flex-col gap-4">
@@ -126,7 +133,7 @@ export default function ReviewStep({
           disabled={saving || !hasSelections}
           className="btn-primary bg-status-green hover:bg-status-green/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {saving ? 'Saving…' : 'Finish setup ✓'}
+          {saving ? 'Saving…' : includePassword ? 'Continue →' : 'Finish setup ✓'}
         </button>
       </div>
     </div>

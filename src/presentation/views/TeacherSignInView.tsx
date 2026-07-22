@@ -16,18 +16,27 @@ import type { Actor } from '@domain/shared/types';
 
 export interface TeacherSignInViewProps {
   onSignedIn?: (actor: Actor) => void;
+  /**
+   * An error to show immediately on mount, before any sign-in attempt — used
+   * when the caller (e.g. `SignInRoute`) already knows the previously active
+   * session belonged to a non-teacher identity (`get_my_role()` = 'none'),
+   * so the same "not on the approved teacher list" message a teacher would
+   * see after typing an unapproved email is shown consistently here too
+   * (bugfix: student-signin-role-routing-fix).
+   */
+  initialError?: string | null;
 }
 
 type Step = 'email' | 'code' | 'password';
 
-export default function TeacherSignInView({ onSignedIn }: TeacherSignInViewProps) {
+export default function TeacherSignInView({ onSignedIn, initialError = null }: TeacherSignInViewProps) {
   const { sendEmailOtp, verifyEmailOtp, signInTeacherPassword } = useAuth();
 
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
   const [info, setInfo] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 

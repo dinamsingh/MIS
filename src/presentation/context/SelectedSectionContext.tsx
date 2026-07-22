@@ -209,3 +209,20 @@ export function useSelectedSection(): SelectedSectionValue {
   }
   return ctx;
 }
+
+/**
+ * Read the global selected-section + subject state if a
+ * {@link SelectedSectionProvider} is present in the tree; returns `null`
+ * otherwise instead of throwing (bugfix: admin-only-sign-in-redirect).
+ *
+ * Used by role-agnostic shell chrome (`AppLayout`) that is shared between
+ * `TeacherShell` (wrapped in `SelectedSectionProvider`) and `AdminShell`
+ * (deliberately NOT wrapped in it, per `design.md` — the Admin Console
+ * manages its own sections and has no globally-selected one) — so the same
+ * `AppLayout` renders correctly under both without either shell needing to
+ * fake a provider it has no data for.
+ */
+export function useOptionalSelectedSection(): SelectedSectionValue | null {
+  const ctx = useContext(SelectedSectionContext);
+  return ctx ?? null;
+}

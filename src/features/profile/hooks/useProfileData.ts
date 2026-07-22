@@ -62,7 +62,7 @@ export function useProfileData(): ProfileData {
       setLoading(false);
     })().catch((err: unknown) => {
       if (active) {
-        setError(err instanceof Error ? err.message : 'Profile data load nahi ho paaya.');
+        setError(err instanceof Error ? err.message : 'Failed to load profile data.');
         setLoading(false);
       }
     });

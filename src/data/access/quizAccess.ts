@@ -13,7 +13,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase as defaultClient } from '../supabase';
 import type { QuizAccess, QuizAttemptSessionInfo } from '../../domain/services/rosterService';
 import { totalAvailableMarks } from '../../domain/services/quizService';
-import { parseQuizAccess, parseSubmitOutcome, type SubmitAttemptOutcome } from './parsers';
+import { parseQuizAccess, parseStartAttemptOutcome, parseSubmitOutcome, type SubmitAttemptOutcome } from './parsers';
 import { expectOk, unwrap, unwrapList } from './support';
 
 export { totalAvailableMarks };
@@ -467,11 +467,20 @@ export function createQuizAccess(
       // callers (it is unused here; the session established via student OTP
       // verification is what the server actually reads).
       const payload = unwrap(await client.rpc('start_quiz_attempt', { p_quiz_id: quizId }));
-      const result = payload as { started_at: string; server_now: string; time_limit_minutes: number };
+      // The DB returns camelCase keys (startedAt/serverNow/timeLimitMinutes)
+      // and a `status`. Parse it properly (not a hand-rolled snake_case cast,
+      // which silently produced an all-undefined session and left the student
+      // stuck on the "Start Quiz" screen). Throw on a non-'started' outcome so
+      // the caller's .catch surfaces the real reason instead of a blank session.
+      const outcome = parseStartAttemptOutcome(payload);
+      if (outcome.status !== 'started') {
+        const reason = outcome.status === 'denied' ? outcome.reason : outcome.status;
+        throw new Error(`start_quiz_attempt not started: ${reason}`);
+      }
       return {
-        startedAt: result.started_at,
-        serverNow: result.server_now,
-        timeLimitMinutes: result.time_limit_minutes,
+        startedAt: outcome.startedAt,
+        serverNow: outcome.serverNow,
+        timeLimitMinutes: outcome.timeLimitMinutes,
       };
     },
 

@@ -8,3 +8,5 @@
 
 export { AuthProvider, useAuth, type AuthContextValue } from './AuthContext';
 export { default as RequireTeacher } from './RequireTeacher';
+export { default as RequireAdmin } from './RequireAdmin';
+export { useUserRole, type RoleTag, type UserRoleStatus } from './useUserRole';

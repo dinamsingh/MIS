@@ -221,13 +221,18 @@ export function toMarkValue(row: MarkValueRow): MarkValue {
 // timetable_entries
 // ---------------------------------------------------------------------------
 
-/** A row of the `timetable_entries` table. */
+/** A row of the `timetable_entries` table (including Phase 4 columns). */
 export interface TimetableEntryRow {
   readonly id: string;
   readonly section_id: string;
-  readonly subject_id: string;
+  readonly subject_id: string | null;
   readonly day_of_week: string;
   readonly time_slot: string;
+  readonly period_id: string | null;
+  readonly span_periods: number;
+  readonly room: string | null;
+  readonly is_tutorial: boolean;
+  readonly special_activity: string | null;
 }
 
 /** Map a timetable row to the domain {@link TimetableEntry}. */
@@ -235,9 +240,14 @@ export function toTimetableEntry(row: TimetableEntryRow): TimetableEntry {
   return {
     id: row.id,
     sectionId: row.section_id,
-    subjectId: row.subject_id,
+    subjectId: row.subject_id ?? '',
     dayOfWeek: row.day_of_week as DayOfWeek,
     timeSlot: row.time_slot,
+    periodId: row.period_id ?? null,
+    spanPeriods: row.span_periods ?? 1,
+    room: row.room ?? null,
+    isTutorial: row.is_tutorial ?? false,
+    specialActivity: (row.special_activity as TimetableEntry['specialActivity']) ?? null,
   };
 }
 

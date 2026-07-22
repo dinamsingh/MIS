@@ -11,24 +11,55 @@
 
 ## 0. Quick Status (READ THIS FIRST)
 
-- **Last updated:** 2026-07-10
-- **Active branch:** `main` (all quiz security + UX work pushed directly to main per user instruction)
-- **Latest commit (pushed):** `75b03b3` — "Harden quiz access security: student OTP verification, session guards, RPC param fixes"
-  **Uncommitted (working tree):** Multi-section quiz assignment feature + student quiz UI improvements + migration 0040/0041 (ready to commit/push after user reviews)
-- **Build/tests:** ✅ green — `npx tsc --noEmit` clean, `npx vitest run` 221 tests pass, `npx vite build` succeeds.
-- **Where work stopped / resume point:** Quiz system fully redesigned (security + UX + multi-section). Two new migrations pending user run in Supabase (0040 + 0041). Frontend complete and verified locally. Next: commit the remaining local changes and push, then have user run 0040 + 0041 in Supabase SQL Editor.
+- **Last updated:** 2026-07-21
+- **Active branch:** `main`. **NOTHING has been pushed** — user explicitly said "no push without permission". Everything below is LOCAL ONLY.
+- **Latest commit (pushed):** `75b03b3` (unchanged since last push).
+- **Build/tests (as of last full run):** ✅ green — `npx vite build` succeeds (6s), `npx vitest run` 306 tests pass (33 files). `npx tsc -b tsconfig.app.json --noEmit` has 2 pre-existing minor errors in unrelated test files (not blocking).
 
-### ⚠️ Action items the human still needs to do (run in Supabase SQL editor, in order)
-1. ✅ `0039_quiz_access_hardening.sql` — teacher-account block restored + atomic roster binding (ALREADY RUN by user)
-2. ⏳ `0040_quiz_multi_section_assignment.sql` — `quiz_target_sections` junction table + `set_quiz_target_sections` / `list_teacher_sections_for_subject` RPCs + widened section-gate in `request_quiz_access` / `start_quiz_attempt`. RUN THIS.
-3. ⏳ `0041_roster_search_contains.sql` — changes `list_quiz_roster_options` search from prefix-only to contains-match (so students can type last 3 digits to find themselves). RUN THIS after 0040.
+### 🔴 CURRENT RESUME POINT
+**ALL 4 PHASES of `.kiro/specs/admin-console-and-scheduling-upgrade/` are IMPLEMENTED + MIGRATIONS APPLIED to Supabase.** The spec is functionally complete (61/110 tasks done — remaining 49 are all optional PBT tests marked `*`).
 
-### Quiz Security Redesign (this session — 2026-07-10)
-Major changes made in this session:
-- **Student OTP verification** — students must verify email ownership via Supabase Magic Link OTP before accessing any quiz (prevents impersonation)
-- **5-minute post-submit session expiry** — after quiz submission, student's authenticated session auto-expires in 5 minutes (configurable), with "Done" button for immediate sign-out and best-effort `beforeunload` cleanup
-- **RequireTeacher guard fix** — only `actor.kind === 'teacher'` passes now (previously any authenticated actor including students could access teacher URLs)
-- **RPC parameter mismatch fix** — frontend was sending `p_provided_email` to `submit_attempt`/`start_quiz_attempt`/`quiz_review` which don't accept that parameter (they use `auth.email()` from session); these calls now correctly omit the unused parameter
+**What was built this session (2026-07-21):**
+- Phase 1: Admin Role Foundation (complete since prior session)
+- Phase 2: Admin Bulk Roster/Session Import — `create_session()` RPC, duplicate-assignment guard, admin roster CSV wrapper, roster remove/permanently-delete RPCs, AdminSessionCreationPage, AdminRosterImportPage
+- Phase 3: Batch Promotion & History — `promote_batch()` RPC, stale-assignment derivation + wiring, stale-assignment dashboard banner, read-only Teaching History page
+- Phase 4: Timetable Overhaul — fixed periods catalog, timetable_entries schema extension (period_id, span_periods, room, is_tutorial, special_activity), section_timetable_status, confirm/unlock RPCs with cross-batch conflict detection + RLS mutation block, TimetableView period-based editor with confirm/unlock UI, My Schedule unified weekly grid, Attendance → confirmed-timetable-derived periods integration
+- Ad-hoc: Admin-only login redirect bugfix (race condition fix), "Create teacher account" feature (temp password + forced password reset on onboarding), Supabase Power setup + CLI login/link
+
+**Migrations applied to Supabase (all ✅ via MCP):**
+- 0042-0044: already applied in prior sessions
+- 0045: `teachers.must_reset_password` column
+- 0046: `create_session()` RPC + duplicate-assignment partial unique index
+- 0047: `remove_student_from_roster()` + `permanently_delete_student()` RPCs
+- 0048: `promote_batch()` RPC
+- 0049: `periods` table + seed data (9 rows)
+- 0050: timetable_entries Phase 4 columns + `section_timetable_status` table
+- 0051: `find_teacher_schedule_conflicts()` + `confirm_timetable()` + `unlock_timetable()` RPCs + confirmed-section RLS mutation block
+
+**Data fix applied:** Removed Ujjawal Singh's duplicate DBMS claim for sections A (batch 2024-28) to unblock the unique index creation.
+
+### ⚠️ Remaining manual steps (for the human)
+1. **Production deploy**: push to `main` (after permission) → Cloudflare auto-builds. Also add these 3 Cloudflare Pages secrets: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
+2. **"Create teacher account" feature testing**: use `npx wrangler pages dev dist` (port 8788) instead of `npm run dev` (port 5173) — only wrangler runs the real Cloudflare Function that creates Auth users.
+3. **Security hardening** (optional, recommended): Supabase Dashboard → Auth → "Leaked password protection" enable; revoke `EXECUTE` from `anon` role on sensitive RPCs.
+4. **Optional PBT tests** (49 tasks): formal property-based tests. Skip for MVP.
+
+### Supabase Power setup (new this session)
+- Supabase CLI installed (v2.109.1), logged in, linked to project `sdhpgvshexqsidkivjnq`
+- Kiro Power "supabase-hosted" installed + MCP connected — can run migrations, queries, inspect schema directly from IDE
+- `.dev.vars` has all 4 secrets filled (GEMINI_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY)
+- `supabase/` folder initialized via `supabase init`
+
+### Key files added/modified this session
+- Migrations: `src/data/migrations/0045-0051_*.sql`
+- Cloudflare Function: `functions/api/admin-create-teacher.ts`
+- Pure services: `src/domain/services/adminAccountService.ts`, `teacherAssignmentService.ts`
+- Data access: `src/data/access/adminRosterImportAccess.ts`, `adminSessionAccess.ts`, `mySchedule.ts`, `teachingHistoryAccess.ts`, `timetableAccess.ts` (extended)
+- Pages: `AdminSessionCreationPage`, `AdminRosterImportPage`, `TeachingHistoryPage`, `MySchedulePage`
+- Views: `TimetableView.tsx` (major Phase 4 update), `MyScheduleView.tsx`, `TeachingHistoryView.tsx`
+- Onboarding: `PasswordStep.tsx` (forced password reset), `StaleAssignmentBanner.tsx`, `useStaleAssignmentNotice.ts`
+- Auth: `App.tsx` (admin-only redirect fix, route wiring), `useUserRole.ts`, `RequireAdmin.tsx`
+- Config: `vite.config.ts` (mock for admin-create-teacher), `.dev.vars`, `wrangler.toml`, `supabase/` folder
 - **Teacher-account block restored** — migration 0037 accidentally dropped the `teacher-account` denial check from `request_quiz_access`; 0039 restores it
 - **Atomic roster/enrollment binding** — race condition where two students could claim the same enrollment simultaneously is now prevented via atomic `UPDATE ... WHERE (email IS NULL)` + a case-insensitive unique index
 - **OTP resend cooldown** — 60-second client-side cooldown prevents students from spamming the OTP endpoint

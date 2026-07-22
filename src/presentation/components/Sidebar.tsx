@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { isFeatureEnabled } from '@domain/featureFlags';
 import { useAuth } from '@presentation/auth';
+import { useUserRole } from '@presentation/auth/useUserRole';
 import { fetchTeacherProfile } from '../../features/onboarding/api/onboarding';
 import { navGroups } from '@presentation/navigation';
 import { motionDurations, motionEase } from '@presentation/motion';
@@ -50,6 +51,15 @@ export default function Sidebar({
 }: SidebarProps) {
   const isCollapsed = collapsed && !mobile;
   const { actor } = useAuth();
+  const { isAdmin } = useUserRole();
+  // The `admin` nav group is statically present in navGroups (other
+  // consumers like GlobalCommandCenter and AppLayout's activeTrail
+  // computation read the same array), but only rendered here for an admin
+  // actor — this is the sole visibility gate (Req 1.9, 1.10).
+  const visibleNavGroups = useMemo(
+    () => navGroups.filter((group) => group.id !== 'admin' || isAdmin),
+    [isAdmin],
+  );
   const fallbackTeacherName = actor.kind === 'teacher' ? nameFromEmail(actor.email) || 'Teacher' : 'Teacher';
   const [teacherName, setTeacherName] = useState(fallbackTeacherName);
   const displayTeacherName = useMemo(() => compactTeacherName(teacherName), [teacherName]);
@@ -151,7 +161,7 @@ export default function Sidebar({
       </div>
 
       <div className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden px-3 py-4">
-        {navGroups.map((group) => (
+        {visibleNavGroups.map((group) => (
           <div key={group.id} className="flex flex-col gap-1.5">
             {!isCollapsed ? (
               <motion.p

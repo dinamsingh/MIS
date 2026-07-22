@@ -31,6 +31,33 @@ function mockApiPlugin(): Plugin {
           });
         }
       });
+
+      // LOCAL-DEV-ONLY stub for /api/admin-create-teacher. Plain `npm run dev`
+      // does not execute Cloudflare Pages Functions, so this fakes a success
+      // response for any POST. The REAL function (functions/api/admin-create-
+      // teacher.ts) — with actual admin authorization + Supabase Auth user
+      // creation — only runs under `wrangler pages dev` or in production.
+      server.middlewares.use('/api/admin-create-teacher', (req, res) => {
+        if (req.method === 'POST') {
+          let body = '';
+          req.on('data', chunk => { body += chunk; });
+          req.on('end', () => {
+            try {
+              const parsed = JSON.parse(body || '{}');
+              const email = parsed.email || 'teacher@example.com';
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({
+                status: 'created',
+                email,
+                temporaryPassword: 'Mock-Temp-Pass-1234!',
+              }));
+            } catch (e) {
+              res.statusCode = 400;
+              res.end(JSON.stringify({ error: 'Bad Request' }));
+            }
+          });
+        }
+      });
     }
   };
 }

@@ -10,7 +10,13 @@
 
 import { supabase } from '@data/supabase';
 import { isLocalDemoMode, readDemoValue, writeDemoValue } from '@data/demo/localDemoMode';
+import { messages } from '@domain/shared/messages';
 import type { Section } from '@data/access/rows';
+import {
+  activeAssignments,
+  type AssignmentWithContext,
+  type BatchState,
+} from '@domain/services/teacherAssignmentService';
 import type {
   AcademicSession,
   AssignmentInput,
@@ -131,7 +137,7 @@ export const MOCK_SUBJECTS: readonly SyllabusSubject[] = SUBJECT_SEEDS.map((seed
 
 const EMPTY_RECORD: OnboardingRecord = {
   onboarded: false,
-  profile: { name: '', email: '' },
+  profile: { name: '', email: '', mustResetPassword: false },
   assignments: [],
 };
 
@@ -163,6 +169,7 @@ interface SubjectRow {
 interface TeacherProfileRow {
   name: string | null;
   email: string | null;
+  must_reset_password: boolean | null;
 }
 
 const toBatch = (row: BatchRow): Batch => ({
@@ -217,6 +224,7 @@ function profileFromUserMetadata(metadata: Record<string, unknown>, fallbackEmai
           ? name
           : '',
     email: fallbackEmail,
+    mustResetPassword: false,
   };
 }
 
@@ -243,7 +251,7 @@ export async function fetchTeacherProfile(): Promise<OnboardingProfile> {
     const record = readDemoRecord();
     return record.profile.email.length > 0
       ? record.profile
-      : { name: 'Demo Teacher', email: 'teacher@example.com' };
+      : { name: 'Demo Teacher', email: 'teacher@example.com', mustResetPassword: false };
   }
 
   const { data: sessionData } = await supabase.auth.getSession();
@@ -259,7 +267,7 @@ export async function fetchTeacherProfile(): Promise<OnboardingProfile> {
 
   const { data, error } = await supabase
     .from('teachers')
-    .select('name, email')
+    .select('name, email, must_reset_password')
     .eq('id', user.id)
     .maybeSingle();
   if (error) {
@@ -270,7 +278,37 @@ export async function fetchTeacherProfile(): Promise<OnboardingProfile> {
   return {
     name: row?.name?.trim() || metadataProfile.name,
     email: row?.email?.trim() || metadataProfile.email,
+    mustResetPassword: row?.must_reset_password === true,
   };
+}
+
+/**
+ * Set the current teacher's own password and clear `must_reset_password`.
+ * Called from the onboarding wizard's forced "Set your password" step, shown
+ * only when `fetchTeacherProfile()` returned `mustResetPassword: true` (i.e.
+ * an admin auto-created this teacher's Auth account with a temporary
+ * password). A normal authenticated-session call — no service role needed,
+ * since the teacher is updating their own password and their own row.
+ */
+export async function setTeacherPassword(newPassword: string): Promise<void> {
+  if (isLocalDemoMode()) {
+    // No real Auth account in demo mode; nothing to persist.
+    return;
+  }
+
+  const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+
+  const teacherId = await requireTeacherId();
+  const { error: clearFlagError } = await supabase
+    .from('teachers')
+    .update({ must_reset_password: false })
+    .eq('id', teacherId);
+  if (clearFlagError) {
+    throw new Error(clearFlagError.message);
+  }
 }
 
 /** Load the live batches (status !== 'graduated'). */
@@ -372,6 +410,18 @@ export async function saveOnboarding(
     }));
     const { error: assignError } = await supabase.from('teacher_assignments').insert(rows);
     if (assignError) {
+      // Duplicate subject-section-assignment safeguard (Requirement 9.1/9.3):
+      // the teacher_assignments_subject_section_batch_unique index (migration
+      // 0046) rejects a claim another teacher already holds for the same
+      // subject+section+batch. Surface a catalog message that identifies the
+      // conflict WITHOUT naming the other teacher, instead of the raw
+      // Postgres unique-violation text.
+      if (
+        assignError.code === '23505' &&
+        assignError.message.includes('teacher_assignments_subject_section_batch_unique')
+      ) {
+        throw new Error(messages.teacherAssignment.duplicateClaim);
+      }
       throw new Error(assignError.message);
     }
   }
@@ -415,7 +465,7 @@ function deriveSections(
 }
 
 /** All batches (live + graduated) — needed to resolve a section's semester. */
-async function fetchAllBatches(): Promise<Batch[]> {
+export async function fetchAllBatches(): Promise<Batch[]> {
   if (isLocalDemoMode()) {
     return [...MOCK_BATCHES];
   }
@@ -485,17 +535,29 @@ async function getOrCreateRealSection(derived: Section): Promise<Section> {
  */
 export async function fetchOnboardedSections(): Promise<Section[]> {
   if (isLocalDemoMode()) {
-    return deriveSections(readDemoRecord().assignments, MOCK_BATCHES);
+    const demoAssignments = readDemoRecord().assignments;
+    const demoBatchStates: BatchState[] = MOCK_BATCHES.map((b) => ({ batchId: b.id, currentSem: b.currentSem }));
+    const demoAssignmentsWithContext = demoAssignments.map((a, index) => ({
+      assignmentId: String(index),
+      batchId: a.batchId,
+      subjectSem: a.semester ?? 0,
+      assignment: a,
+    }));
+    const activeDemoAssignments = activeAssignments(demoAssignmentsWithContext, demoBatchStates).map(
+      (a) => a.assignment,
+    );
+    return deriveSections(activeDemoAssignments, MOCK_BATCHES);
   }
   const teacherId = await requireTeacherId();
   const [assignmentRes, batches] = await Promise.all([
-    supabase.from('teacher_assignments').select('batch_id, section, subject_id').eq('teacher_id', teacherId),
+    supabase.from('teacher_assignments').select('id, batch_id, section, subject_id').eq('teacher_id', teacherId),
     fetchAllBatches(),
   ]);
   if (assignmentRes.error) {
     throw new Error(assignmentRes.error.message);
   }
   const assignmentRows = assignmentRes.data as Array<{
+    id: string;
     batch_id: string;
     section: AssignmentInput['section'];
     subject_id: string;
@@ -514,7 +576,21 @@ export async function fetchOnboardedSections(): Promise<Section[]> {
       subjectSemById.set(row.id, row.sem);
     }
   }
-  const assignments: AssignmentInput[] = assignmentRows.map((row) => ({
+
+  // Exclude stale assignments (Requirement 11.2): an assignment whose
+  // subject's sem is strictly behind its batch's CURRENT sem no longer
+  // produces a selectable section — see teacherAssignmentService.ts.
+  const assignmentsWithContext: Array<AssignmentWithContext & { row: (typeof assignmentRows)[number] }> =
+    assignmentRows.map((row) => ({
+      assignmentId: row.id,
+      batchId: row.batch_id,
+      subjectSem: subjectSemById.get(row.subject_id) ?? 0,
+      row,
+    }));
+  const batchStates: BatchState[] = batches.map((b) => ({ batchId: b.id, currentSem: b.currentSem }));
+  const activeRows = activeAssignments(assignmentsWithContext, batchStates).map((a) => a.row);
+
+  const assignments: AssignmentInput[] = activeRows.map((row) => ({
     subjectId: row.subject_id,
     batchId: row.batch_id,
     section: row.section,
@@ -523,6 +599,57 @@ export async function fetchOnboardedSections(): Promise<Section[]> {
   }));
   const derived = deriveSections(assignments, batches);
   return Promise.all(derived.map(getOrCreateRealSection));
+}
+
+/**
+ * The current teacher's own assignments as `(batchId, subjectSem)` pairs —
+ * the minimal shape `isStaleAssignment`/`activeAssignments`
+ * (`teacherAssignmentService.ts`) need to derive staleness. Reuses the exact
+ * query shape `fetchOnboardedSections()` already uses for this join, so
+ * `useStaleAssignmentNotice` (Requirement 11.4) does not have to invent a new
+ * query or pull in unrelated onboarding wizard state.
+ */
+export async function fetchTeacherAssignmentsWithContext(): Promise<AssignmentWithContext[]> {
+  if (isLocalDemoMode()) {
+    return readDemoRecord().assignments.map((a, index) => ({
+      assignmentId: String(index),
+      batchId: a.batchId,
+      subjectSem: a.semester ?? 0,
+    }));
+  }
+  const teacherId = await requireTeacherId();
+  const assignmentRes = await supabase
+    .from('teacher_assignments')
+    .select('id, batch_id, section, subject_id')
+    .eq('teacher_id', teacherId);
+  if (assignmentRes.error) {
+    throw new Error(assignmentRes.error.message);
+  }
+  const assignmentRows = assignmentRes.data as Array<{
+    id: string;
+    batch_id: string;
+    section: AssignmentInput['section'];
+    subject_id: string;
+  }>;
+  const subjectIds = Array.from(new Set(assignmentRows.map((row) => row.subject_id)));
+  const subjectSemById = new Map<string, number>();
+  if (subjectIds.length > 0) {
+    const subjectRes = await supabase
+      .from('syllabus_subjects')
+      .select('id, sem')
+      .in('id', subjectIds);
+    if (subjectRes.error) {
+      throw new Error(subjectRes.error.message);
+    }
+    for (const row of subjectRes.data as Array<{ id: string; sem: number }>) {
+      subjectSemById.set(row.id, row.sem);
+    }
+  }
+  return assignmentRows.map((row) => ({
+    assignmentId: row.id,
+    batchId: row.batch_id,
+    subjectSem: subjectSemById.get(row.subject_id) ?? 0,
+  }));
 }
 
 // ---------------------------------------------------------------------------

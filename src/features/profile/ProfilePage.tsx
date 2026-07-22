@@ -17,11 +17,12 @@ import { useEffect, useMemo, useState } from 'react';
 import PageLoader from '@presentation/components/PageLoader';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
 import SemAccordion from '../onboarding/components/SemAccordion';
+import StaleAssignmentBanner from '../onboarding/components/StaleAssignmentBanner';
 import { buildAssignments, fetchTeacherProfile, saveOnboarding } from '../onboarding/api/onboarding';
 import type { OnboardingProfile, Section, SelectionState } from '../onboarding/types';
 import { useProfileData } from './hooks/useProfileData';
 
-const EMPTY_PROFILE: OnboardingProfile = { name: '', email: '' };
+const EMPTY_PROFILE: OnboardingProfile = { name: '', email: '', mustResetPassword: false };
 
 /** Count distinct subjects, sections and batches picked across the selection. */
 function summarize(selection: SelectionState) {
@@ -126,7 +127,7 @@ export default function ProfilePage() {
       refresh();
       setSavedAt(Date.now());
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Save fail hua. Dobara try karein.');
+      setSaveError(err instanceof Error ? err.message : 'Save failed. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -141,7 +142,7 @@ export default function ProfilePage() {
   if (error) {
     return (
       <div className="rounded-card border border-border bg-surface p-6 text-center">
-        <p className="text-sm font-semibold text-status-red">Profile load nahi ho paaya.</p>
+        <p className="text-sm font-semibold text-status-red">Failed to load profile.</p>
         <p className="mt-1 text-xs text-muted">{error}</p>
       </div>
     );
@@ -151,6 +152,8 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
+      <StaleAssignmentBanner />
+
       {/* Profile card */}
       <section className="rounded-card border border-border bg-surface p-6 shadow-soft">
         <div className="flex items-start gap-4">
@@ -194,8 +197,8 @@ export default function ProfilePage() {
           <div>
             <h2 className="text-lg font-bold text-text">My Teaching Subjects</h2>
             <p className="mt-0.5 text-xs text-muted">
-              Har batch ke subjects/sections yahan se badal sakte hain. Subject hatane se uska
-              record delete nahi hota — sirf selector se chhup jaata hai.
+              Subjects and sections for each batch can be edited here. Removing a subject does
+              not delete its records — it only hides it from the selector.
             </p>
           </div>
           <span className="inline-flex shrink-0 items-center rounded-full bg-accent-tint px-3 py-1 text-xs font-semibold text-accent">
@@ -206,7 +209,7 @@ export default function ProfilePage() {
         <div className="flex flex-col gap-3">
           {batchesWithSubjects.length === 0 ? (
             <p className="rounded-card border border-border bg-surface px-4 py-6 text-center text-sm text-muted">
-              Koi live batch nahi mila.
+              No live batch found.
             </p>
           ) : (
             batchesWithSubjects.map(({ batch, subjects: batchSubjects }) => (

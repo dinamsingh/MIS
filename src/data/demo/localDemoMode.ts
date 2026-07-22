@@ -25,7 +25,7 @@ import {
 } from '@data/access/quizAccess';
 import type { SubmitAttemptOutcome } from '@data/access/parsers';
 import type { SyllabusAccess, UnitInput, TopicInput } from '@data/access/syllabusAccess';
-import type { TimetableAccess, TimetableEntryInput } from '@data/access/timetableAccess';
+import type { TimetableAccess, TimetableEntryInput, ConfirmedPeriodsResult, ConfirmResult, UnlockResult } from '@data/access/timetableAccess';
 import type { ParsedRosterRow } from '@domain/services/rosterImportService';
 import {
   aggregateRangeTallies,
@@ -40,7 +40,7 @@ import {
 import { computeInternalMarks, validateMarkValue, type MarkComponent, type MarkValue } from '@domain/services/marksService';
 import { isValidEnrollmentNumber, type QuizAccess, type QuizPayloadNoAnswers, type QuizAttemptSessionInfo } from '@domain/services/rosterService';
 import type { Unit } from '@domain/services/syllabusService';
-import { todaysClasses, type DayOfWeek, type TimetableEntry } from '@domain/services/timetableService';
+import { spannedPeriodIds, todaysClasses, type DayOfWeek, type TimetableEntry } from '@domain/services/timetableService';
 import type { LeaderboardWeights, StudentMetrics } from '@domain/services/leaderboardService';
 import type { SubmissionStatus, ValidationError } from '@domain/shared/types';
 import { ok, err, type Result } from '@domain/shared/result';
@@ -1422,6 +1422,11 @@ function buildTimetableEntries(sectionId: string, subjects: readonly DemoSubject
         subjectId: subject.id,
         dayOfWeek: day,
         timeSlot,
+        periodId: null,
+        spanPeriods: 1,
+        room: null,
+        isTutorial: false,
+        specialActivity: null,
       };
     }),
   );
@@ -1450,7 +1455,18 @@ export function createLocalDemoTimetableAccess(
       const store = readDemoValue<DemoTimetableStore>(STORAGE.timetable, { entriesBySection: {} });
       const current = store.entriesBySection[input.sectionId] ?? [];
       const id = input.id ?? createDemoId('timetable');
-      const saved: TimetableEntry = { ...input, id };
+      const saved: TimetableEntry = {
+        id,
+        sectionId: input.sectionId,
+        subjectId: input.subjectId ?? '',
+        dayOfWeek: input.dayOfWeek,
+        timeSlot: input.timeSlot,
+        periodId: input.periodId ?? null,
+        spanPeriods: input.spanPeriods ?? 1,
+        room: input.room ?? null,
+        isTutorial: input.isTutorial ?? false,
+        specialActivity: (input.specialActivity as TimetableEntry['specialActivity']) ?? null,
+      };
       const next = current.some((entry) => entry.id === id)
         ? current.map((entry) => (entry.id === id ? saved : entry))
         : [...current, saved];
@@ -1485,6 +1501,80 @@ export function createLocalDemoTimetableAccess(
         }
       }
       return Array.from(sectionIds);
+    },
+
+    async listPeriods() {
+      return [
+        { id: 'P1', label: 'Period I', startTime: '09:30', endTime: '10:20', dayType: 'weekday' as const, sortOrder: 1 },
+        { id: 'P2', label: 'Period II', startTime: '10:20', endTime: '11:10', dayType: 'weekday' as const, sortOrder: 2 },
+        { id: 'P3', label: 'Period III', startTime: '11:10', endTime: '12:00', dayType: 'weekday' as const, sortOrder: 3 },
+        { id: 'LUNCH', label: 'Lunch Break', startTime: '12:00', endTime: '12:40', dayType: 'weekday' as const, sortOrder: 4 },
+        { id: 'P4', label: 'Period IV', startTime: '12:40', endTime: '13:30', dayType: 'weekday' as const, sortOrder: 5 },
+        { id: 'P5', label: 'Period V', startTime: '13:30', endTime: '14:20', dayType: 'weekday' as const, sortOrder: 6 },
+        { id: 'P6', label: 'Period VI', startTime: '14:20', endTime: '15:10', dayType: 'weekday' as const, sortOrder: 7 },
+        { id: 'P7', label: 'Period VII', startTime: '15:10', endTime: '16:00', dayType: 'weekday' as const, sortOrder: 8 },
+        { id: 'SAT_BLOCK', label: 'NCC/NSS/CLUB ACTIVITIES/SPORTS/NPTEL/T&P', startTime: '09:30', endTime: '13:00', dayType: 'saturday' as const, sortOrder: 1 },
+      ];
+    },
+
+    async resolveConfirmedPeriods(
+      _teacherId: string,
+      sectionId: string,
+      subjectId: string,
+      dayOfWeek: DayOfWeek,
+    ): Promise<ConfirmedPeriodsResult> {
+      // In demo mode, treat all timetables as confirmed so the feature is
+      // exercisable without needing a real section_timetable_status table.
+      const entries = await listEntries(sectionId);
+      const matching = entries.filter(
+        (e) => e.subjectId === subjectId && e.dayOfWeek === dayOfWeek,
+      );
+
+      const catalog = [
+        { id: 'P1', label: 'Period I', startTime: '09:30', endTime: '10:20', dayType: 'weekday' as const, sortOrder: 1 },
+        { id: 'P2', label: 'Period II', startTime: '10:20', endTime: '11:10', dayType: 'weekday' as const, sortOrder: 2 },
+        { id: 'P3', label: 'Period III', startTime: '11:10', endTime: '12:00', dayType: 'weekday' as const, sortOrder: 3 },
+        { id: 'LUNCH', label: 'Lunch Break', startTime: '12:00', endTime: '12:40', dayType: 'weekday' as const, sortOrder: 4 },
+        { id: 'P4', label: 'Period IV', startTime: '12:40', endTime: '13:30', dayType: 'weekday' as const, sortOrder: 5 },
+        { id: 'P5', label: 'Period V', startTime: '13:30', endTime: '14:20', dayType: 'weekday' as const, sortOrder: 6 },
+        { id: 'P6', label: 'Period VI', startTime: '14:20', endTime: '15:10', dayType: 'weekday' as const, sortOrder: 7 },
+        { id: 'P7', label: 'Period VII', startTime: '15:10', endTime: '16:00', dayType: 'weekday' as const, sortOrder: 8 },
+        { id: 'SAT_BLOCK', label: 'NCC/NSS/CLUB ACTIVITIES/SPORTS/NPTEL/T&P', startTime: '09:30', endTime: '13:00', dayType: 'saturday' as const, sortOrder: 1 },
+      ];
+
+      const seenIds = new Set<string>();
+      const periods: typeof catalog = [];
+      for (const entry of matching) {
+        if (!entry.periodId) continue;
+        const ids = spannedPeriodIds(
+          { periodId: entry.periodId, spanPeriods: entry.spanPeriods },
+          catalog.map((p) => ({ id: p.id, sortOrder: p.sortOrder, dayType: p.dayType })),
+        );
+        for (const pid of ids) {
+          if (!seenIds.has(pid)) {
+            seenIds.add(pid);
+            const period = catalog.find((p) => p.id === pid);
+            if (period) periods.push(period);
+          }
+        }
+      }
+
+      return { kind: 'confirmed', periods };
+    },
+
+    async confirmTimetable(sectionId: string): Promise<ConfirmResult> {
+      // Demo mode: always succeed — no real conflict detection needed.
+      return { status: 'confirmed', sectionId };
+    },
+
+    async unlockTimetable(sectionId: string): Promise<UnlockResult> {
+      // Demo mode: always succeed.
+      return { status: 'unlocked', sectionId };
+    },
+
+    async getTimetableStatus(_sectionId: string): Promise<'draft' | 'confirmed'> {
+      // Demo mode: default to draft so the Confirm button is visible.
+      return 'draft';
     },
   };
 }

@@ -92,7 +92,7 @@ async function loadAssignedSyllabusSubjects(
   if (isLocalDemoMode()) {
     const record = readDemoValue<OnboardingRecord>(DEMO_STORAGE_KEY, {
       onboarded: false,
-      profile: { name: '', email: '' },
+      profile: { name: '', email: '', mustResetPassword: false },
       assignments: [],
     });
     const selectedIds = new Set(selectedSubjectIdsForAssignments(record.assignments, section));

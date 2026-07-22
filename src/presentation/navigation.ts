@@ -46,6 +46,7 @@ export const navGroups: NavGroup[] = [
       },
       { id: 'syllabus', label: 'Syllabus', icon: '📖', path: '/syllabus' },
       { id: 'timetable', label: 'Timetable', icon: '🕛', path: '/timetable', badge: 'NEW' },
+      { id: 'my-schedule', label: 'My Schedule', icon: '📅', path: '/my-schedule', badge: 'NEW' },
     ],
   },
   {
@@ -72,6 +73,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { id: 'reports', label: 'Reports', icon: '📊', path: '/reports', badge: 'NEW' },
       { id: 'leaderboard', label: 'Leaderboard', icon: '🏆', path: '/leaderboard' },
+      { id: 'teaching-history', label: 'Teaching History', icon: '🗂️', path: '/teaching-history', badge: 'NEW' },
     ],
   },
   {
@@ -86,6 +88,17 @@ export const navGroups: NavGroup[] = [
     label: 'Roster',
     items: [
       { id: 'roster', label: 'Roster', icon: '👥', path: '/roster', badge: 'NEW' },
+    ],
+  },
+  {
+    id: 'admin',
+    label: 'Admin',
+    items: [
+      { id: 'admin-teachers', label: 'Teacher Approval', icon: '👤', path: '/admin/teachers' },
+      { id: 'admin-powers', label: 'Extra Powers', icon: '🔑', path: '/admin/powers' },
+      { id: 'admin-admins', label: 'Manage Admins', icon: '🛡️', path: '/admin/admins' },
+      { id: 'admin-sessions', label: 'Session Creation', icon: '🗓️', path: '/admin/sessions', badge: 'NEW' },
+      { id: 'admin-roster', label: 'Roster Import', icon: '📋', path: '/admin/roster', badge: 'NEW' },
     ],
   },
 ];

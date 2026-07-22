@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
 import Sidebar from '@presentation/components/Sidebar';
-import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
+import { useOptionalSelectedSection } from '@presentation/context/SelectedSectionContext';
 import { formatSectionLabel } from '@presentation/format/sectionLabel';
 import { navGroups } from '@presentation/navigation';
 import {
@@ -56,6 +56,13 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [motionDisabled, setMotionDisabled] = useState(() => readMotionDisabledPreference());
   const [theme, setTheme] = useState<ThemePreference>(() => readThemePreference());
+  // `AdminShell` deliberately renders this layout without a
+  // `SelectedSectionProvider` (the Admin Console manages its own sections,
+  // per `design.md`) — fall back to an empty/inert section+subject state
+  // instead of throwing, so the top bar's section/subject dropdowns simply
+  // render as "No sections" for an admin-only identity (bugfix:
+  // admin-only-sign-in-redirect).
+  const selectedSectionCtx = useOptionalSelectedSection();
   const {
     sections,
     selectedSectionId,
@@ -66,7 +73,17 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
     selectedSubjectId,
     setSelectedSubjectId,
     isSubjectsLoading,
-  } = useSelectedSection();
+  } = selectedSectionCtx ?? {
+    sections: [],
+    selectedSectionId: null,
+    selectedSection: null,
+    setSelectedSectionId: () => {},
+    isLoading: false,
+    subjects: [],
+    selectedSubjectId: null,
+    setSelectedSubjectId: () => {},
+    isSubjectsLoading: false,
+  };
   const todayLabel = useMemo(() => formatHeaderDate(), []);
   const [timeLabel, setTimeLabel] = useState(() => formatHeaderTime());
   const isDarkTheme = theme === 'dark';

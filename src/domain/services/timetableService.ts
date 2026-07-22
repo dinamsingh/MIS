@@ -10,6 +10,11 @@
  *   slot, the shape modelled by {@link TimetableEntry}.
  * - Requirement 14.3: the Dashboard derives the current date's classes from the
  *   timetable data, computed purely by {@link todaysClasses}.
+ * - Requirement 14.1/14.2/14.3: multi-period lab spans must be one consecutive
+ *   run of periods with no gaps ({@link isConsecutiveSpan}), and every
+ *   consumer expands a span to its full set of period ids purely from
+ *   `periodId` + `spanPeriods` ({@link spannedPeriodIds}), never by storing N
+ *   separate rows.
  */
 
 /** The seven days a weekly timetable is organised by (Requirement 14.1). */
@@ -22,10 +27,17 @@ export type DayOfWeek =
   | 'saturday'
   | 'sunday';
 
+/** Allowed values for the `special_activity` column on `timetable_entries`. */
+export type SpecialActivity = 'library' | 'mentor' | 'club_activities' | 'sports' | 'ncc_nss';
+
 /**
  * A single weekly schedule entry: one subject taught to one section in a given
  * day's time slot. Mirrors the `timetable_entries` table
  * (`id`, `section_id`, `subject_id`, `day_of_week`, `time_slot`).
+ *
+ * Phase 4 additions: `periodId`, `spanPeriods`, `room`, `isTutorial`,
+ * `specialActivity` (nullable — old entries that predate migration 0050 may
+ * not have these populated).
  */
 export interface TimetableEntry {
   readonly id: string;
@@ -33,6 +45,16 @@ export interface TimetableEntry {
   readonly subjectId: string;
   readonly dayOfWeek: DayOfWeek;
   readonly timeSlot: string;
+  /** FK → periods.id — null for legacy entries predating migration 0050. */
+  readonly periodId: string | null;
+  /** Number of consecutive periods this entry spans (default 1). */
+  readonly spanPeriods: number;
+  /** Optional room/location for this entry. */
+  readonly room: string | null;
+  /** Whether this entry is a tutorial session. */
+  readonly isTutorial: boolean;
+  /** Optional special non-subject activity (replaces subject when set). */
+  readonly specialActivity: SpecialActivity | null;
 }
 
 /**
@@ -78,4 +100,28 @@ export function sectionIdsForSubject(
     }
   }
   return result;
+}
+
+/** True when the given periods, ordered by sort_order, form one consecutive
+ *  run with no gaps — the only shape a multi-period lab span may take
+ *  (Requirement 14.1/14.3). */
+export function isConsecutiveSpan(periods: readonly { sortOrder: number }[]): boolean {
+  if (periods.length === 0) return false;
+  const sorted = [...periods].sort((a, b) => a.sortOrder - b.sortOrder);
+  return sorted.every((p, i) => i === 0 || p.sortOrder === sorted[i - 1].sortOrder + 1);
+}
+
+/** The full set of Period ids a (possibly multi-period) entry occupies, in
+ *  order — used by the grid to render one merged cell (Requirement 14.2) and
+ *  by the conflict/My-Schedule derivations to expand a span. */
+export function spannedPeriodIds(
+  entry: { readonly periodId: string; readonly spanPeriods: number },
+  catalog: readonly { readonly id: string; readonly sortOrder: number; readonly dayType: string }[],
+): string[] {
+  const start = catalog.find((p) => p.id === entry.periodId);
+  if (!start) return [];
+  return catalog
+    .filter((p) => p.dayType === start.dayType && p.sortOrder >= start.sortOrder && p.sortOrder < start.sortOrder + entry.spanPeriods)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((p) => p.id);
 }

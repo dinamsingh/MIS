@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@presentation/auth';
-import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
+import { useOptionalSelectedSection } from '@presentation/context/SelectedSectionContext';
 import { formatSectionLabel } from '@presentation/format/sectionLabel';
 import { navGroups } from '@presentation/navigation';
 import { Badge, Dialog, SearchInput } from '@presentation/components/ui';
@@ -132,6 +132,11 @@ export const GlobalCommandCenter = memo(function GlobalCommandCenter({
   const searchRef = useRef<HTMLInputElement | null>(null);
   const { notify } = useToast();
   const { actor } = useAuth();
+  // `AdminShell` renders this component (via `AppLayout`) without a
+  // `SelectedSectionProvider` — fall back to an empty/inert state instead of
+  // throwing (bugfix: admin-only-sign-in-redirect; see AppLayout.tsx's same
+  // fallback for the rationale).
+  const selectedSectionCtx = useOptionalSelectedSection();
   const {
     sections,
     selectedSection,
@@ -141,7 +146,16 @@ export const GlobalCommandCenter = memo(function GlobalCommandCenter({
     selectedSubject,
     selectedSubjectId,
     setSelectedSubjectId,
-  } = useSelectedSection();
+  } = selectedSectionCtx ?? {
+    sections: [],
+    selectedSection: null,
+    selectedSectionId: null,
+    setSelectedSectionId: () => {},
+    subjects: [],
+    selectedSubject: null,
+    selectedSubjectId: null,
+    setSelectedSubjectId: () => {},
+  };
   const navItems = useMemo(() => flattenNavItems(), []);
   const teacherLabel = teacherLabelFromActor(actor);
   const closeCommandPalette = useCallback(() => {

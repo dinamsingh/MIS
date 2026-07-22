@@ -383,7 +383,7 @@ export default function AssignmentGridView({
             [slotNumber]: currentStatus,
           },
         }));
-        notify({ tone: 'danger', title: 'Save failed', message: 'Dobara try karein.' });
+        notify({ tone: 'danger', title: 'Save failed', message: 'Please try again.' });
       } finally {
         setSavingCells((prev) => ({ ...prev, [key]: false }));
       }
@@ -406,7 +406,7 @@ export default function AssignmentGridView({
         await access.setLabManualBySubject(studentId, selectedSubjectId, nextStatus);
       } catch {
         setLabGrid((prev) => ({ ...prev, [studentId]: currentStatus }));
-        notify({ tone: 'danger', title: 'Save failed', message: 'Dobara try karein.' });
+        notify({ tone: 'danger', title: 'Save failed', message: 'Please try again.' });
       } finally {
         setSavingLab((prev) => ({ ...prev, [studentId]: false }));
       }
@@ -457,8 +457,8 @@ export default function AssignmentGridView({
 
       const confirmed = window.confirm(
         status === 'submitted'
-          ? `${filteredStudents.length} dikhe hue students ko "DONE" mark karein sabhi assignments ke liye?`
-          : `${filteredStudents.length} dikhe hue students ko "Pending" mark karein sabhi assignments ke liye?`,
+          ? `Mark all ${filteredStudents.length} visible students as "DONE" for all assignments?`
+          : `Mark all ${filteredStudents.length} visible students as "Pending" for all assignments?`,
       );
       if (!confirmed) return;
 
@@ -520,7 +520,7 @@ export default function AssignmentGridView({
           message: `${filteredStudents.length} students updated.`,
         });
       } catch {
-        notify({ tone: 'danger', title: 'Bulk update failed', message: 'Dobara try karein.' });
+        notify({ tone: 'danger', title: 'Bulk update failed', message: 'Please try again.' });
       } finally {
         setBulkSaving(false);
       }
@@ -555,7 +555,7 @@ export default function AssignmentGridView({
         <div>
           <h2 className="text-2xl font-bold text-text">Assignments & Lab File</h2>
           <p className="mt-0.5 text-sm text-muted">
-            Subject select karo → student grid mein directly DONE mark karo.
+            Select a subject → mark students as DONE directly in the grid.
           </p>
         </div>
         <button
@@ -577,9 +577,9 @@ export default function AssignmentGridView({
       {/* ── Subject selector ── */}
       {subjects.length === 0 ? (
         <div className="rounded-xl border-2 border-dashed border-border bg-surface p-10 text-center">
-          <p className="text-sm font-medium text-text">Koi subject nahi mila</p>
+          <p className="text-sm font-medium text-text">No subject found</p>
           <p className="mt-1 text-sm text-muted">
-            Pehle timetable ya onboarding mein subject assign karein.
+            Assign a subject in the timetable or onboarding first.
           </p>
         </div>
       ) : (
@@ -682,9 +682,9 @@ export default function AssignmentGridView({
           {/* ── Excel-style grid ── */}
           {students.length === 0 ? (
             <div className="rounded-xl border-2 border-dashed border-border bg-surface p-10 text-center">
-              <p className="text-sm font-medium text-text">Koi student nahi mila</p>
+              <p className="text-sm font-medium text-text">No student found</p>
               <p className="mt-1 text-sm text-muted">
-                Pehle Roster page mein students import karein.
+                Import students on the Roster page first.
               </p>
             </div>
           ) : (
@@ -747,7 +747,7 @@ export default function AssignmentGridView({
                         colSpan={3 + activeSlotNumbers.length + 1}
                         className="py-8 text-center text-sm text-muted"
                       >
-                        Search se koi student match nahi hua.
+                        No students matched your search.
                       </td>
                     </tr>
                   ) : (

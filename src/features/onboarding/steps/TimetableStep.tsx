@@ -20,6 +20,8 @@ interface TimetableStepProps {
   ) => void;
   readonly onBack: () => void;
   readonly onContinue: () => void;
+  /** Forwarded to `Stepper` — show the "Password" step when true. */
+  readonly includePassword?: boolean;
 }
 
 /** Count every (subject × section) pick across all batches. */
@@ -40,6 +42,7 @@ export default function TimetableStep({
   onChangeSubjectLab,
   onBack,
   onContinue,
+  includePassword = false,
 }: TimetableStepProps) {
   // Collapsed by default.
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -47,13 +50,13 @@ export default function TimetableStep({
 
   return (
     <div className="flex flex-col gap-6">
-      <Stepper current="timetable" />
+      <Stepper current="timetable" includePassword={includePassword} />
 
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text">Aapki timetable</h1>
           <p className="mt-1 text-sm text-soft">
-            Har batch ke liye apne subjects aur sections chuniye.
+            Select your subjects and sections for each batch.
           </p>
         </div>
         <span className="inline-flex shrink-0 items-center rounded-full bg-accent-tint px-3 py-1 text-xs font-semibold text-accent">

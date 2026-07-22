@@ -13,14 +13,15 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ProgressIndicator } from '@presentation/components/ui';
 import { useOnboardingData } from './hooks/useOnboardingData';
-import { buildAssignments, fetchTeacherProfile, saveOnboarding } from './api/onboarding';
+import { buildAssignments, fetchTeacherProfile, saveOnboarding, setTeacherPassword } from './api/onboarding';
 import ProfileStep from './steps/ProfileStep';
 import TimetableStep from './steps/TimetableStep';
 import ReviewStep from './steps/ReviewStep';
+import PasswordStep from './steps/PasswordStep';
 import type { AcademicSession, OnboardingProfile, Section, SelectionState } from './types';
 import type { WizardStep } from './components/Stepper';
 
-const EMPTY_PROFILE: OnboardingProfile = { name: '', email: '' };
+const EMPTY_PROFILE: OnboardingProfile = { name: '', email: '', mustResetPassword: false };
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
@@ -111,7 +112,7 @@ export default function OnboardingPage() {
     });
   };
 
-  const handleFinish = async () => {
+  const finishSetup = async () => {
     setSaving(true);
     setSaveError(null);
     try {
@@ -124,6 +125,26 @@ export default function OnboardingPage() {
       setSaveError(err instanceof Error ? err.message : 'Setup save failed. Try again.');
       setSaving(false);
     }
+  };
+
+  // Review's "Finish" button either goes straight to saving (the normal
+  // case), or — when this teacher's account still needs a password reset —
+  // advances to the forced Password step first. Skipped entirely when
+  // `mustResetPassword` is false, preserving the exact prior behavior.
+  const handleReviewFinish = () => {
+    if (profile.mustResetPassword) {
+      setStep('password');
+      return;
+    }
+    void finishSetup();
+  };
+
+  // Password step: set the new password (which also clears
+  // must_reset_password server-side), then proceed to the actual save.
+  const handlePasswordSubmit = async (newPassword: string) => {
+    await setTeacherPassword(newPassword);
+    setProfile((prev) => ({ ...prev, mustResetPassword: false }));
+    await finishSetup();
   };
 
   return (
@@ -143,7 +164,7 @@ export default function OnboardingPage() {
             </div>
           ) : profileError || error ? (
             <div className="flex flex-col gap-2 text-center">
-              <p className="text-sm font-semibold text-status-red">Data load nahi ho paaya.</p>
+              <p className="text-sm font-semibold text-status-red">Failed to load data.</p>
               <p className="text-xs text-muted">{profileError ?? error}</p>
             </div>
           ) : (
@@ -168,6 +189,7 @@ export default function OnboardingPage() {
                   onChangeSubjectLab={handleChangeSubjectLab}
                   onBack={() => setStep('profile')}
                   onContinue={() => setStep('review')}
+                  includePassword={profile.mustResetPassword}
                 />
               )}
 
@@ -178,7 +200,16 @@ export default function OnboardingPage() {
                   currentSession={currentSession}
                   saving={saving}
                   onBack={() => setStep('timetable')}
-                  onFinish={handleFinish}
+                  onFinish={handleReviewFinish}
+                  includePassword={profile.mustResetPassword}
+                />
+              )}
+
+              {step === 'password' && (
+                <PasswordStep
+                  saving={saving}
+                  onBack={() => setStep('review')}
+                  onSubmit={handlePasswordSubmit}
                 />
               )}
 

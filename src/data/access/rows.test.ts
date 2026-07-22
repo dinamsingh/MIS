@@ -166,8 +166,30 @@ describe('timetable + leaderboard + submission mappers', () => {
         subject_id: 'sub1',
         day_of_week: 'monday',
         time_slot: '09:00',
+        period_id: 'P1',
+        span_periods: 2,
+        room: 'Lab 301',
+        is_tutorial: true,
+        special_activity: null,
       }),
-    ).toEqual({ id: 'e1', sectionId: 's1', subjectId: 'sub1', dayOfWeek: 'monday', timeSlot: '09:00' });
+    ).toEqual({ id: 'e1', sectionId: 's1', subjectId: 'sub1', dayOfWeek: 'monday', timeSlot: '09:00', periodId: 'P1', spanPeriods: 2, room: 'Lab 301', isTutorial: true, specialActivity: null });
+  });
+
+  it('maps a timetable row with nulls/defaults for new Phase 4 columns', () => {
+    expect(
+      toTimetableEntry({
+        id: 'e2',
+        section_id: 's2',
+        subject_id: null,
+        day_of_week: 'friday',
+        time_slot: '12:00',
+        period_id: null,
+        span_periods: 1,
+        room: null,
+        is_tutorial: false,
+        special_activity: 'library',
+      }),
+    ).toEqual({ id: 'e2', sectionId: 's2', subjectId: '', dayOfWeek: 'friday', timeSlot: '12:00', periodId: null, spanPeriods: 1, room: null, isTutorial: false, specialActivity: 'library' });
   });
 
   it('maps leaderboard config to weights', () => {

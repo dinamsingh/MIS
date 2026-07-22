@@ -42,17 +42,29 @@ describe('AppLayout shell', () => {
   it('renders the grouped-section navigation with every module (Req 20.7)', () => {
     renderLayout(<AppLayout activePath="/dashboard">content</AppLayout>);
 
-    // Each group label is rendered.
+    // Each group label is rendered, except `admin` — that group is
+    // intentionally gated on isAdmin (Req 1.9, 1.10) and this test renders
+    // with an anonymous actor, so it's covered separately below instead of
+    // weakening this loop's assertion for the pre-existing groups.
     for (const group of navGroups) {
+      if (group.id === 'admin') continue;
       expect(screen.getAllByText(group.label).length).toBeGreaterThan(0);
     }
 
     // Each nav item is rendered (sidebar present in DOM even when hidden via CSS).
     for (const group of navGroups) {
+      if (group.id === 'admin') continue;
       for (const item of group.items) {
         expect(screen.getAllByText(item.label).length).toBeGreaterThan(0);
       }
     }
+  });
+
+  it('hides the admin nav group for a non-admin actor (Req 1.9, 1.10)', () => {
+    renderLayout(<AppLayout activePath="/dashboard">content</AppLayout>);
+    const adminGroup = navGroups.find((group) => group.id === 'admin');
+    expect(adminGroup).toBeDefined();
+    expect(screen.queryByText(adminGroup!.label)).not.toBeInTheDocument();
   });
 
   it('marks the active item with aria-current=page', () => {

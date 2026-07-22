@@ -1,22 +1,33 @@
 /**
- * Compact three-step progress indicator (Profile · Timetable · Review).
- * The current step is highlighted with the accent color; completed steps use a
- * softer accent, upcoming steps are muted.
+ * Compact progress indicator: Profile · Timetable · Review, plus an optional
+ * fourth "Password" step shown only for a teacher whose account was
+ * auto-created by an admin (`profile.mustResetPassword`). The current step is
+ * highlighted with the accent color; completed steps use a softer accent,
+ * upcoming steps are muted.
  */
 
-export type WizardStep = 'profile' | 'timetable' | 'review';
+export type WizardStep = 'profile' | 'timetable' | 'review' | 'password';
 
-const STEPS: readonly { key: WizardStep; label: string }[] = [
+const BASE_STEPS: readonly { key: WizardStep; label: string }[] = [
   { key: 'profile', label: 'Profile' },
   { key: 'timetable', label: 'Timetable' },
   { key: 'review', label: 'Review' },
 ];
 
+const PASSWORD_STEP = { key: 'password' as const, label: 'Password' };
+
 interface StepperProps {
   readonly current: WizardStep;
+  /**
+   * Include the "Password" step in the displayed sequence. Defaults to
+   * false so a teacher who does NOT need the forced password reset sees the
+   * exact same three-step stepper as before this feature existed.
+   */
+  readonly includePassword?: boolean;
 }
 
-export default function Stepper({ current }: StepperProps) {
+export default function Stepper({ current, includePassword = false }: StepperProps) {
+  const STEPS = includePassword ? [...BASE_STEPS, PASSWORD_STEP] : BASE_STEPS;
   const currentIndex = STEPS.findIndex((s) => s.key === current);
 
   return (

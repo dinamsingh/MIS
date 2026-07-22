@@ -340,7 +340,7 @@ export default function AttendanceReportPage() {
             <p className="text-xs font-bold uppercase text-muted">Attendance Intelligence</p>
             <h1 className="text-2xl font-semibold text-text">Attendance Report</h1>
             <p className="mt-1 text-sm text-muted">
-              Leave aur N/A percentage ko down nahi karte. Formula: Present / (Present + Absent).
+              Leave and N/A do not reduce the percentage. Formula: Present / (Present + Absent).
             </p>
           </div>
           <Button
@@ -355,7 +355,7 @@ export default function AttendanceReportPage() {
 
       {loadError && (
         <Alert tone="danger" title="Unable to load report">
-          Attendance report load nahi ho paayi. Migration/status column aur network check karo.
+          Failed to load attendance report. Check the migration/status column and your network connection.
         </Alert>
       )}
 
@@ -581,7 +581,7 @@ export default function AttendanceReportPage() {
 
               <div className="mt-4 rounded-control border border-border bg-surface-muted/50 p-3">
                 <p className="text-xs font-semibold text-muted">
-                  Percentage rule: Leave aur N/A count display hote hain, par denominator me sirf Present + Absent aata hai.
+                  Percentage rule: Leave and N/A counts are displayed, but the denominator includes only Present + Absent.
                 </p>
               </div>
 

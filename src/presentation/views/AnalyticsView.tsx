@@ -402,7 +402,7 @@ export default function AnalyticsView({
         <div>
           <h2 className="text-xl font-bold text-text">Smart Analytics</h2>
           <p className="mt-0.5 text-sm text-soft">
-            Class performance, subject comparison aur trends.
+            Class performance, subject comparison, and trends.
           </p>
         </div>
         <button

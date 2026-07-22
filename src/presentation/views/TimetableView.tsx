@@ -1,10 +1,14 @@
 /**
- * Timetable module view (task 18.1).
+ * Timetable module view (task 18.1, updated task 23.1).
  *
  * Renders the teacher's weekly class schedule as a grid organized by day of
  * week (columns) and time slot (rows), and lets the teacher add or edit a class
  * session entry that is persisted with its Section and subject and then shown in
  * the corresponding day/time-slot cell (Requirements 14.1, 14.2).
+ *
+ * Phase 4 additions: Period_Catalog-driven period selection (Req 13.4/13.5),
+ * room, isTutorial, specialActivity fields (Req 15.1-15.3), and consecutive-
+ * span validation (Req 14.3).
  *
  * Like the other presentation views, this component performs no I/O of its own:
  * persistence is delegated to an injected {@link TimetableAccess} slice (the
@@ -18,10 +22,15 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import type {
   DayOfWeek,
   TimetableEntry,
+  SpecialActivity,
 } from '@domain/services/timetableService';
+import { isConsecutiveSpan } from '@domain/services/timetableService';
 import type {
   TimetableAccess,
   TimetableEntryInput,
+  PeriodOption,
+  ConfirmResult,
+  UnlockResult,
 } from '@data/access/timetableAccess';
 import { messages } from '@domain/shared/messages';
 import { formatSectionLabel } from '@presentation/format/sectionLabel';
@@ -44,7 +53,7 @@ export interface SubjectOption {
 /** The persistence slice this view needs from the timetable data-access layer. */
 export type TimetableViewAccess = Pick<
   TimetableAccess,
-  'listEntries' | 'upsertEntry' | 'deleteEntry'
+  'listEntries' | 'upsertEntry' | 'deleteEntry' | 'listPeriods' | 'confirmTimetable' | 'unlockTimetable' | 'getTimetableStatus'
 >;
 
 export interface TimetableViewProps {
@@ -91,6 +100,15 @@ const DEFAULT_TIME_SLOTS: readonly string[] = [
   '16:00',
 ];
 
+/** The five allowed special_activity values per the CHECK constraint in 0050. */
+const SPECIAL_ACTIVITIES: readonly { value: SpecialActivity; label: string }[] = [
+  { value: 'library', label: 'Library' },
+  { value: 'mentor', label: 'Mentor' },
+  { value: 'club_activities', label: 'Club Activities' },
+  { value: 'sports', label: 'Sports' },
+  { value: 'ncc_nss', label: 'NCC/NSS' },
+];
+
 /** Editor state for the add/edit class-session dialog. */
 interface EditorState {
   /** `add` creates a new entry; `edit` updates the entry identified by `id`. */
@@ -99,6 +117,16 @@ interface EditorState {
   readonly dayOfWeek: DayOfWeek;
   readonly timeSlot: string;
   readonly subjectId: string;
+  /** Period_Catalog-driven period selection (Requirement 13.4/13.5). */
+  readonly periodId: string;
+  /** For multi-period lab spans (Requirement 14.1). */
+  readonly spanPeriods: number;
+  /** Room/location (Requirement 15.1). */
+  readonly room: string;
+  /** Tutorial marker (Requirement 15.2). */
+  readonly isTutorial: boolean;
+  /** Special non-subject activity (Requirement 15.3). */
+  readonly specialActivity: SpecialActivity | '';
 }
 
 const inputClass =
@@ -128,9 +156,29 @@ export default function TimetableView({
   const [error, setError] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [periods, setPeriods] = useState<readonly PeriodOption[]>([]);
+  const [timetableStatus, setTimetableStatus] = useState<'draft' | 'confirmed'>('draft');
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  /** Whether add/edit/delete controls should be disabled (section is confirmed). */
+  const isLocked = timetableStatus === 'confirmed';
 
   // Current day for column highlighting
   const today: DayOfWeek | undefined = DAY_INDEX_MAP[new Date().getDay()];
+
+  // Load the Period_Catalog once on mount.
+  useEffect(() => {
+    void access.listPeriods().then(setPeriods).catch(() => setPeriods([]));
+  }, [access]);
+
+  // Load the timetable status for the selected section.
+  useEffect(() => {
+    if (sectionId === '') {
+      setTimetableStatus('draft');
+      return;
+    }
+    void access.getTimetableStatus(sectionId).then(setTimetableStatus).catch(() => setTimetableStatus('draft'));
+  }, [access, sectionId]);
 
   // Resolve a subject id to its display name, falling back to the raw id.
   const subjectName = useCallback(
@@ -197,6 +245,11 @@ export default function TimetableView({
       dayOfWeek,
       timeSlot,
       subjectId: subjects[0]?.id ?? '',
+      periodId: periods[0]?.id ?? '',
+      spanPeriods: 1,
+      room: '',
+      isTutorial: false,
+      specialActivity: '',
     });
   }
 
@@ -207,6 +260,11 @@ export default function TimetableView({
       dayOfWeek: entry.dayOfWeek,
       timeSlot: entry.timeSlot,
       subjectId: entry.subjectId,
+      periodId: entry.periodId ?? periods[0]?.id ?? '',
+      spanPeriods: entry.spanPeriods,
+      room: entry.room ?? '',
+      isTutorial: entry.isTutorial,
+      specialActivity: entry.specialActivity ?? '',
     });
   }
 
@@ -219,16 +277,54 @@ export default function TimetableView({
     if (editor === null || sectionId === '') {
       return;
     }
-    if (editor.subjectId === '' || editor.timeSlot.trim() === '') {
+
+    // Determine if a subject is required: when specialActivity is not set,
+    // subjectId is required (or when isTutorial, subjectId always required).
+    const hasSpecialActivity = editor.specialActivity !== '';
+    const needsSubject = !hasSpecialActivity || editor.isTutorial;
+    if (needsSubject && editor.subjectId === '') {
       setError(messages.error.generic);
       return;
     }
+    if (editor.periodId === '') {
+      setError(messages.error.generic);
+      return;
+    }
+
+    // Validate consecutive span (Requirement 14.3): only when spanPeriods > 1.
+    if (editor.spanPeriods > 1) {
+      const startPeriod = periods.find((p) => p.id === editor.periodId);
+      if (startPeriod) {
+        const spannedPeriods = periods.filter(
+          (p) =>
+            p.dayType === startPeriod.dayType &&
+            p.sortOrder >= startPeriod.sortOrder &&
+            p.sortOrder < startPeriod.sortOrder + editor.spanPeriods,
+        );
+        if (!isConsecutiveSpan(spannedPeriods)) {
+          setError(messages.timetable.periodsNotConsecutive);
+          return;
+        }
+      }
+    }
+
+    // Resolve the time slot label from the selected period for storage.
+    const selectedPeriod = periods.find((p) => p.id === editor.periodId);
+    const resolvedTimeSlot = selectedPeriod
+      ? `${selectedPeriod.startTime}-${selectedPeriod.endTime}`
+      : editor.timeSlot.trim();
+
     const input: TimetableEntryInput = {
       ...(editor.id !== undefined ? { id: editor.id } : {}),
       sectionId,
-      subjectId: editor.subjectId,
+      subjectId: needsSubject ? editor.subjectId : undefined,
       dayOfWeek: editor.dayOfWeek,
-      timeSlot: editor.timeSlot.trim(),
+      timeSlot: resolvedTimeSlot,
+      periodId: editor.periodId,
+      spanPeriods: editor.spanPeriods,
+      room: editor.room.trim() || undefined,
+      isTutorial: editor.isTutorial,
+      specialActivity: hasSpecialActivity ? (editor.specialActivity as SpecialActivity) : null,
     };
     setIsSaving(true);
     setError(null);
@@ -260,6 +356,64 @@ export default function TimetableView({
     }
   }
 
+  async function handleConfirm() {
+    if (sectionId === '') return;
+    setIsConfirming(true);
+    setError(null);
+    try {
+      const result: ConfirmResult = await access.confirmTimetable(sectionId);
+      if (result.status === 'confirmed') {
+        setTimetableStatus('confirmed');
+      } else if (result.status === 'denied' && result.reason === 'conflict') {
+        // Surface the conflict detail inline using the message catalog.
+        const conflict = result as Extract<ConfirmResult, { reason: 'conflict' }>;
+        const conflictMessage = messages.timetable.conflict(
+          conflict.conflictingDay,
+          conflict.entryB.period,
+          conflict.entryB.sectionId,
+          conflict.entryB.sectionId,
+          conflict.entryB.subjectId,
+        );
+        setError(conflictMessage);
+      } else {
+        setError(messages.error.generic);
+      }
+    } catch {
+      setError(messages.error.generic);
+    } finally {
+      setIsConfirming(false);
+    }
+  }
+
+  async function handleUnlock() {
+    if (sectionId === '') return;
+    setIsConfirming(true);
+    setError(null);
+    try {
+      const result: UnlockResult = await access.unlockTimetable(sectionId);
+      if (result.status === 'unlocked' || result.status === 'already-draft') {
+        setTimetableStatus('draft');
+      } else {
+        setError(messages.error.generic);
+      }
+    } catch {
+      setError(messages.error.generic);
+    } finally {
+      setIsConfirming(false);
+    }
+  }
+
+  /** Display label for an entry in the grid cell. */
+  function entryLabel(entry: TimetableEntry): string {
+    if (entry.specialActivity) {
+      const act = SPECIAL_ACTIVITIES.find((a) => a.value === entry.specialActivity);
+      return act?.label ?? entry.specialActivity;
+    }
+    const name = subjectName(entry.subjectId);
+    if (entry.isTutorial) return `${name}-T`;
+    return name;
+  }
+
   return (
     <section className="space-y-6">
       {/* Header */}
@@ -273,7 +427,7 @@ export default function TimetableView({
               </span>
             </h2>
             <p className="mt-1 text-sm text-soft">
-              Tumhari weekly classes — ek nazar me.
+              Your weekly classes at a glance.
             </p>
           </div>
 
@@ -301,6 +455,39 @@ export default function TimetableView({
             </div>
           )}
         </div>
+
+        {/* Confirm/Unlock actions (Requirement 16.3-16.6) */}
+        {sections.length > 0 && sectionId !== '' && (
+          <div className="flex items-center gap-3 border-t border-border/50 pt-4 mt-4 sm:border-t-0 sm:pt-0 sm:mt-0">
+            {timetableStatus === 'draft' ? (
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => void handleConfirm()}
+                disabled={isConfirming || entries.length === 0}
+                aria-label="Confirm Timetable"
+              >
+                {isConfirming ? 'Confirming…' : 'Confirm Timetable'}
+              </button>
+            ) : (
+              <>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-status-green/10 px-3 py-1 text-xs font-semibold text-status-green">
+                  <span className="inline-block h-2 w-2 rounded-full bg-status-green" />
+                  Confirmed
+                </span>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => void handleUnlock()}
+                  disabled={isConfirming}
+                  aria-label="Unlock Timetable"
+                >
+                  {isConfirming ? 'Unlocking…' : 'Unlock Timetable'}
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Error message */}
@@ -369,18 +556,24 @@ export default function TimetableView({
                               <button
                                 key={entry.id}
                                 type="button"
-                                onClick={() => openEdit(entry)}
-                                className="group w-full rounded-lg bg-accent/10 px-2.5 py-1.5 text-left transition-colors hover:bg-accent/20"
+                                onClick={() => !isLocked && openEdit(entry)}
+                                disabled={isLocked}
+                                className={`group w-full rounded-lg px-2.5 py-1.5 text-left transition-colors ${
+                                  isLocked
+                                    ? 'bg-accent/10 cursor-not-allowed opacity-75'
+                                    : 'bg-accent/10 hover:bg-accent/20'
+                                }`}
                               >
                                 <span className="block text-xs font-semibold text-accent">
-                                  {subjectName(entry.subjectId)}
+                                  {entryLabel(entry)}
                                 </span>
                                 <span className="block text-[10px] text-soft group-hover:text-text">
                                   {sectionName(entry.sectionId)}
+                                  {entry.room ? ` · ${entry.room}` : ''}
                                 </span>
                               </button>
                             ))}
-                            {cellEntries.length === 0 && (
+                            {cellEntries.length === 0 && !isLocked && (
                               <button
                                 type="button"
                                 onClick={() => openAdd(day.value, slot)}
@@ -423,12 +616,13 @@ export default function TimetableView({
             role="dialog"
             aria-modal="true"
             aria-label={editor.mode === 'add' ? 'Add class session' : 'Edit class session'}
-            className="card relative z-50 w-full max-w-sm p-6 shadow-xl"
+            className="card relative z-50 w-full max-w-sm p-6 shadow-xl max-h-[90vh] overflow-y-auto"
           >
             <h3 className="text-base font-semibold text-text">
               {editor.mode === 'add' ? 'Add class session' : 'Edit class session'}
             </h3>
             <form className="mt-4 flex flex-col gap-4" onSubmit={handleSave}>
+              {/* Day */}
               <div className="flex flex-col gap-1">
                 <label htmlFor="entry-day" className="text-sm font-medium text-text">
                   Day
@@ -449,37 +643,117 @@ export default function TimetableView({
                 </select>
               </div>
 
+              {/* Period selection (replaces free-text time slot, Req 13.4/13.5) */}
               <div className="flex flex-col gap-1">
-                <label htmlFor="entry-slot" className="text-sm font-medium text-text">
-                  Time slot
-                </label>
-                <input
-                  id="entry-slot"
-                  type="text"
-                  value={editor.timeSlot}
-                  onChange={(e) => setEditor({ ...editor, timeSlot: e.target.value })}
-                  className={inputClass}
-                  placeholder="09:00"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label htmlFor="entry-subject" className="text-sm font-medium text-text">
-                  Subject
+                <label htmlFor="entry-period" className="text-sm font-medium text-text">
+                  Period
                 </label>
                 <select
-                  id="entry-subject"
-                  value={editor.subjectId}
-                  onChange={(e) => setEditor({ ...editor, subjectId: e.target.value })}
+                  id="entry-period"
+                  value={editor.periodId}
+                  onChange={(e) =>
+                    setEditor({ ...editor, periodId: e.target.value })
+                  }
                   className={inputClass}
                 >
-                  {subjects.length === 0 && <option value="">No subjects</option>}
-                  {subjects.map((subject) => (
-                    <option key={subject.id} value={subject.id}>
-                      {subject.name}
+                  {periods.length === 0 && <option value="">No periods available</option>}
+                  {periods.map((period) => (
+                    <option key={period.id} value={period.id}>
+                      {period.label} ({period.startTime}–{period.endTime})
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Span periods (for labs, Req 14.1) */}
+              <div className="flex flex-col gap-1">
+                <label htmlFor="entry-span" className="text-sm font-medium text-text">
+                  Span (periods)
+                </label>
+                <input
+                  id="entry-span"
+                  type="number"
+                  min={1}
+                  max={periods.length || 8}
+                  value={editor.spanPeriods}
+                  onChange={(e) =>
+                    setEditor({ ...editor, spanPeriods: Math.max(1, parseInt(e.target.value, 10) || 1) })
+                  }
+                  className={inputClass}
+                />
+              </div>
+
+              {/* Special Activity (Req 15.3) */}
+              <div className="flex flex-col gap-1">
+                <label htmlFor="entry-activity" className="text-sm font-medium text-text">
+                  Special Activity
+                </label>
+                <select
+                  id="entry-activity"
+                  value={editor.specialActivity}
+                  onChange={(e) =>
+                    setEditor({ ...editor, specialActivity: e.target.value as SpecialActivity | '' })
+                  }
+                  className={inputClass}
+                >
+                  <option value="">None (regular subject)</option>
+                  {SPECIAL_ACTIVITIES.map((act) => (
+                    <option key={act.value} value={act.value}>
+                      {act.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Subject (hidden when specialActivity is set and not tutorial) */}
+              {(editor.specialActivity === '' || editor.isTutorial) && (
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="entry-subject" className="text-sm font-medium text-text">
+                    Subject
+                  </label>
+                  <select
+                    id="entry-subject"
+                    value={editor.subjectId}
+                    onChange={(e) => setEditor({ ...editor, subjectId: e.target.value })}
+                    className={inputClass}
+                  >
+                    {subjects.length === 0 && <option value="">No subjects</option>}
+                    {subjects.map((subject) => (
+                      <option key={subject.id} value={subject.id}>
+                        {subject.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Room (Req 15.1) */}
+              <div className="flex flex-col gap-1">
+                <label htmlFor="entry-room" className="text-sm font-medium text-text">
+                  Room
+                </label>
+                <input
+                  id="entry-room"
+                  type="text"
+                  value={editor.room}
+                  onChange={(e) => setEditor({ ...editor, room: e.target.value })}
+                  className={inputClass}
+                  placeholder="e.g. Lab 301"
+                />
+              </div>
+
+              {/* Tutorial marker (Req 15.2) */}
+              <div className="flex items-center gap-2">
+                <input
+                  id="entry-tutorial"
+                  type="checkbox"
+                  checked={editor.isTutorial}
+                  onChange={(e) => setEditor({ ...editor, isTutorial: e.target.checked })}
+                  className="h-4 w-4 rounded border-border text-accent focus:ring-accent/30"
+                />
+                <label htmlFor="entry-tutorial" className="text-sm font-medium text-text">
+                  Tutorial
+                </label>
               </div>
 
               <div className="mt-2 flex items-center justify-between gap-3">

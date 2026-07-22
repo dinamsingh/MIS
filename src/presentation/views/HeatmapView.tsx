@@ -263,7 +263,7 @@ export default function HeatmapView({
           Attendance Heatmap 🗓️
         </h2>
         <p className="mt-1 text-sm text-text-soft">
-          Poore semester ka attendance ek nazar me.
+          Full-semester attendance at a glance.
         </p>
       </header>}
 
