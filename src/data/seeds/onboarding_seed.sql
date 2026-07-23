@@ -78,11 +78,15 @@ INSERT INTO public.syllabus_subjects (sem, code, name, kind, lab_name) VALUES
     (6, 'CS-606', 'Internship / Skill Development', 'special', NULL),
 
     -- Sem 7 (VII)
-    (7, 'CS-7001', 'Distributed Systems', 'theory', NULL),
-    (7, 'CS-7002', 'Compiler Design', 'theory', NULL),
-    (7, 'CS-7003', 'Web Engineering', 'theory', NULL),
-    (7, 'CS-7004', 'Departmental Elective-III', 'elective', NULL),
-    (7, 'CS-7005', 'Departmental Elective-IV', 'elective', NULL),
+    (7, 'CS-701', 'Software Architectures', 'theory', NULL),
+    (7, 'CS-702A', 'Computational Intelligence', 'theory', NULL),
+    (7, 'CS-702B', 'Deep & Reinforcement Learning', 'theory', NULL),
+    (7, 'CS-702C', 'Wireless & Mobile Computing', 'theory', NULL),
+    (7, 'CS-702D', 'Big Data', 'theory', NULL),
+    (7, 'CS-703A', 'Cryptography & Information Security', 'theory', NULL),
+    (7, 'CS-703B', 'Data Mining and Warehousing', 'theory', NULL),
+    (7, 'CS-703C', 'Agile Software Development', 'theory', NULL),
+    (7, 'CS-703D', 'Disaster Management', 'theory', NULL),
     (7, 'CS-7006', 'Major Project Phase-I', 'project', NULL),
     (7, 'CS-7007', 'Seminar', 'special', NULL),
 
