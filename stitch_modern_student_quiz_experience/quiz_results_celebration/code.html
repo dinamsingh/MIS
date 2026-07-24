@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Quiz Results</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-secondary-fixed": "#131546",
+                      "on-secondary-container": "#4d5082",
+                      "secondary": "#585a8d",
+                      "primary-fixed": "#e1e0ff",
+                      "on-secondary-fixed-variant": "#404274",
+                      "secondary-fixed": "#e1e0ff",
+                      "secondary-container": "#c3c4ff",
+                      "tertiary-fixed": "#e1e0ff",
+                      "inverse-surface": "#233144",
+                      "error": "#ba1a1a",
+                      "tertiary-fixed-dim": "#c0c1ff",
+                      "on-primary-container": "#9da1ff",
+                      "tertiary-container": "#2421b6",
+                      "primary-container": "#2e3192",
+                      "error-container": "#ffdad6",
+                      "background": "#f8f9ff",
+                      "tertiary": "#0c0092",
+                      "on-tertiary-fixed-variant": "#2f2ebe",
+                      "on-tertiary-container": "#9ea1ff",
+                      "on-error": "#ffffff",
+                      "surface-tint": "#4f54b4",
+                      "surface-bright": "#f8f9ff",
+                      "on-background": "#0d1c2e",
+                      "on-error-container": "#93000a",
+                      "surface-dim": "#ccdbf3",
+                      "surface-container-lowest": "#ffffff",
+                      "on-primary": "#ffffff",
+                      "inverse-on-surface": "#eaf1ff",
+                      "surface-container-high": "#dce9ff",
+                      "outline-variant": "#c7c5d4",
+                      "surface-variant": "#d5e3fc",
+                      "surface-container-highest": "#d5e3fc",
+                      "on-surface-variant": "#464652",
+                      "on-primary-fixed": "#04006d",
+                      "surface-container": "#e6eeff",
+                      "on-secondary": "#ffffff",
+                      "on-primary-fixed-variant": "#373a9b",
+                      "surface-container-low": "#eff4ff",
+                      "surface": "#f8f9ff",
+                      "primary-fixed-dim": "#c0c1ff",
+                      "secondary-fixed-dim": "#c0c2fc",
+                      "on-tertiary-fixed": "#07006c",
+                      "primary": "#15157d",
+                      "outline": "#777683",
+                      "on-tertiary": "#ffffff",
+                      "inverse-primary": "#c0c1ff",
+                      "on-surface": "#0d1c2e",
+                      "gold": "#d4af37",
+                      "gold-light": "#f3e5ab"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "sm": "16px",
+                      "xs": "8px",
+                      "margin-mobile": "16px",
+                      "xl": "80px",
+                      "lg": "48px",
+                      "base": "4px",
+                      "gutter": "24px",
+                      "md": "24px",
+                      "margin-desktop": "40px"
+              },
+              "fontFamily": {
+                      "headline-md": [
+                              "Inter"
+                      ],
+                      "display-lg": [
+                              "Inter"
+                      ],
+                      "body-lg": [
+                              "Inter"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "label-sm": [
+                              "Inter"
+                      ],
+                      "display-lg-mobile": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "display-lg": [
+                              "48px",
+                              {
+                                      "lineHeight": "56px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-sm": [
+                              "13px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.02em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "display-lg-mobile": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "700"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+          .confetti {
+              position: absolute;
+              width: 10px;
+              height: 10px;
+              background-color: #f00;
+              opacity: 0;
+          }
+          
+          .glow-effect {
+              box-shadow: 0px 0px 0px 4px rgba(99, 102, 241, 0.2);
+          }
+
+          .ambient-shadow {
+              box-shadow: 0px 4px 20px rgba(46, 49, 146, 0.05);
+          }
+      </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background min-h-screen font-body-md text-on-background relative overflow-hidden flex flex-col items-center justify-center md:hidden">
+<!-- Confetti Background (Simulated via script below) -->
+<div class="absolute inset-0 pointer-events-none z-0" id="confetti-container"></div>
+<main class="w-full h-full flex flex-col px-margin-mobile py-lg z-10 max-w-[400px] mx-auto">
+<!-- Header -->
+<header class="text-center mb-xl">
+<h1 class="font-display-lg-mobile text-display-lg-mobile text-primary mb-sm">Quiz Completed!</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant">Fantastic work! You've mastered this topic.</p>
+</header>
+<!-- Hero Visualization: Circular Progress -->
+<div class="flex justify-center items-center mb-xl relative">
+<div class="relative w-64 h-64 flex items-center justify-center">
+<!-- SVG Circle for Progress -->
+<svg class="w-full h-full transform -rotate-90" viewbox="0 0 100 100">
+<circle cx="50" cy="50" fill="none" r="45" stroke="#e6eeff" stroke-width="8"></circle>
+<circle class="transition-all duration-1000 ease-out" cx="50" cy="50" fill="none" r="45" stroke="url(#gradient)" stroke-dasharray="282.7" stroke-dashoffset="42.4" stroke-linecap="round" stroke-width="8"></circle>
+<defs>
+<lineargradient id="gradient" x1="0%" x2="100%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#15157d"></stop>
+<stop offset="100%" stop-color="#d4af37"></stop>
+</lineargradient>
+</defs>
+</svg>
+<!-- Center Text -->
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="font-display-lg-mobile text-display-lg-mobile text-primary">85%</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mt-1">Score</span>
+</div>
+</div>
+<!-- Shimmering overlays (subtle) -->
+<div class="absolute inset-0 bg-gradient-to-tr from-primary/5 to-gold/5 rounded-full pointer-events-none blur-xl"></div>
+</div>
+<!-- Statistics Cards -->
+<div class="grid grid-cols-2 gap-sm mb-xl">
+<div class="bg-surface-container-lowest rounded-xl p-sm flex flex-col items-center justify-center ambient-shadow border border-surface-container">
+<span class="material-symbols-outlined text-primary mb-2 text-[28px]">fact_check</span>
+<span class="font-headline-md text-headline-md text-on-background">17/20</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant text-center mt-1">Correct Answers</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-sm flex flex-col items-center justify-center ambient-shadow border border-surface-container">
+<span class="material-symbols-outlined text-gold mb-2 text-[28px]">military_tech</span>
+<span class="font-headline-md text-headline-md text-on-background">85/100</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant text-center mt-1">Total Marks</span>
+</div>
+</div>
+<!-- Action Button -->
+<div class="mt-auto pb-lg w-full">
+<button class="w-full bg-primary text-on-primary rounded-full py-4 font-label-sm text-label-sm flex items-center justify-center gap-2 ambient-shadow hover:bg-on-primary-fixed-variant transition-colors glow-effect focus:outline-none focus:ring-4 focus:ring-primary/20">
+<span class="material-symbols-outlined text-[18px]">home</span>
+                Return to Dashboard
+            </button>
+</div>
+</main>
+<script>
+        // Simple Confetti Effect
+        const colors = ['#15157d', '#d4af37', '#e1e0ff', '#4f54b4'];
+        const container = document.getElementById('confetti-container');
+
+        for (let i = 0; i < 50; i++) {
+            const confetti = document.createElement('div');
+            confetti.classList.add('confetti');
+            
+            // Random properties
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const left = Math.random() * 100;
+            const top = Math.random() * -20;
+            const size = Math.random() * 8 + 4;
+            
+            // Animation config
+            const duration = Math.random() * 3 + 2;
+            const delay = Math.random() * 2;
+            
+            confetti.style.backgroundColor = color;
+            confetti.style.left = left + '%';
+            confetti.style.top = top + '%';
+            confetti.style.width = size + 'px';
+            confetti.style.height = size + 'px';
+            confetti.style.borderRadius = Math.random() > 0.5 ? '50%' : '0';
+            
+            container.appendChild(confetti);
+            
+            // Simple falling animation via JS
+            confetti.animate([
+                { transform: `translate3d(0,0,0) rotate(0deg)`, opacity: 1 },
+                { transform: `translate3d(${Math.random()*100 - 50}px, 100vh, 0) rotate(${Math.random()*360}deg)`, opacity: 0 }
+            ], {
+                duration: duration * 1000,
+                delay: delay * 1000,
+                iterations: Infinity,
+                easing: 'linear'
+            });
+        }
+    </script>
+</body></html>

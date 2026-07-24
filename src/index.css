@@ -9,12 +9,17 @@
   :root {
     color-scheme: light;
 
-    /* Color tokens: RGB triplets keep Tailwind opacity modifiers working. */
-    --color-background: 250 248 244;
-    --color-surface: 255 253 248;
-    --color-surface-muted: 243 240 234;
-    --color-border: 226 220 211;
-    --color-input: 219 212 202;
+    /* Color tokens: RGB triplets keep Tailwind opacity modifiers working.
+     * Light-mode background/surface were near-pure-white (255 253 248),
+     * which on large flat card/panel areas reads as glare against the dark
+     * text tokens below. Deepened to a warm light-gray/beige (bugfix:
+     * light-mode-glare) — noticeably softer than white, closer to
+     * "eggshell paper" than "printer paper", while staying a light theme. */
+    --color-background: 224 218 205;
+    --color-surface: 236 231 219;
+    --color-surface-muted: 214 207 191;
+    --color-border: 196 186 168;
+    --color-input: 188 177 157;
     --color-ring: 185 151 95;
     --color-secondary: 246 243 237;
     --color-accent: 55 50 43;
@@ -115,6 +120,24 @@
   body {
     @apply bg-background text-text font-sans antialiased;
     overflow-x: hidden;
+    /* Premium type rendering (bugfix: premium-font-rendering): Geist ships
+     * OpenType kerning/ligature features that were never turned on, and the
+     * browser's default text rendering leaves letterforms looking slightly
+     * fuzzy/uneven at UI sizes compared to a tuned SaaS product. */
+    font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Headings get tighter tracking + line-height than body text (bugfix:
+   * premium-font-rendering) — this is what makes large bold text read as
+   * "designed" rather than default-browser-bold; every h1-h3 in the app
+   * uses text-*xl font-bold utilities but never set tracking, so this one
+   * rule fixes every page's headings without touching each component. */
+  h1, h2, h3 {
+    letter-spacing: -0.015em;
+    line-height: 1.2;
   }
 
   :root:not([data-theme='dark']) body {

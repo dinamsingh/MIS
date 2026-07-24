@@ -58,6 +58,7 @@ export default function StudentQuizAccessPage() {
           attemptSession={attemptSession}
           email={email}
           submitAttempt={(quizId, answers, emailToSubmit) => quizAccess.submitAttempt(quizId, answers, emailToSubmit)}
+          getQuizReview={(quizId, emailToReview) => quizAccess.getQuizReview(quizId, emailToReview)}
         />
       )}
     />

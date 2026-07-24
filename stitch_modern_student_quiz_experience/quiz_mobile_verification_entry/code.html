@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Midterm Quiz - Academic Verification</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                            "tertiary-fixed": "#e1e0ff",
+                            "background": "#f8f9ff",
+                            "secondary-fixed": "#e1e0ff",
+                            "error": "#ba1a1a",
+                            "primary-fixed-dim": "#c0c1ff",
+                            "on-tertiary-fixed": "#07006c",
+                            "on-error": "#ffffff",
+                            "on-surface-variant": "#464652",
+                            "surface-container-high": "#dce9ff",
+                            "primary-container": "#2e3192",
+                            "secondary-fixed-dim": "#c0c2fc",
+                            "surface-container": "#e6eeff",
+                            "inverse-primary": "#c0c1ff",
+                            "secondary": "#585a8d",
+                            "surface": "#f8f9ff",
+                            "surface-container-lowest": "#ffffff",
+                            "tertiary": "#0c0092",
+                            "on-primary": "#ffffff",
+                            "inverse-surface": "#233144",
+                            "tertiary-fixed-dim": "#c0c1ff",
+                            "on-secondary-fixed": "#131546",
+                            "on-primary-container": "#9da1ff",
+                            "inverse-on-surface": "#eaf1ff",
+                            "surface-container-low": "#eff4ff",
+                            "surface-tint": "#4f54b4",
+                            "surface-variant": "#d5e3fc",
+                            "error-container": "#ffdad6",
+                            "on-secondary": "#ffffff",
+                            "on-tertiary": "#ffffff",
+                            "on-secondary-fixed-variant": "#404274",
+                            "on-primary-fixed-variant": "#373a9b",
+                            "on-primary-fixed": "#04006d",
+                            "on-secondary-container": "#4d5082",
+                            "on-surface": "#0d1c2e",
+                            "on-background": "#0d1c2e",
+                            "surface-dim": "#ccdbf3",
+                            "outline-variant": "#c7c5d4",
+                            "on-tertiary-container": "#9ea1ff",
+                            "tertiary-container": "#2421b6",
+                            "outline": "#777683",
+                            "on-tertiary-fixed-variant": "#2f2ebe",
+                            "on-error-container": "#93000a",
+                            "secondary-container": "#c3c4ff",
+                            "primary": "#15157d",
+                            "surface-bright": "#f8f9ff",
+                            "surface-container-highest": "#d5e3fc",
+                            "primary-fixed": "#e1e0ff"
+                    },
+                    "borderRadius": {
+                            "DEFAULT": "0.125rem",
+                            "lg": "0.25rem",
+                            "xl": "0.5rem",
+                            "full": "0.75rem"
+                    },
+                    "spacing": {
+                            "gutter": "24px",
+                            "lg": "48px",
+                            "xl": "80px",
+                            "xs": "8px",
+                            "margin-desktop": "40px",
+                            "margin-mobile": "16px",
+                            "sm": "16px",
+                            "base": "4px",
+                            "md": "24px"
+                    },
+                    "fontFamily": {
+                            "label-sm": ["Inter"],
+                            "headline-md": ["Inter"],
+                            "body-lg": ["Inter"],
+                            "display-lg-mobile": ["Inter"],
+                            "body-md": ["Inter"],
+                            "display-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                            "label-sm": ["13px", {"lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600"}],
+                            "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                            "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                            "display-lg-mobile": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                            "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                            "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        /* Ambient shadow for resting state cards */
+        .shadow-ambient {
+            box-shadow: 0px 4px 20px rgba(46, 49, 146, 0.05);
+        }
+        /* Floating label logic */
+        .group-input:focus-within label,
+        .group-input input:not(:placeholder-shown) + label {
+            transform: translateY(-50%) scale(0.85);
+            top: 0;
+            background-color: theme('colors.surface-container-lowest');
+            padding: 0 4px;
+            color: theme('colors.primary');
+        }
+        .focus-glow:focus-within {
+             box-shadow: 0px 0px 0px 4px rgba(99, 102, 241, 0.2);
+        }
+        .step-line::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 100%;
+            width: 100%;
+            height: 2px;
+            background-color: theme('colors.outline-variant');
+            transform: translateY(-50%);
+            z-index: -1;
+        }
+        .step-active .step-line::after {
+            background-color: theme('colors.primary');
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-md antialiased selection:bg-primary-container selection:text-on-primary-container">
+<!-- Transactional Intent: Suppressing main navigation as per Semantic Shell Mandate -->
+<!-- We render a simplified header tailored to the verification task, using TopAppBar tokens for styling alignment -->
+<header class="bg-surface shadow-[0px_4px_20px_rgba(46,49,146,0.05)] w-full top-0 z-50 sticky transition-all duration-300">
+<div class="flex justify-between items-center px-margin-mobile md:px-margin-desktop h-16 w-full max-w-[1280px] mx-auto">
+<div class="flex items-center gap-xs">
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container shadow-sm">
+<span class="material-symbols-outlined text-[18px]">school</span>
+</div>
+<h1 class="font-headline-md text-headline-md text-primary tracking-tight">Academic Verification</h1>
+</div>
+<!-- Secondary action relative to the task -->
+<button aria-label="Help" class="text-on-surface-variant hover:text-primary transition-colors p-2 rounded-full hover:bg-surface-container-low">
+<span class="material-symbols-outlined">help</span>
+</button>
+</div>
+</header>
+<main class="flex-grow flex flex-col items-center justify-center p-margin-mobile md:p-margin-desktop w-full max-w-[1280px] mx-auto">
+<!-- Verification Container -->
+<div class="w-full max-w-md flex flex-col gap-lg">
+<!-- Context Header -->
+<div class="text-center space-y-sm">
+<div class="inline-flex items-center justify-center p-md bg-surface-container-highest rounded-full mb-xs shadow-ambient">
+<span class="material-symbols-outlined text-[32px] text-primary" style="font-variation-settings: 'FILL' 1;">assignment</span>
+</div>
+<h2 class="font-display-lg-mobile text-display-lg-mobile text-on-background">Midterm Quiz</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant">Please verify your identity to access the examination portal.</p>
+</div>
+<!-- Elevated Card Form -->
+<form class="bg-surface-container-lowest rounded-xl p-md md:p-lg shadow-ambient border border-outline-variant/30 flex flex-col gap-lg">
+<!-- Step Indicator -->
+<div class="flex justify-between items-center px-lg mb-xs">
+<div class="flex flex-col items-center relative step-active group z-10">
+<div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-sm shadow-sm transition-transform group-hover:scale-105">
+<span class="material-symbols-outlined text-[16px]">mail</span>
+</div>
+<span class="absolute -bottom-6 whitespace-nowrap font-label-sm text-label-sm text-primary">Email</span>
+<div class="step-line absolute w-[150%] right-[-75%] top-4 h-[2px] -z-10"></div>
+</div>
+<div class="flex flex-col items-center relative group z-10">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest border-2 border-outline-variant text-outline flex items-center justify-center font-label-sm transition-transform group-hover:scale-105 bg-surface-container-lowest">
+<span class="material-symbols-outlined text-[16px]">lock</span>
+</div>
+<span class="absolute -bottom-6 whitespace-nowrap font-label-sm text-label-sm text-outline">OTP</span>
+</div>
+</div>
+<div class="h-px w-full bg-surface-variant"></div>
+<!-- Input Fields -->
+<div class="flex flex-col gap-md">
+<!-- Email Input -->
+<div class="relative group-input focus-glow rounded-DEFAULT transition-all duration-200">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-on-surface-variant">
+<span class="material-symbols-outlined">alternate_email</span>
+</div>
+<input class="block w-full pl-10 pr-3 py-3 border border-outline-variant rounded-DEFAULT bg-surface-container-lowest text-on-background font-body-md focus:border-primary focus:ring-0 transition-colors peer" id="email" name="email" placeholder=" " required="" type="email"/>
+<label class="absolute left-10 top-3 text-on-surface-variant font-body-md transition-all duration-200 pointer-events-none px-1" for="email">Institutional Email</label>
+</div>
+<!-- OTP Input (Pre-filled style for demonstration or secondary step) -->
+<div class="relative group-input focus-glow rounded-DEFAULT transition-all duration-200 opacity-60 cursor-not-allowed">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-outline">
+<span class="material-symbols-outlined">pin</span>
+</div>
+<input class="block w-full pl-10 pr-3 py-3 border border-outline-variant rounded-DEFAULT bg-surface-container text-outline font-body-md cursor-not-allowed" disabled="" id="otp" name="otp" placeholder=" " type="text"/>
+<label class="absolute left-10 top-3 text-outline font-body-md transition-all duration-200 pointer-events-none px-1" for="otp">One-Time Password</label>
+</div>
+</div>
+<!-- Action Button -->
+<button class="w-full bg-primary hover:bg-on-primary-fixed-variant text-on-primary font-label-sm text-label-sm py-4 rounded-lg shadow-ambient hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2 mt-xs active:scale-95 group relative overflow-hidden" type="button">
+<span class="relative z-10 flex items-center gap-2">
+                        Verify &amp; Start
+                        <span class="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</span>
+<!-- Subtle premium overlay on hover -->
+<div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-in-out"></div>
+</button>
+</form>
+<!-- Bottom Section: Trust & Rules -->
+<div class="flex flex-col items-center gap-md text-center">
+<!-- Trust Badge -->
+<div class="inline-flex items-center gap-2 px-4 py-2 bg-surface-container-low rounded-full border border-surface-variant">
+<span class="material-symbols-outlined text-primary text-[16px]" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Verified Access Only</span>
+</div>
+<!-- Rules Summary -->
+<div class="flex gap-lg justify-center text-on-surface-variant font-body-md text-sm">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">timer</span>
+<span>30 mins</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">format_list_numbered</span>
+<span>15 Questions</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer implementation from Shared Components JSON -->
+<footer class="bg-surface-container-low border-t border-outline-variant full-width bottom-0 opacity-80 hover:opacity-100 transition-opacity duration-300">
+<div class="flex flex-col md:flex-row justify-between items-center py-md px-margin-mobile md:px-margin-desktop w-full gap-base max-w-[1280px] mx-auto">
+<p class="font-label-sm text-label-sm text-primary">© 2024 Institutional MIS. All Rights Reserved.</p>
+<nav class="flex gap-md">
+<!-- Static rendering of Footer links based on context -->
+<a class="text-secondary hover:text-tertiary transition-colors font-label-sm text-label-sm" href="#">Quiz Rules</a>
+<a class="text-secondary hover:text-tertiary transition-colors font-label-sm text-label-sm" href="#">Privacy Policy</a>
+<a class="text-secondary hover:text-tertiary transition-colors font-label-sm text-label-sm" href="#">Technical Support</a>
+</nav>
+</div>
+</footer>
+<script>
+        // Simple client-side interaction for demonstration
+        document.querySelector('button[type="button"]').addEventListener('click', function(e) {
+            e.preventDefault();
+            const btn = this;
+            const originalText = btn.innerHTML;
+            
+            // Simulate loading state
+            btn.innerHTML = `<span class="material-symbols-outlined animate-spin">progress_activity</span> Verifying...`;
+            btn.classList.add('opacity-90');
+            
+            setTimeout(() => {
+                // Advance to OTP step visually
+                btn.innerHTML = `Confirm OTP <span class="material-symbols-outlined text-[18px]">check_circle</span>`;
+                btn.classList.remove('opacity-90');
+                
+                // Update step indicators
+                const steps = document.querySelectorAll('.group');
+                if(steps.length >= 2) {
+                    // Make email step 'done'
+                    steps[0].querySelector('div').innerHTML = `<span class="material-symbols-outlined text-[16px]">check</span>`;
+                    steps[0].querySelector('div').classList.add('bg-tertiary', 'text-on-tertiary');
+                    steps[0].querySelector('div').classList.remove('bg-primary', 'text-on-primary');
+                    
+                    // Make OTP step active
+                    steps[1].classList.add('step-active');
+                    steps[1].querySelector('div').classList.remove('bg-surface-container-highest', 'border-outline-variant', 'text-outline', 'bg-surface-container-lowest');
+                    steps[1].querySelector('div').classList.add('bg-primary', 'text-on-primary', 'border-primary');
+                    steps[1].querySelector('span').classList.remove('text-outline');
+                    steps[1].querySelector('span').classList.add('text-primary');
+                }
+                
+                // Enable OTP input
+                const otpInput = document.getElementById('otp');
+                const otpContainer = otpInput.closest('.group-input');
+                otpContainer.classList.remove('opacity-60', 'cursor-not-allowed');
+                otpInput.removeAttribute('disabled');
+                otpInput.classList.remove('cursor-not-allowed');
+                otpInput.focus();
+                
+            }, 1500);
+        });
+    </script>
+</body></html>

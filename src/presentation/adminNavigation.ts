@@ -42,6 +42,7 @@ export const adminNavGroups: AdminNavGroup[] = [
       { id: 'admin-sessions', label: 'Session Creation', icon: '🗓️', path: '/admin/sessions', badge: 'NEW' },
       { id: 'admin-roster', label: 'Roster Import', icon: '📋', path: '/admin/roster', badge: 'NEW' },
       { id: 'admin-batches', label: 'Batch Promotion', icon: '🎓', path: '/admin/batches', badge: 'NEW' },
+      { id: 'admin-syllabus-upload', label: 'Syllabus Upload', icon: '📄', path: '/admin/syllabus-upload', badge: 'NEW' },
     ],
   },
 ];

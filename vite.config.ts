@@ -32,6 +32,41 @@ function mockApiPlugin(): Plugin {
         }
       });
 
+      // LOCAL-DEV-ONLY stub for /api/parse-syllabus-pdf. Mirrors the
+      // generate-quiz mock: returns one fabricated subject/unit/topic so the
+      // admin syllabus upload review screen is exercisable without wrangler.
+      server.middlewares.use('/api/parse-syllabus-pdf', (req, res) => {
+        if (req.method === 'POST') {
+          let body = '';
+          req.on('data', chunk => { body += chunk; });
+          req.on('end', () => {
+            try {
+              const parsed = JSON.parse(body);
+              const semester = parsed.semester || 1;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({
+                subjects: [
+                  {
+                    code: `MOCK-${semester}01`,
+                    name: '[Local Mock] Sample Subject',
+                    kind: 'theory',
+                    labName: null,
+                    electiveGroup: null,
+                    units: [
+                      { unitNo: 1, name: 'Sample Unit 1', topics: ['Sample topic A', 'Sample topic B'] },
+                    ],
+                  },
+                ],
+                rejected: 0,
+              }));
+            } catch (e) {
+              res.statusCode = 400;
+              res.end(JSON.stringify({ error: 'Bad Request' }));
+            }
+          });
+        }
+      });
+
       // LOCAL-DEV-ONLY stub for /api/admin-create-teacher. Plain `npm run dev`
       // does not execute Cloudflare Pages Functions, so this fakes a success
       // response for any POST. The REAL function (functions/api/admin-create-

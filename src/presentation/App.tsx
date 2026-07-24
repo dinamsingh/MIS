@@ -72,6 +72,7 @@ const AdminSessionCreationPage = lazy(() => import('@presentation/pages/AdminSes
 const AdminRosterImportPage = lazy(() => import('@presentation/pages/AdminRosterImportPage'));
 const AdminDashboardPage = lazy(() => import('@presentation/pages/AdminDashboardPage'));
 const AdminBatchPromotionPage = lazy(() => import('@presentation/pages/AdminBatchPromotionPage'));
+const AdminSyllabusUploadPage = lazy(() => import('@presentation/pages/AdminSyllabusUploadPage'));
 const TeachingHistoryPage = lazy(() => import('@presentation/pages/TeachingHistoryPage'));
 const MySchedulePage = lazy(() => import('@presentation/pages/MySchedulePage'));
 
@@ -338,6 +339,7 @@ export default function App() {
               <Route path="/admin/sessions" element={<AdminSessionCreationPage />} />
               <Route path="/admin/roster" element={<AdminRosterImportPage />} />
               <Route path="/admin/batches" element={<AdminBatchPromotionPage />} />
+              <Route path="/admin/syllabus-upload" element={<AdminSyllabusUploadPage />} />
             </Route>
 
             {/* Root and catch-all */}
