@@ -11,13 +11,39 @@
 
 ## 0. Quick Status (READ THIS FIRST)
 
-- **Last updated:** 2026-07-21
-- **Active branch:** `main`. **NOTHING has been pushed** — user explicitly said "no push without permission". Everything below is LOCAL ONLY.
-- **Latest commit (pushed):** `75b03b3` (unchanged since last push).
+- **Last updated:** 2026-07-24
+- **Active branch:** `main` (pushed). Also `fix/batch-promotion-and-quiz-security` (merged into main).
+- **Latest commit (pushed):** `5eee9e9` — sem7 subject codes fix + syllabus seed.
 - **Build/tests (as of last full run):** ✅ green — `npx vite build` succeeds (6s), `npx vitest run` 306 tests pass (33 files). `npx tsc -b tsconfig.app.json --noEmit` has 2 pre-existing minor errors in unrelated test files (not blocking).
 
 ### 🔴 CURRENT RESUME POINT
-**ALL 4 PHASES of `.kiro/specs/admin-console-and-scheduling-upgrade/` are IMPLEMENTED + MIGRATIONS APPLIED to Supabase.** The spec is functionally complete (61/110 tasks done — remaining 49 are all optional PBT tests marked `*`).
+**Sem 7 syllabus fully seeded + subject codes fixed.** Quiz access bug (wrong-section) identified and manually fixed for one student. Broader fix needed for all students with NULL section_id.
+
+**What was done this session (2026-07-24):**
+1. **Sem 7 subject codes fixed** — old placeholder codes (CS-7001..7007 from onboarding_seed) renamed to actual RGPV codes (CS-701, CS-702A/B/C/D, CS-703A/B/C/D). teacher_assignments preserved via UUID FK.
+2. **Sem 7 syllabus seeded** — 9 subjects × 5 units each, full topic list from official RGPV PDF. File: `src/data/seeds/sem7_syllabus_seed.sql`.
+3. **Duplicate subjects cleaned** — PDF upload had created spaced-code duplicates (`CS 7 02 (A)` etc.) that coexisted with the corrected hyphenated codes. Merged teacher_assignments and deleted orphans.
+4. **Quiz wrong-section bug diagnosed** — root cause: `request_quiz_access` upserts students WITHOUT section_id. Students created via quiz enrollment path get NULL section_id → fail the section gate. Manual fix applied for one student (`0131CS241058` → CSE-7A).
+5. **onboarding_seed.sql updated** — sem 7 now has correct RGPV codes for fresh installs.
+
+### ⚠️ KNOWN BUG: Quiz wrong-section for new students
+**Root cause:** In `request_quiz_access` (migration 0040), the student upsert does NOT set `section_id`:
+```sql
+insert into public.students (name, email, enrollment_number)
+on conflict (enrollment_number) do update set email, name
+-- section_id is NEVER set here!
+```
+If a student was seeded via admin roster import (which sets section_id), they're fine. But if a student only exists because they self-registered via quiz enrollment, their section_id stays NULL → every section-restricted quiz denies them.
+
+**Proper fix needed:** The upsert in `request_quiz_access` should derive section_id from the student_roster/students row that matches the enrollment, or from the quiz's target section. This requires a new migration to update the `request_quiz_access` function.
+
+**Workaround (manual):** For any student getting "wrong section" error:
+```sql
+-- Find their current state:
+select enrollment_number, section_id from students where email = 'their@email.com';
+-- Fix by assigning correct section:
+update students set section_id = '<correct-section-uuid>' where enrollment_number = '<enrollment>';
+```
 
 **What was built this session (2026-07-21):**
 - Phase 1: Admin Role Foundation (complete since prior session)
@@ -157,6 +183,9 @@ Migrations live in `src/data/migrations/` (applied manually via Supabase SQL edi
 | `0019_unify_subjects_units.sql` | Repoint operational FKs (quizzes.unit_id, assignments.subject_id/unit_id, assignment_submissions.unit_id, lab_manual_submissions.unit_id, attendance.subject_id, mark_components.subject_id, timetable_entries.subject_id) → `syllabus_subjects`/`syllabus_units`. Deletes orphan rows first. Legacy `subjects`/`units`/`topics` retired | ⏳ RUN |
 | `0020_quiz_active_window.sql` | Add `quizzes.active_from`/`active_until` + enforce window in `request_quiz_access` (new `not-active` denied reason) | ⏳ RUN |
 | `0021_sem5_electives_and_subjects.sql` | Add `syllabus_subjects.elective_group`; correct sem-5 subjects → CS-503A/B/C (Departmental Elective), CS-504A/B/C (Open Elective), CS-505 Linux Lab, CS-506 Python Lab. Removes old sem-5 placeholders; keeps CS-501/CS-502 | ⏳ RUN |
+| `0052_admin_syllabus_upload.sql` | Admin PDF-upload syllabus RPC (`save_syllabus_structure`), `normalize_subject_code()` helper, unique (code,sem) index | ✅ applied |
+| `0053_fix_syllabus_upload_duplicate_codes.sql` | Bugfix: `save_syllabus_structure` now uses normalized code matching to prevent duplicates | ✅ applied |
+| `0054_fix_sem7_subject_codes.sql` | Rename sem-7 placeholder codes (CS-7001..7007) to actual RGPV codes (CS-701, CS-702A/B/C/D, CS-703A/B/C/D), merge teacher_assignments, create missing elective subjects | ✅ applied |
 
 Seeds in `src/data/seeds/`:
 - `seed.sql` — original 12 demo students (IWT 5th Sem). 
@@ -166,6 +195,7 @@ Seeds in `src/data/seeds/`:
 - `sem4_syllabus_seed.sql` — **sem-4 master syllabus**: 6 subjects (BT-401, CS-402/403/404/405, CS-406 Java), **30 units, 312 topics**. Idempotent + progress-safe. ⏳ RUN after 0018.
 - `sem4_java_lab_seed.sql` — optional one-click: adds CS-406 Java 20 lab programs as an extra unit. ⏳ optional.
 - `sem5_syllabus_seed.sql` — **sem-5 master syllabus**: CS-501 (Theory of Computation), CS-502 (DBMS), elective variants CS-503A/B/C & CS-504A/B/C, and labs CS-505 (Linux) & CS-506 (Python) — units + topics. Idempotent + progress-safe (seeds a subject only if it has no units). ⏳ RUN after `0021`.
+- `sem7_syllabus_seed.sql` — **sem-7 master syllabus**: CS-701 (Software Architectures), CS-702A/B/C/D (Dept Electives: Computational Intelligence, Deep & RL, Wireless & Mobile, Big Data), CS-703A/B/C/D (Open Electives: Crypto & InfoSec, Data Mining, Agile, Disaster Mgmt) — 9 subjects × 5 units each. Also cleans up old placeholder codes. ✅ applied.
 
 > **Note:** `.gitignore` previously had a blanket `*.sql` rule (added by collaborator) that hid migrations.
 > Fixed by adding `!src/data/migrations/*.sql` and `!src/data/seeds/*.sql` exceptions.
@@ -328,6 +358,13 @@ See `request_quiz_access` (migrations 0024/0025/0027) and `submit_attempt`
 (migration 0028) for the reference pattern.
 
 ### Work Log (newest first)
+- **2026-07-24** — **Sem 7 syllabus seeding + subject code fix + quiz wrong-section diagnosis:**
+  - **Subject codes renamed:** Migration `0054_fix_sem7_subject_codes.sql` renames onboarding placeholder codes (CS-7001→CS-701, CS-7002→CS-702A, CS-7003→CS-703A) and merges teacher_assignments from old to new. CS-7004/7005 (generic "Departmental Elective" placeholders) cleaned up. New elective codes (CS-702B/C/D, CS-703B/C/D) created.
+  - **Syllabus seed:** `src/data/seeds/sem7_syllabus_seed.sql` — 9 subjects (Software Architectures, Computational Intelligence, Deep & Reinforcement Learning, Wireless & Mobile Computing, Big Data, Cryptography & Information Security, Data Mining and Warehousing, Agile Software Development, Disaster Management), 5 units each, full topic breakdowns from official RGPV VII-Sem PDF.
+  - **Duplicate cleanup:** Spaced-code subjects from earlier PDF upload (`CS 7 01`, `CS 7 02 (A)` etc.) merged into correct hyphenated codes and deleted.
+  - **onboarding_seed.sql:** Sem 7 section updated to use actual RGPV codes (fresh installs get correct codes).
+  - **Quiz wrong-section bug:** Diagnosed root cause in `request_quiz_access` (migration 0040) — student upsert doesn't set section_id. Manually fixed student `0131CS241058` (deendyalsinghpro@gmail.com) by assigning section CSE-7A. **Needs proper migration fix** to set section_id during upsert.
+  - **Pushed to main:** commit `5eee9e9`.
 - **2026-07-06** — **`submit_attempt` now returns specific denial reasons (migration `0028`)**: audited "does every error show a specific message, not a generic one" — found `request_quiz_access`/`StudentQuizAccessView` already did this (per-reason `DENIED_COPY`), but `submit_attempt` (quiz submission) still collapsed every failure into one generic `not-registered`, and `QuizAttemptView` always showed `messages.auth.notRegistered` for any denial. Fixed: `submit_attempt` now returns `not-authenticated` / `quiz-not-found` / `teacher-account` / `not-registered` distinctly (also re-checks the teacher-account gate at submission, matching `request_quiz_access`). Added `SubmitAttemptDeniedReason` (domain), threaded it through `parseSubmitOutcome` with a safe fallback for unrecognized values, and exported `DENIED_COPY` from `StudentQuizAccessView` so `QuizAttemptView` shows the exact same specific wording instead of a generic fallback — no duplicated copy. Added 2 new parser tests (reason preserved; unrecognized reason safely falls back). **Established convention for future work** (documented in "Update Protocol" below): whenever a server RPC can return a structured `reason`, thread it end-to-end (type → parser → UI copy) instead of collapsing to one generic string; `messages.error.generic` remains correct ONLY for truly unstructured failures (network errors, unexpected JS exceptions) where the server provided no reason at all. Audited remaining `messages.error.generic` usages across the app (Timetable, Syllabus, Roster, Quiz, Material, Marks, Leaderboard, Heatmap, Attendance views) — confirmed all of them are legitimate catch-all fallbacks for unstructured errors, not hidden structured reasons. tsc + 209 tests + build green. (Uncommitted — pending user confirm; migration 0028 must be run in Supabase.)
 - **2026-07-06** — **Teacher/student identity separation (migration `0027`)**: closed a real security gap — `is_teacher()` only checked "does a teachers row exist", so ANY signed-in Google account (including a student who already self-registered via a quiz link) could complete onboarding and become a teacher, with full RLS access to every teacher's data. Fixed with: (A) new `allowed_teacher_emails` allowlist table, bootstrapped with every email already in `teachers` (grandfathered, nobody currently onboarded gets locked out); (B) a `BEFORE INSERT/UPDATE` trigger on `teachers` (`enforce_teacher_eligibility()`) that rejects the write at the DB level unless the email is on the allowlist AND no `students` row with that email exists yet — cannot be bypassed by any client code path, only by direct SQL; (C) `request_quiz_access` now denies with reason `teacher-account` if the signed-in email belongs to an existing teacher, so a teacher can never be silently self-registered as a "new student" on someone else's quiz; (D) `add_allowed_teacher(email)` RPC so an existing teacher can approve a new teacher's email without SQL Editor access. Added `teacher-account` to `QuizAccessDeniedReason` (domain + parser allowlist + student-facing copy in `StudentQuizAccessView`). Note: verified `students.id` is NOT `auth.uid()` in the current (0022+) design — identity is matched by email/enrollment, not id, correcting an earlier wrong assumption made mid-session. tsc + 207 tests + build green. (Uncommitted — pending user confirm; migration 0027 must be run in Supabase. Afterwards, approve any teacher email beyond the ones already onboarded via `select public.add_allowed_teacher('newteacher@gmail.com');` while signed in as an existing teacher, or insert directly into `allowed_teacher_emails`.)
 - **2026-07-06** — **Dev/prod environment separation documented**: identified that `.env` and `.env.production` both point at the same Supabase project (`sdhpgvshexqsidkivjnq`), so local testing writes directly to the would-be production database with no isolation. Since only the developer is using the project so far (no real onboarding yet), this is a clean cutover: keep the current project as **testing**, create a NEW Supabase project as **production**. Wrote `docs/PRODUCTION_SETUP.md` — a full ordered checklist (all 26+ migrations in order, real-curriculum seeds only, Google OAuth + redirect URLs, the `sensitive-files` storage bucket, pre-provisioning teacher accounts since there's no self-signup, a separate Gemini key for prod, and the ongoing "test on dev project → then apply to prod project" migration workflow). No code/schema changes in this entry — purely a setup doc; `.env.production` will be updated once the user creates the new Supabase project and shares its URL/anon key.
