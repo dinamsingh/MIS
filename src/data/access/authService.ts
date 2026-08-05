@@ -320,7 +320,7 @@ export function createAuthService(
           message: error.message,
         });
       }
-      return ok<void, AuthError>(undefined);
+      return ok(undefined);
     },
 
     async sendPasswordResetEmail(email: string): Promise<Result<void, AuthError>> {
@@ -333,7 +333,7 @@ export function createAuthService(
           message: error.message,
         });
       }
-      return ok<void, AuthError>(undefined);
+      return ok(undefined);
     },
 
     async updatePassword(password: string): Promise<Result<void, AuthError>> {
@@ -344,7 +344,7 @@ export function createAuthService(
           message: error.message,
         });
       }
-      return ok<void, AuthError>(undefined);
+      return ok(undefined);
     },
 
     async signOut(): Promise<void> {

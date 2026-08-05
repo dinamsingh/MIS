@@ -145,7 +145,7 @@ function QuizShell({ children, quizMeta }: { children: ReactNode; quizMeta?: Qui
           transition: background-color 5000s ease-in-out 0s;
         }
       `}} />
-      <header className="bg-white/40 dark:bg-[#0f172a]/40 backdrop-blur-xl shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] dark:shadow-[5px_5px_10px_#020617,-5px_-5px_10px_#1e293b73] w-full top-0 z-50 sticky transition-all duration-300">
+      <header className="bg-surface/80 backdrop-blur-xl border-b border-border w-full top-0 z-50 sticky transition-all duration-300">
         <div className="flex justify-between items-center px-6 h-16 w-full max-w-[1280px] mx-auto">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-[#2e3192] flex items-center justify-center text-[#9da1ff] shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73]">
@@ -173,9 +173,9 @@ function QuizShell({ children, quizMeta }: { children: ReactNode; quizMeta?: Qui
             </p>
           </div>
 
-          <div className="bg-white/60 dark:bg-[#0f172a]/40 backdrop-blur-2xl rounded-[32px] p-6 md:p-8 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05),0_0_0_1px_rgba(255,255,255,0.4)_inset] dark:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.1)_inset] border border-white/20 dark:border-white/5 flex flex-col gap-6 relative overflow-hidden">
+          <div className="bg-surface p-8 rounded-[32px] shadow-card border border-border flex flex-col gap-6 relative overflow-hidden">
              {/* Soft inner glow top edge */}
-             <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/60 dark:via-white/20 to-transparent"></div>
+             
              <div className="relative z-10 flex flex-col gap-6">
                {children}
              </div>
@@ -775,7 +775,7 @@ export default function StudentQuizAccessView({
     case 'denied':
       return (
         <QuizShell>
-          <div className="bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl p-8 rounded-2xl  border border-white/20 flex flex-col items-center text-center">
+          <div className="bg-surface p-8 rounded-2xl shadow-card border border-border flex flex-col items-center text-center">
             <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#ffebee] text-[32px] text-[#ba1a1a]" aria-hidden="true">
               <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>error</span>
             </span>
@@ -788,13 +788,13 @@ export default function StudentQuizAccessView({
     case 'already-attempted':
       return (
         <QuizShell>
-          <div className="bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl p-8 rounded-2xl  border border-white/20 flex flex-col items-center text-center">
+          <div className="bg-surface p-8 rounded-2xl shadow-card border border-border flex flex-col items-center text-center">
             <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#dce9ff] text-[32px] text-[#15157d] dark:text-[#818cf8]" aria-hidden="true">
               <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
             </span>
             <h1 className="mt-4 text-[24px] font-bold text-[#0d1c2e] dark:text-[#ffffff]">Attempt already submitted</h1>
             <p className="mt-2 text-[15px] text-[#464652] dark:text-[#cbd5e1]">{messages.auth.alreadyAttempted}</p>
-            <div className="mt-6 rounded-xl border border-white/20 dark:border-[#334155] bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl px-6 py-4 w-full">
+            <div className="mt-6 rounded-xl border border-border bg-surface-muted px-6 py-4 w-full">
               <p className="text-[32px] font-bold text-[#15157d] dark:text-[#818cf8]">
                 {phase.score} <span className="text-lg font-semibold text-[#777683] dark:text-[#94a3b8]">/ {phase.totalMarks}</span>
               </p>
@@ -815,13 +815,13 @@ export default function StudentQuizAccessView({
                 Teacher preview — this is exactly what students will see. Answers are hidden and no
                 attempt is recorded.
               </div>
-              <div className="bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl p-8 rounded-2xl  border border-white/20">
+              <div className="bg-surface p-8 rounded-2xl shadow-card border border-border">
                 <p className="text-xs font-semibold uppercase tracking-wide text-[#777683] dark:text-[#94a3b8]">
                   {phase.quiz.questions.length} questions · {phase.quiz.timeLimitMinutes} min
                 </p>
                 <ol className="mt-4 flex flex-col gap-4">
                   {phase.quiz.questions.map((q, i) => (
-                    <li key={q.id} className="rounded-xl border border-white/20 dark:border-[#334155] bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl p-5 text-left">
+                    <li key={q.id} className="rounded-xl border border-border bg-surface-muted p-5 text-left">
                       <p className="text-sm font-medium text-[#0d1c2e] dark:text-[#ffffff]">
                         {i + 1}. {q.text}
                       </p>
@@ -846,7 +846,7 @@ export default function StudentQuizAccessView({
       if (!phase.session.startedAt) {
         return (
           <QuizShell quizMeta={quizMeta}>
-            <div className="bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl p-8 rounded-2xl  border border-white/20 flex flex-col items-center text-center">
+            <div className="bg-surface p-8 rounded-2xl shadow-card border border-border flex flex-col items-center text-center">
               <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#dce9ff] text-[32px] text-[#15157d] dark:text-[#818cf8]" aria-hidden="true">
                 <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
               </span>
@@ -901,7 +901,7 @@ export default function StudentQuizAccessView({
             onGranted(phase.quiz, phase.session, phase.email)
           ) : (
             <QuizShell quizMeta={quizMeta}>
-              <div className="bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl p-8 rounded-2xl  border border-white/20 flex flex-col items-center text-center">
+              <div className="bg-surface p-8 rounded-2xl shadow-card border border-border flex flex-col items-center text-center">
                 <h1 className="text-[24px] font-bold text-[#0d1c2e] dark:text-[#ffffff]">Access granted</h1>
                 <p className="mt-2 text-[15px] text-[#464652] dark:text-[#cbd5e1]">You may now attempt the quiz.</p>
               </div>

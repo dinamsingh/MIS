@@ -289,7 +289,7 @@ export function ReportModeView() {
           <h3 className="text-lg font-semibold text-text mb-4">Class Attendance Heatmap (Selected Range)</h3>
           <div className="flex flex-wrap gap-2">
             {classHeatmapData.length > 0 ? (
-              classHeatmapData.map((data, idx) => {
+              classHeatmapData.map((data) => {
                 let colorClass = 'bg-surface-muted border-border';
                 if (data.percent >= 90) colorClass = 'bg-emerald-600 border-emerald-700 text-white';
                 else if (data.percent >= 75) colorClass = 'bg-emerald-400 border-emerald-500';

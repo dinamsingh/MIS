@@ -355,7 +355,7 @@ export default function TeacherSignInView({ onSignedIn, initialError = null }: T
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className={inputClass}
-                    placeholder="Enter your college email"
+                    placeholder="e.g. name@university.edu"
                   />
                 </div>
 
@@ -393,7 +393,7 @@ export default function TeacherSignInView({ onSignedIn, initialError = null }: T
                     value={passwordValue}
                     onChange={(e) => setPasswordValue(e.target.value)}
                     className={inputClass}
-                    placeholder="New Password"
+                    placeholder="••••••••"
                   />
                 </div>
 

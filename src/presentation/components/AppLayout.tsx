@@ -12,12 +12,7 @@ import {
   pageMotion,
   readMotionDisabledPreference,
 } from '@presentation/motion';
-import {
-  applyThemePreference,
-  readThemePreference,
-  writeThemePreference,
-  type ThemePreference,
-} from '@presentation/theme';
+
 import { GlobalCommandCenter } from './GlobalCommandCenter';
 import { ToastProvider } from './ToastProvider';
 import { ThemeToggle } from '@presentation/components/ui/ThemeToggle';
@@ -56,7 +51,6 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [motionDisabled, setMotionDisabled] = useState(() => readMotionDisabledPreference());
-  const [theme, setTheme] = useState<ThemePreference>(() => readThemePreference());
   // `AdminShell` deliberately renders this layout without a
   // `SelectedSectionProvider` (the Admin Console manages its own sections,
   // per `design.md`) — fall back to an empty/inert section+subject state
@@ -87,7 +81,6 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
   };
   const todayLabel = useMemo(() => formatHeaderDate(), []);
   const [timeLabel, setTimeLabel] = useState(() => formatHeaderTime());
-  const isDarkTheme = theme === 'dark';
 
   const closeMobileDrawer = useCallback(() => {
     setIsDrawerOpen(false);
@@ -110,13 +103,6 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
     },
     [closeMobileDrawer, onNavigate],
   );
-
-  const toggleTheme = useCallback(() => {
-    const nextTheme: ThemePreference = isDarkTheme ? 'light' : 'dark';
-    setTheme(nextTheme);
-    writeThemePreference(nextTheme);
-    applyThemePreference(nextTheme, { animate: true });
-  }, [isDarkTheme]);
 
   // The section dropdown shows ONLY the section (clean). Subjects live in their
   // own global dropdown beside it.
@@ -166,10 +152,6 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
     window.addEventListener(MOTION_PREFERENCE_EVENT, handleMotionPreferenceChange);
     return () => window.removeEventListener(MOTION_PREFERENCE_EVENT, handleMotionPreferenceChange);
   }, [motionDisabled]);
-
-  useEffect(() => {
-    applyThemePreference(theme);
-  }, [theme]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setTimeLabel(formatHeaderTime()), 30_000);

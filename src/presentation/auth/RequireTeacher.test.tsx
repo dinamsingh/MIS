@@ -88,6 +88,8 @@ function stubServiceReturning(actor: Actor): AuthService {
     sendStudentEmailOtp: () => Promise.reject(new Error('not used in this test')),
     verifyStudentEmailOtp: () => Promise.reject(new Error('not used in this test')),
     signInWithGoogle: () => Promise.reject(new Error('not used in this test')),
+    sendPasswordResetEmail: () => Promise.reject(new Error('not used in this test')),
+    updatePassword: () => Promise.reject(new Error('not used in this test')),
     signOut: () => Promise.resolve(),
   };
 }
