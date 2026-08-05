@@ -3,7 +3,14 @@ import { createRoot } from 'react-dom/client';
 import App from '@presentation/App';
 import { Agentation } from 'agentation';
 import { applyThemePreference, readThemePreference } from '@presentation/theme';
+import { install as installReticleReact } from '@reticlehq/react';
+import { reticle } from '@reticlehq/browser';
 import './index.css';
+
+if (import.meta.env.DEV) {
+  installReticleReact();
+  reticle.connect({ session: 'academic-mis' });
+}
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

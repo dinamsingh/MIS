@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dashboard - Academic MIS Teacher Portal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        background: '#E0DACD',
+                        surface: '#ECE7DB',
+                        'surface-muted': '#D6CFBF',
+                        border: '#C4BAA8',
+                        accent: '#37322B',
+                        'accent-tint': '#EDE5D7',
+                        text: '#2D2923',
+                        'text-soft': '#5E564B',
+                        'text-muted': '#897E6F',
+                        'status-green': '#27966F',
+                        'status-amber': '#C2802F',
+                        'status-red': '#D55267',
+                        'status-blue': '#4178B8',
+                        sidebar: '#F8F5EF'
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px",
+                        "14px": "14px"
+                    },
+                    fontFamily: {
+                        headline: ["Geist", "sans-serif"],
+                        display: ["Geist", "sans-serif"],
+                        body: ["Geist", "sans-serif"],
+                        label: ["Geist", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..900&display=swap');
+        body { font-family: 'Geist', sans-serif; background-color: #E0DACD; color: #2D2923; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .icon-filled { font-variation-settings: 'FILL' 1; }
+        
+        .sidebar-scroll::-webkit-scrollbar { width: 4px; }
+        .sidebar-scroll::-webkit-scrollbar-thumb { background: #C4BAA8; border-radius: 4px; }
+        .sidebar-scroll:hover::-webkit-scrollbar-thumb { background: #897E6F; }
+    </style>
+</head>
+<body class="flex min-h-screen bg-background text-text overflow-hidden">
+<!-- SideNavBar -->
+<aside class="w-[280px] h-screen fixed left-0 top-0 bg-sidebar border-r border-border flex flex-col z-20">
+<!-- Logo Area -->
+<div class="px-6 py-6 flex items-center gap-3 shrink-0">
+<div class="w-10 h-10 rounded-lg bg-accent text-white flex items-center justify-center font-headline font-black text-xl">A</div>
+<div>
+<h1 class="font-headline font-black text-xl text-accent leading-tight">Academic MIS</h1>
+<p class="font-body text-sm font-medium text-text-soft tracking-tight">Teacher Portal</p>
+</div>
+</div>
+<!-- Navigation -->
+<nav class="flex-1 overflow-y-auto sidebar-scroll py-2 px-2 flex flex-col gap-1">
+<a class="bg-gradient-to-r from-[#064E4B] via-[#0D746A] to-[#14B8A6] text-white rounded-full mx-2 px-4 py-2 shadow-sm flex items-center gap-3 font-body text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined icon-filled">dashboard</span>
+                Dashboard
+            </a>
+<a class="text-text-soft hover:text-accent hover:bg-accent-tint rounded-full px-4 py-2 mx-2 transition-all duration-200 flex items-center gap-3 font-body text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+                Attendance
+            </a>
+<a class="text-text-soft hover:text-accent hover:bg-accent-tint rounded-full px-4 py-2 mx-2 transition-all duration-200 flex items-center gap-3 font-body text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined">menu_book</span>
+                Syllabus
+            </a>
+<a class="text-text-soft hover:text-accent hover:bg-accent-tint rounded-full px-4 py-2 mx-2 transition-all duration-200 flex items-center gap-3 font-body text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined">schedule</span>
+                Timetable
+            </a>
+<a class="text-text-soft hover:text-accent hover:bg-accent-tint rounded-full px-4 py-2 mx-2 transition-all duration-200 flex items-center gap-3 font-body text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined">event_note</span>
+                My Schedule
+            </a>
+<div class="mt-4 mb-1 px-6 text-xs font-bold text-text-muted uppercase tracking-wider">Assessments</div>
+<a class="text-text-soft hover:text-accent hover:bg-accent-tint rounded-full px-4 py-2 mx-2 transition-all duration-200 flex items-center gap-3 font-body text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined">quiz</span>
+                Quizzes
+            </a>
+<a class="text-text-soft hover:text-accent hover:bg-accent-tint rounded-full px-4 py-2 mx-2 transition-all duration-200 flex items-center gap-3 font-body text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined">assignment</span>
+                Assignments
+            </a>
+<a class="text-text-soft hover:text-accent hover:bg-accent-tint rounded-full px-4 py-2 mx-2 transition-all duration-200 flex items-center gap-3 font-body text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined">grade</span>
+                Internal Marks
+            </a>
+<div class="mt-4 mb-1 px-6 text-xs font-bold text-text-muted uppercase tracking-wider">Insights</div>
+<a class="text-text-soft hover:text-accent hover:bg-accent-tint rounded-full px-4 py-2 mx-2 transition-all duration-200 flex items-center gap-3 font-body text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined">assessment</span>
+                Reports
+            </a>
+<a class="text-text-soft hover:text-accent hover:bg-accent-tint rounded-full px-4 py-2 mx-2 transition-all duration-200 flex items-center gap-3 font-body text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined">leaderboard</span>
+                Leaderboard
+            </a>
+<a class="text-text-soft hover:text-accent hover:bg-accent-tint rounded-full px-4 py-2 mx-2 transition-all duration-200 flex items-center gap-3 font-body text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined">history</span>
+                Teaching History
+            </a>
+<div class="mt-4 mb-1 px-6 text-xs font-bold text-text-muted uppercase tracking-wider">Resources</div>
+<a class="text-text-soft hover:text-accent hover:bg-accent-tint rounded-full px-4 py-2 mx-2 transition-all duration-200 flex items-center gap-3 font-body text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined">folder_open</span>
+                Study Material
+            </a>
+<a class="text-text-soft hover:text-accent hover:bg-accent-tint rounded-full px-4 py-2 mx-2 transition-all duration-200 flex items-center gap-3 font-body text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined">group</span>
+                Roster
+            </a>
+</nav>
+<!-- Footer / Profile -->
+<div class="p-4 border-t border-border shrink-0">
+<div class="flex items-center justify-between bg-surface rounded-14px p-3 shadow-sm border border-border/50">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-accent-tint text-accent flex items-center justify-center font-bold text-sm">DS</div>
+<div>
+<p class="font-bold text-sm text-accent leading-tight">Dindayal Singh</p>
+<p class="text-xs text-text-soft">Teacher</p>
+</div>
+</div>
+<button class="text-text-soft hover:text-status-red transition-colors p-1" title="Logout">
+<span class="material-symbols-outlined">logout</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="ml-[280px] flex-1 flex flex-col h-screen overflow-y-auto bg-background">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-8 py-6 w-full sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border/30">
+<div class="flex flex-col">
+<h2 class="font-headline text-2xl font-bold text-accent">Good morning, Mr. Singh 👋</h2>
+<div class="flex items-center gap-4 mt-1">
+<p class="text-sm text-text-soft font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">calendar_today</span>
+                        Friday, 25 Jul 2025
+                    </p>
+<button class="flex items-center gap-2 bg-surface hover:bg-surface-muted px-3 py-1.5 rounded-full border border-border text-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[18px] text-accent">menu_book</span>
+                        CSE-3A — Semester 5
+                        <span class="material-symbols-outlined text-[18px]">arrow_drop_down</span>
+</button>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center text-text-soft hover:text-accent hover:bg-surface-muted transition-colors relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-status-red border border-surface"></span>
+</button>
+</div>
+</header>
+<!-- Dashboard Content -->
+<div class="p-8 max-w-7xl mx-auto w-full flex flex-col gap-6">
+<!-- Quick Stats Row -->
+<div class="grid grid-cols-4 gap-4">
+<div class="bg-surface rounded-14px p-4 border border-border flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-accent-tint flex items-center justify-center text-accent">
+<span class="material-symbols-outlined">groups</span>
+</div>
+<div>
+<p class="text-sm text-text-soft font-medium">Total Students</p>
+<p class="text-2xl font-bold text-accent">42</p>
+</div>
+</div>
+<div class="bg-surface rounded-14px p-4 border border-border flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-[#E0E7FF] flex items-center justify-center text-[#4338CA]">
+<span class="material-symbols-outlined">book</span>
+</div>
+<div>
+<p class="text-sm text-text-soft font-medium">Subjects</p>
+<p class="text-2xl font-bold text-accent">4</p>
+</div>
+</div>
+<div class="bg-surface rounded-14px p-4 border border-border flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-[#FEF3C7] flex items-center justify-center text-[#B45309]">
+<span class="material-symbols-outlined">quiz</span>
+</div>
+<div>
+<p class="text-sm text-text-soft font-medium">Quiz Avg</p>
+<p class="text-2xl font-bold text-accent">67.2%</p>
+</div>
+</div>
+<div class="bg-surface rounded-14px p-4 border border-border flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-[#DCFCE7] flex items-center justify-center text-[#15803D]">
+<span class="material-symbols-outlined">task_alt</span>
+</div>
+<div>
+<p class="text-sm text-text-soft font-medium">Syllabus</p>
+<p class="text-2xl font-bold text-accent">65%</p>
+</div>
+</div>
+</div>
+<!-- Main Bento Grid -->
+<div class="grid grid-cols-12 gap-6">
+<!-- Hero Stat 1: Attendance -->
+<div class="col-span-6 bg-surface rounded-14px p-6 border border-border relative overflow-hidden flex flex-col justify-between">
+<!-- Subtle background decoration -->
+<div class="absolute -right-10 -top-10 w-40 h-40 bg-status-green opacity-5 rounded-full blur-2xl"></div>
+<div class="flex justify-between items-start relative z-10">
+<div>
+<h3 class="font-headline font-semibold text-lg text-accent flex items-center gap-2">
+                                Class Attendance
+                                <span class="bg-status-green/10 text-status-green text-xs px-2 py-0.5 rounded-full font-bold">Excellent</span>
+</h3>
+<p class="text-sm text-text-soft mt-1">Average for CSE-3A</p>
+</div>
+<button class="text-text-soft hover:text-accent"><span class="material-symbols-outlined">more_horiz</span></button>
+</div>
+<div class="mt-8 flex items-end justify-between relative z-10">
+<div>
+<div class="text-5xl font-black text-status-green tracking-tight">78.4<span class="text-2xl">%</span></div>
+<p class="text-sm text-status-green flex items-center gap-1 mt-2 font-medium">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+                                Above 75% threshold
+                            </p>
+</div>
+<!-- CSS Sparkline representation -->
+<div class="w-32 h-16 flex items-end gap-1 opacity-80">
+<div class="w-full bg-status-green/20 rounded-t-sm h-[40%]"></div>
+<div class="w-full bg-status-green/20 rounded-t-sm h-[50%]"></div>
+<div class="w-full bg-status-green/30 rounded-t-sm h-[45%]"></div>
+<div class="w-full bg-status-green/40 rounded-t-sm h-[60%]"></div>
+<div class="w-full bg-status-green/50 rounded-t-sm h-[75%]"></div>
+<div class="w-full bg-status-green rounded-t-sm h-[85%]"></div>
+</div>
+</div>
+</div>
+<!-- Hero Stat 2: Need Attention -->
+<div class="col-span-6 bg-surface rounded-14px p-6 border border-status-red/30 relative overflow-hidden flex flex-col">
+<div class="absolute -right-10 -bottom-10 w-40 h-40 bg-status-red opacity-5 rounded-full blur-2xl"></div>
+<div class="flex justify-between items-start relative z-10">
+<div>
+<h3 class="font-headline font-semibold text-lg text-accent flex items-center gap-2">
+                                Needs Attention
+                                <span class="bg-status-red text-white text-xs px-2 py-0.5 rounded-full font-bold flex items-center justify-center min-w-[24px]">3</span>
+</h3>
+<p class="text-sm text-text-soft mt-1">Students below 75% attendance</p>
+</div>
+<span class="material-symbols-outlined text-status-red bg-status-red/10 p-2 rounded-lg">warning</span>
+</div>
+<div class="mt-6 flex-1 relative z-10">
+<ul class="flex flex-col gap-3">
+<li class="flex items-center justify-between bg-background/50 p-2 rounded-lg border border-border/50">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-accent-tint flex items-center justify-center text-xs font-bold text-accent">PS</div>
+<span class="text-sm font-medium text-accent">Priya Singh</span>
+</div>
+<span class="text-sm font-bold text-status-red">68%</span>
+</li>
+<li class="flex items-center justify-between bg-background/50 p-2 rounded-lg border border-border/50">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-accent-tint flex items-center justify-center text-xs font-bold text-accent">AP</div>
+<span class="text-sm font-medium text-accent">Anita Patel</span>
+</div>
+<span class="text-sm font-bold text-status-red">71%</span>
+</li>
+<li class="flex items-center justify-between bg-background/50 p-2 rounded-lg border border-border/50">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-accent-tint flex items-center justify-center text-xs font-bold text-accent">SG</div>
+<span class="text-sm font-medium text-accent">Sanjay Gupta</span>
+</div>
+<span class="text-sm font-bold text-status-red">72%</span>
+</li>
+</ul>
+</div>
+<button class="mt-4 w-full bg-white border border-border hover:bg-surface-muted text-accent font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm relative z-10 shadow-sm">
+                        Review Students
+                        <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+<!-- Today's Classes -->
+<div class="col-span-8 bg-surface rounded-14px p-6 border border-border">
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-headline font-semibold text-lg text-accent">Today's Schedule</h3>
+<a class="text-sm text-[#0D746A] hover:underline font-medium" href="#">View Full Timetable</a>
+</div>
+<div class="flex flex-col gap-4 relative">
+<!-- Timeline line -->
+<div class="absolute left-16 top-4 bottom-4 w-px bg-border z-0"></div>
+<!-- Past Class -->
+<div class="flex items-start gap-6 relative z-10 group">
+<div class="w-12 text-right pt-1 shrink-0">
+<p class="text-xs font-bold text-text-soft">09:00</p>
+<p class="text-[10px] text-text-muted">AM</p>
+</div>
+<div class="w-4 h-4 rounded-full bg-surface border-4 border-border shrink-0 mt-1 relative"></div>
+<div class="flex-1 bg-background/50 border border-border rounded-xl p-4 opacity-70">
+<div class="flex justify-between items-start">
+<div>
+<h4 class="font-bold text-text-soft line-through">Data Structures</h4>
+<p class="text-xs text-text-muted mt-1">CSE-3B • Room 302</p>
+</div>
+<span class="bg-surface-muted text-text-soft text-xs px-2 py-1 rounded-md flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">check</span> Done
+                                    </span>
+</div>
+</div>
+</div>
+<!-- Current/Active Class -->
+<div class="flex items-start gap-6 relative z-10">
+<div class="w-12 text-right pt-1 shrink-0">
+<p class="text-xs font-bold text-[#0D746A]">11:30</p>
+<p class="text-[10px] text-[#0D746A]">AM</p>
+</div>
+<div class="w-4 h-4 rounded-full bg-[#0D746A] shadow-[0_0_0_4px_rgba(13,116,106,0.2)] shrink-0 mt-1"></div>
+<div class="flex-1 bg-white border-2 border-[#0D746A]/30 shadow-sm rounded-xl p-4 relative overflow-hidden group">
+<!-- Gradient accent line -->
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-[#064E4B] to-[#14B8A6]"></div>
+<div class="flex justify-between items-center">
+<div>
+<h4 class="font-bold text-accent text-lg">Operating Systems</h4>
+<p class="text-sm text-text-soft mt-0.5 flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">location_on</span>
+                                            CSE-3A • Lab 2
+                                        </p>
+</div>
+<button class="bg-[#0D746A] hover:bg-[#064E4B] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center gap-2 opacity-0 group-hover:opacity-100 transform translate-x-2 group-hover:translate-x-0 duration-200">
+<span class="material-symbols-outlined text-[18px]">how_to_reg</span>
+                                        Take Attendance
+                                    </button>
+</div>
+</div>
+</div>
+<!-- Future Class -->
+<div class="flex items-start gap-6 relative z-10 group">
+<div class="w-12 text-right pt-1 shrink-0">
+<p class="text-xs font-bold text-text-soft">02:00</p>
+<p class="text-[10px] text-text-muted">PM</p>
+</div>
+<div class="w-4 h-4 rounded-full bg-surface border-2 border-border shrink-0 mt-1"></div>
+<div class="flex-1 bg-background/50 border border-border border-dashed rounded-xl p-4 hover:bg-surface transition-colors cursor-pointer">
+<div class="flex justify-between items-start">
+<div>
+<h4 class="font-bold text-accent">Computer Networks</h4>
+<p class="text-xs text-text-soft mt-1">CSE-3A • Room 405</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Pending Tasks -->
+<div class="col-span-4 bg-surface rounded-14px p-6 border border-border">
+<h3 class="font-headline font-semibold text-lg text-accent mb-4">Action Items</h3>
+<div class="flex flex-col gap-3">
+<div class="p-4 rounded-xl bg-status-red/5 border border-status-red/20 flex items-start gap-3">
+<div class="p-2 bg-white rounded-lg shadow-sm text-status-red shrink-0">
+<span class="material-symbols-outlined text-[20px]">person_alert</span>
+</div>
+<div>
+<h4 class="text-sm font-bold text-accent">3 Students Below Threshold</h4>
+<p class="text-xs text-text-soft mt-1">Attendance warning letters need to be generated.</p>
+</div>
+</div>
+<div class="p-4 rounded-xl bg-status-amber/5 border border-status-amber/20 flex items-start gap-3">
+<div class="p-2 bg-white rounded-lg shadow-sm text-status-amber shrink-0">
+<span class="material-symbols-outlined text-[20px]">menu_book</span>
+</div>
+<div>
+<h4 class="text-sm font-bold text-accent">35% Syllabus Covered</h4>
+<p class="text-xs text-text-soft mt-1">Slightly behind schedule for OS. Need to schedule extra class.</p>
+</div>
+</div>
+<div class="p-4 rounded-xl bg-status-blue/5 border border-status-blue/20 flex items-start gap-3">
+<div class="p-2 bg-white rounded-lg shadow-sm text-status-blue shrink-0">
+<span class="material-symbols-outlined text-[20px]">assignment_turned_in</span>
+</div>
+<div>
+<h4 class="text-sm font-bold text-accent">3 Classes Pending Marks</h4>
+<p class="text-xs text-text-soft mt-1">Upload mid-term marks for Data Structures.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Chart Placeholder -->
+<div class="col-span-12 bg-surface rounded-14px p-6 border border-border">
+<div class="flex justify-between items-center mb-6">
+<div>
+<h3 class="font-headline font-semibold text-lg text-accent">Attendance Trend</h3>
+<p class="text-sm text-text-soft">Weekly overview for CSE-3A</p>
+</div>
+<select class="bg-background border border-border text-sm rounded-lg px-3 py-1.5 focus:ring-[#0D746A] focus:border-[#0D746A] outline-none">
+<option>This Month</option>
+<option>Last Month</option>
+<option>Semester</option>
+</select>
+</div>
+<div class="h-64 w-full relative mt-4">
+<!-- Faux Y-Axis -->
+<div class="absolute left-0 top-0 bottom-8 w-8 flex flex-col justify-between text-[10px] text-text-muted text-right pr-2 border-r border-border/50">
+<span>100%</span>
+<span>75%</span>
+<span>50%</span>
+<span>25%</span>
+<span>0%</span>
+</div>
+<!-- 75% Reference Line -->
+<div class="absolute left-8 right-0 top-[25%] border-t-2 border-dashed border-status-amber/50 z-0 pointer-events-none flex items-center">
+<span class="bg-surface px-1 text-[10px] text-status-amber font-bold ml-2 -mt-4">Target 75%</span>
+</div>
+<!-- Grid lines -->
+<div class="absolute left-8 right-0 top-0 border-t border-border/20"></div>
+<div class="absolute left-8 right-0 top-[50%] border-t border-border/20"></div>
+<div class="absolute left-8 right-0 top-[75%] border-t border-border/20"></div>
+<div class="absolute left-8 right-0 bottom-8 border-t border-border/50"></div>
+<!-- Fake Area Chart SVG -->
+<div class="absolute left-8 right-0 top-0 bottom-8 z-10 overflow-hidden">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 1000 200">
+<defs>
+<lineargradient id="gradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#0D746A" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#0D746A" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0,150 C100,120 200,80 300,90 C400,100 500,40 600,45 C700,50 800,20 900,25 L1000,30 L1000,200 L0,200 Z" fill="url(#gradient)"></path>
+<path d="M0,150 C100,120 200,80 300,90 C400,100 500,40 600,45 C700,50 800,20 900,25 L1000,30" fill="none" stroke="#0D746A" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"></path>
+<!-- Data points -->
+<circle cx="300" cy="90" fill="white" r="4" stroke="#0D746A" stroke-width="2"></circle>
+<circle cx="600" cy="45" fill="white" r="4" stroke="#0D746A" stroke-width="2"></circle>
+<circle cx="900" cy="25" fill="white" r="4" stroke="#0D746A" stroke-width="2"></circle>
+</svg>
+</div>
+<!-- Faux X-Axis -->
+<div class="absolute left-8 right-0 bottom-0 h-8 flex justify-between items-end text-[10px] text-text-muted px-4">
+<span>Week 1</span>
+<span>Week 2</span>
+<span>Week 3</span>
+<span>Week 4</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

@@ -26,6 +26,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ThemeToggle } from '../components/ui/ThemeToggle';
 import type { QuizAttemptSessionInfo, QuizPayloadNoAnswers } from '@domain/services/rosterService';
 import type { SubmitAttemptOutcome } from '@data/access/parsers';
 import type { QuizAttemptDetailQuestion } from '@data/access/quizAccess';
@@ -396,25 +397,25 @@ export default function QuizAttemptView({
 
     if (showAnswerSheet) {
       return (
-        <div className="bg-[#f8f9ff] min-h-screen font-['Inter'] text-[#0d1c2e] pb-[100px]">
-          <header className="sticky top-0 z-20 bg-[#ffffff] border-b border-[#e6eeff] px-4 py-4 shadow-sm flex items-center justify-between">
+        <div className="bg-transparent min-h-screen font-['Inter'] text-[#0d1c2e] dark:text-[#ffffff] pb-[100px]">
+          <header className="sticky top-0 z-20 bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl border-b border-white/20 px-4 py-4 shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73] flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setShowAnswerSheet(false)}
-                className="w-9 h-9 rounded-full bg-[#f0f4ff] hover:bg-[#e6eeff] text-[#15157d] flex items-center justify-center transition-colors"
+                className="w-9 h-9 rounded-full bg-[#dde1e7] shadow-[inset_2px_2px_5px_#BABECC,inset_-2px_-2px_5px_#ffffff73] dark:bg-[#0f172a] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] hover:bg-[#e6eeff] dark:bg-[#3730a3] text-[#15157d] dark:text-[#818cf8] flex items-center justify-center transition-colors"
                 title="Back to Summary"
               >
                 <span className="material-symbols-outlined text-[20px]">arrow_back</span>
               </button>
               <div>
-                <h1 className="font-bold text-[18px] text-[#0d1c2e] leading-tight">Answer Sheet & Review</h1>
-                <p className="text-[12px] text-[#464652]">Detailed breakdown of your answers</p>
+                <h1 className="font-bold text-[18px] text-[#0d1c2e] dark:text-[#ffffff] leading-tight">Answer Sheet & Review</h1>
+                <p className="text-[12px] text-[#464652] dark:text-[#cbd5e1]">Detailed breakdown of your answers</p>
               </div>
             </div>
             <div className="text-right">
-              <span className="font-bold text-[18px] text-[#15157d]">{phase.score}/{phase.totalMarks}</span>
-              <span className="text-[11px] text-[#464652] block font-semibold uppercase">Score</span>
+              <span className="font-bold text-[18px] text-[#15157d] dark:text-[#818cf8]">{phase.score}/{phase.totalMarks}</span>
+              <span className="text-[11px] text-[#464652] dark:text-[#cbd5e1] block font-semibold uppercase">Score</span>
             </div>
           </header>
 
@@ -444,25 +445,25 @@ export default function QuizAttemptView({
                 const isUnanswered = q.studentAnswerIndex === null;
 
                 return (
-                  <div key={q.questionId || idx} className="bg-[#ffffff] rounded-2xl p-5 shadow-[0px_2px_12px_rgba(46,49,146,0.04)] border border-[#e6eeff]">
+                  <div key={q.questionId || idx} className="bg-white/40 dark:bg-[#1e293b]/40 backdrop-blur-xl rounded-2xl shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] border border-white/20 dark:border-white/10 p-5 shadow-[0px_2px_12px_rgba(46,49,146,0.04)] border border-white/20">
                     <div className="flex items-center justify-between mb-3">
-                      <span className="font-bold text-[13px] text-[#15157d] uppercase tracking-wider">Question {idx + 1}</span>
+                      <span className="font-bold text-[13px] text-[#15157d] dark:text-[#818cf8] uppercase tracking-wider">Question {idx + 1}</span>
                       {isCorrect && <span className="inline-flex items-center gap-1 bg-[#e6f4ea] text-[#137333] font-semibold text-[12px] px-3 py-1 rounded-full border border-[#ceead6]"><span className="material-symbols-outlined text-[14px]">check</span> Correct</span>}
                       {isIncorrect && <span className="inline-flex items-center gap-1 bg-[#fce8e6] text-[#c5221f] font-semibold text-[12px] px-3 py-1 rounded-full border border-[#fad2cf]"><span className="material-symbols-outlined text-[14px]">close</span> Incorrect</span>}
                       {isUnanswered && <span className="inline-flex items-center gap-1 bg-[#f1f3f4] text-[#5f6368] font-semibold text-[12px] px-3 py-1 rounded-full border border-[#e3e5e8]"><span className="material-symbols-outlined text-[14px]">remove</span> Unanswered</span>}
                     </div>
-                    <p className="font-semibold text-[15px] text-[#0d1c2e] mb-4 leading-relaxed">{q.text}</p>
+                    <p className="font-semibold text-[15px] text-[#0d1c2e] dark:text-[#ffffff] mb-4 leading-relaxed">{q.text}</p>
                     <div className="flex flex-col gap-2">
                       {q.options.map((optText: string, optIdx: number) => {
                         const isCorrectOption = q.correctIndex !== -1 && optIdx === q.correctIndex;
                         const isStudentChoice = optIdx === q.studentAnswerIndex;
-                        let optionStyle = "border-[#e6eeff] bg-[#ffffff] text-[#464652]";
+                        let optionStyle = "border-white/20 bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl text-[#464652] dark:text-[#cbd5e1]";
                         let badge = null;
                         if (isCorrectOption) {
-                          optionStyle = "border-[#34a853] bg-[#f6fbf7] text-[#137333] font-semibold shadow-sm";
+                          optionStyle = "border-[#34a853] bg-[#f6fbf7] text-[#137333] font-semibold shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73]";
                           badge = <span className="ml-auto inline-flex items-center gap-1 text-[12px] font-bold text-[#137333] bg-[#e6f4ea] px-2.5 py-0.5 rounded-full border border-[#ceead6]"><span className="material-symbols-outlined text-[14px]">check_circle</span> Correct Answer</span>;
                         } else if (isStudentChoice) {
-                          optionStyle = "border-[#ea4335] bg-[#fef7f6] text-[#c5221f] font-semibold shadow-sm";
+                          optionStyle = "border-[#ea4335] bg-[#fef7f6] text-[#c5221f] font-semibold shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73]";
                           badge = <span className="ml-auto inline-flex items-center gap-1 text-[12px] font-bold text-[#c5221f] bg-[#fce8e6] px-2.5 py-0.5 rounded-full border border-[#fad2cf]"><span className="material-symbols-outlined text-[14px]">cancel</span> Your Answer</span>;
                         }
                         return (
@@ -479,22 +480,22 @@ export default function QuizAttemptView({
               })}
             </div>
           </main>
-          <div className="fixed bottom-0 left-0 right-0 bg-[#ffffff] border-t border-[#e6eeff] p-4 shadow-[0px_-4px_20px_rgba(0,0,0,0.05)] flex items-center gap-3 z-30">
-            <button type="button" onClick={() => setShowAnswerSheet(false)} className="flex-1 bg-[#f0f4ff] hover:bg-[#e6eeff] text-[#15157d] font-semibold py-3.5 px-4 rounded-xl text-[14px] transition-colors flex items-center justify-center gap-2"><span className="material-symbols-outlined text-[18px]">arrow_back</span>Back to Score</button>
-            <button type="button" onClick={() => void signOut()} className="flex-1 bg-[#15157d] hover:bg-[#0c0092] text-white font-semibold py-3.5 px-4 rounded-xl text-[14px] transition-colors flex items-center justify-center gap-2 shadow-md"><span className="material-symbols-outlined text-[18px]">home</span>Return to Dashboard</button>
+          <div className="fixed bottom-0 left-0 right-0 bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl border-t border-white/20 p-4 shadow-[0px_-4px_20px_rgba(0,0,0,0.05)] flex items-center gap-3 z-30">
+            <button type="button" onClick={() => setShowAnswerSheet(false)} className="flex-1 bg-[#dde1e7] shadow-[inset_2px_2px_5px_#BABECC,inset_-2px_-2px_5px_#ffffff73] dark:bg-[#0f172a] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] hover:bg-[#e6eeff] dark:bg-[#3730a3] text-[#15157d] dark:text-[#818cf8] font-semibold py-3.5 px-4 rounded-xl text-[14px] transition-colors flex items-center justify-center gap-2"><span className="material-symbols-outlined text-[18px]">arrow_back</span>Back to Score</button>
+            <button type="button" onClick={() => void signOut()} className="flex-1 bg-[#15157d] dark:bg-[#818cf8] hover:bg-[#ba1a1a] dark:hover:bg-[#ff5449] text-white font-semibold py-3.5 px-4 rounded-xl text-[14px] transition-colors flex items-center justify-center gap-2 shadow-[4px_4px_8px_#BABECC,-4px_-4px_8px_#ffffff73] dark:shadow-[4px_4px_8px_#020617,-4px_-4px_8px_#1e293b73]"><span className="material-symbols-outlined text-[18px]">logout</span>Logout</button>
           </div>
         </div>
       );
     }
 
     return (
-      <div className="bg-[#f8f9ff] min-h-screen font-['Inter'] text-[#0d1c2e] relative overflow-hidden flex flex-col items-center justify-center pb-[env(safe-area-inset-bottom)]">
+      <div className="bg-transparent min-h-screen font-['Inter'] text-[#0d1c2e] dark:text-[#ffffff] relative overflow-hidden flex flex-col items-center justify-center pb-[env(safe-area-inset-bottom)]">
         <main className="w-full h-full flex flex-col px-4 py-12 z-10 max-w-md mx-auto">
           <header className="text-center mb-10">
-            <h1 className="font-semibold text-[32px] text-[#15157d] mb-2 tracking-tight">
+            <h1 className="font-semibold text-[32px] text-[#15157d] dark:text-[#818cf8] mb-2 tracking-tight">
               {phase.kind === 'scored' ? (phase.auto ? 'Auto-submitted' : 'Quiz Completed!') : 'Already Attempted'}
             </h1>
-            <p className="text-[18px] text-[#464652]">
+            <p className="text-[18px] text-[#464652] dark:text-[#cbd5e1]">
               {phase.kind === 'scored' 
                 ? "Your score has been successfully recorded." 
                 : messages.auth.alreadyAttempted}
@@ -521,23 +522,23 @@ export default function QuizAttemptView({
                 </defs>
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="font-bold text-[32px] text-[#15157d]">{percent}%</span>
-                <span className="font-semibold text-[13px] text-[#464652] uppercase tracking-wider mt-1">Score</span>
+                <span className="font-bold text-[32px] text-[#15157d] dark:text-[#818cf8]">{percent}%</span>
+                <span className="font-semibold text-[13px] text-[#464652] dark:text-[#cbd5e1] uppercase tracking-wider mt-1">Score</span>
               </div>
             </div>
             <div className="absolute inset-0 bg-gradient-to-tr from-[#15157d]/5 to-[#d4af37]/5 rounded-full pointer-events-none blur-xl"></div>
           </div>
 
           <div className="grid grid-cols-2 gap-4 mb-10">
-            <div className="bg-[#ffffff] rounded-xl p-4 flex flex-col items-center justify-center shadow-[0px_4px_20px_rgba(46,49,146,0.05)] border border-[#e6eeff]">
-              <span className="material-symbols-outlined text-[#15157d] mb-2 text-[28px]" style={{ fontVariationSettings: "'FILL' 1" }}>fact_check</span>
-              <span className="font-semibold text-[24px] text-[#0d1c2e]">{phase.score}/{phase.totalMarks}</span>
-              <span className="font-semibold text-[13px] text-[#464652] text-center mt-1">Total Marks</span>
+            <div className="bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl rounded-xl p-4 flex flex-col items-center justify-center  border border-white/20">
+              <span className="material-symbols-outlined text-[#15157d] dark:text-[#818cf8] mb-2 text-[28px]" style={{ fontVariationSettings: "'FILL' 1" }}>fact_check</span>
+              <span className="font-semibold text-[24px] text-[#0d1c2e] dark:text-[#ffffff]">{phase.score}/{phase.totalMarks}</span>
+              <span className="font-semibold text-[13px] text-[#464652] dark:text-[#cbd5e1] text-center mt-1">Total Marks</span>
             </div>
-            <div className="bg-[#ffffff] rounded-xl p-4 flex flex-col items-center justify-center shadow-[0px_4px_20px_rgba(46,49,146,0.05)] border border-[#e6eeff]">
+            <div className="bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl rounded-xl p-4 flex flex-col items-center justify-center  border border-white/20">
               <span className="material-symbols-outlined text-[#d4af37] mb-2 text-[28px]" style={{ fontVariationSettings: "'FILL' 1" }}>timer</span>
-              <span className="font-semibold text-[24px] text-[#0d1c2e]">{formatTime(postResultSecondsLeft)}</span>
-              <span className="font-semibold text-[13px] text-[#464652] text-center mt-1">Auto-close in</span>
+              <span className="font-semibold text-[24px] text-[#0d1c2e] dark:text-[#ffffff]">{formatTime(postResultSecondsLeft)}</span>
+              <span className="font-semibold text-[13px] text-[#464652] dark:text-[#cbd5e1] text-center mt-1">Auto-close in</span>
             </div>
           </div>
 
@@ -545,7 +546,7 @@ export default function QuizAttemptView({
             <button 
               onClick={handleOpenAnswerSheet}
               disabled={loadingReview}
-              className="w-full bg-[#15157d] text-white rounded-full py-4 font-semibold text-[14px] flex items-center justify-center gap-2 shadow-[0px_4px_20px_rgba(46,49,146,0.05)] hover:bg-[#0c0092] transition-colors focus:outline-none focus:ring-4 focus:ring-[#15157d]/20 active:scale-95 disabled:opacity-50"
+              className="w-full bg-[#15157d] dark:bg-[#818cf8] text-white rounded-full py-4 font-semibold text-[14px] flex items-center justify-center gap-2  hover:bg-[#0c0092] dark:bg-[#6366f1] transition-colors focus:outline-none focus:ring-4 focus:ring-[#15157d]/20 active:scale-95 disabled:opacity-50"
             >
               {loadingReview ? (
                 <><span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span> Loading answer sheet...</>
@@ -555,10 +556,10 @@ export default function QuizAttemptView({
             </button>
             <button 
               onClick={() => void signOut()}
-              className="w-full bg-[#ffffff] text-[#15157d] border border-[#e6eeff] rounded-full py-3.5 font-semibold text-[14px] flex items-center justify-center gap-2 shadow-sm hover:bg-[#f0f4ff] transition-colors active:scale-95"
+              className="w-full bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl text-[#ba1a1a] dark:text-[#ff5449] border border-white/20 rounded-full py-3.5 font-semibold text-[14px] flex items-center justify-center gap-2 shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73] hover:bg-[#fce8e6] dark:hover:bg-[#410002] transition-colors active:scale-95"
             >
-              <span className="material-symbols-outlined text-[18px]">home</span>
-              Return to Dashboard
+              <span className="material-symbols-outlined text-[18px]">logout</span>
+              Logout
             </button>
           </div>
         </main>
@@ -594,34 +595,37 @@ export default function QuizAttemptView({
   const isSubmitting = phase.kind === 'submitting';
 
   return (
-    <div className="min-h-screen bg-[#f8f9ff] text-[#0d1c2e] flex flex-col pb-[env(safe-area-inset-bottom)] font-['Inter']">
+    <div className="min-h-screen bg-transparent text-[#0d1c2e] dark:text-[#ffffff] flex flex-col pb-[env(safe-area-inset-bottom)] font-['Inter'] transition-colors duration-500">
       {/* --- Sticky top: title, progress, PROMINENT timer --------------- */}
-      <header className="sticky top-0 z-20 bg-[#f8f9ff] shadow-sm w-full mx-auto">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 h-16 w-full relative">
-          <button type="button" onClick={handleOpenReview} className="flex items-center justify-center p-2 text-[#464652] hover:bg-[#dce9ff] rounded-full transition-colors active:scale-95 duration-200">
+      <header className="sticky top-0 z-20 bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73] w-full mx-auto transition-colors duration-500">
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 h-16 w-full relative gap-2">
+          <button type="button" onClick={handleOpenReview} className="flex items-center justify-center p-2 text-[#464652] dark:text-[#cbd5e1] hover:bg-[#dce9ff] rounded-full transition-colors active:scale-95 duration-200">
             <span className="material-symbols-outlined">menu</span>
           </button>
           
-          <h1 className="font-semibold text-[24px] text-[#15157d] tracking-tight truncate px-4">
+          <h1 className="font-semibold text-[24px] text-[#15157d] dark:text-[#818cf8] tracking-tight truncate px-4 flex-1">
             {quiz.title ?? 'Quiz'}
           </h1>
           
-          <div className={`flex items-center gap-2 font-bold px-3 py-1.5 rounded-full text-white shadow-md transition-colors duration-300 ${remainingSeconds !== null && remainingSeconds < 60 ? 'bg-[#ba1a1a] animate-pulse' : 'bg-[#15157d]'}`}>
-            <span className="material-symbols-outlined text-[18px]">timer</span>
-            <span className="text-[14px] tracking-widest tabular-nums">{formatTime(remainingSeconds)}</span>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <div className={`flex items-center gap-2 font-bold px-3 py-1.5 rounded-full text-white shadow-[4px_4px_8px_#BABECC,-4px_-4px_8px_#ffffff73] dark:shadow-[4px_4px_8px_#020617,-4px_-4px_8px_#1e293b73] transition-colors duration-300 ${remainingSeconds !== null && remainingSeconds < 60 ? 'bg-[#ba1a1a] animate-pulse' : 'bg-[#15157d] dark:bg-[#818cf8]'}`}>
+              <span className="material-symbols-outlined text-[18px]">timer</span>
+              <span className="text-[14px] tracking-widest tabular-nums">{formatTime(remainingSeconds)}</span>
+            </div>
           </div>
         </div>
         
         {/* Progress Bar */}
-        <div className="w-full max-w-4xl mx-auto h-1 bg-[#d5e3fc]">
+        <div className="w-full max-w-4xl mx-auto h-1 bg-[#d5e3fc] dark:bg-[#1e1b4b]">
           <div 
-            className="h-full bg-[#15157d] transition-[width] duration-1000 ease-linear" 
+            className="h-full bg-[#15157d] dark:bg-[#818cf8] transition-[width] duration-1000 ease-linear" 
             style={{ width: `${progressPercent}%` }}
           ></div>
         </div>
 
         {/* --- Question palette strip (horizontal, scrollable) --------- */}
-        <div className="mx-auto max-w-4xl px-4 py-2 bg-[#f8f9ff]">
+        <div className="mx-auto max-w-4xl px-4 py-2 bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl">
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide" role="tablist" aria-label="Questions">
             {displayQuestions.map((q, i) => {
               const isAnswered = answers[q.id] !== undefined;
@@ -629,13 +633,13 @@ export default function QuizAttemptView({
               let cls =
                 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition-colors ';
               if (isAnswered && isMarked) {
-                cls += 'border-[#0c0092] bg-[#0c0092] text-white ring-2 ring-yellow-400';
+                cls += 'border-[#0c0092] bg-[#0c0092] dark:bg-[#6366f1] text-white ring-2 ring-yellow-400';
               } else if (isAnswered) {
-                cls += 'border-[#15157d] bg-[#eff4ff] text-[#15157d]';
+                cls += 'border-[#15157d] dark:border-[#818cf8] bg-[#eff4ff] dark:bg-[#0f172a] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] text-[#15157d] dark:text-[#818cf8]';
               } else if (isMarked) {
                 cls += 'border-yellow-500 bg-yellow-50 text-yellow-600';
               } else {
-                cls += 'border-[#c7c5d4] bg-[#ffffff] text-[#464652] hover:bg-[#e6eeff]';
+                cls += 'border-white/20 dark:border-[#334155] bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl text-[#464652] dark:text-[#cbd5e1] hover:bg-[#e6eeff] dark:bg-[#3730a3]';
               }
               return (
                 <button
@@ -681,7 +685,7 @@ export default function QuizAttemptView({
               <article
                 key={question.id}
                 id={`question-${question.id}`}
-                className={`scroll-mt-[10rem] rounded-xl shadow-[0px_4px_20px_rgba(46,49,146,0.05)] bg-[#ffffff] p-6 relative transition-[border-color,box-shadow] duration-200 ease-standard border ${
+                className={`scroll-mt-[10rem] rounded-xl  bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl p-6 relative transition-[border-color,box-shadow] duration-200 ease-standard border ${
                   isMarked ? 'border-yellow-400/80 ring-2 ring-yellow-400/20' : 'border-transparent'
                 }`}
                 aria-disabled={isSubmitting}
@@ -690,7 +694,7 @@ export default function QuizAttemptView({
                   type="button"
                   onClick={() => toggleMarkForReview(question.id)}
                   className={`absolute top-6 right-6 transition-colors ${
-                    isMarked ? 'text-yellow-500 hover:text-yellow-600' : 'text-[#c7c5d4] hover:text-[#15157d]'
+                    isMarked ? 'text-yellow-500 hover:text-yellow-600' : 'text-[#c7c5d4] hover:text-[#15157d] dark:hover:text-[#818cf8] dark:text-[#818cf8]'
                   }`}
                   aria-pressed={isMarked}
                   aria-label={isMarked ? 'Unmark question' : 'Mark for review'}
@@ -700,12 +704,12 @@ export default function QuizAttemptView({
                 </button>
                 
                 <div className="mb-4 flex items-center gap-2">
-                  <span className="px-2 py-1 bg-[#e6eeff] text-[#464652] font-semibold text-[10px] rounded uppercase tracking-wide">
+                  <span className="px-2 py-1 bg-[#e6eeff] dark:bg-[#3730a3] text-[#464652] dark:text-[#cbd5e1] font-semibold text-[10px] rounded uppercase tracking-wide">
                     Question {qIndex + 1}
                   </span>
                 </div>
                 
-                <h2 className="text-[18px] leading-7 font-semibold text-[#0d1c2e] mb-6 pr-12 break-words">
+                <h2 className="text-[18px] leading-7 font-semibold text-[#0d1c2e] dark:text-[#ffffff] mb-6 pr-12 break-words">
                   {question.text}
                 </h2>
 
@@ -726,15 +730,15 @@ export default function QuizAttemptView({
                           disabled={isSubmitting}
                           className="peer sr-only"
                         />
-                        <div className={`flex items-center gap-4 p-4 rounded-xl shadow-[0px_4px_20px_rgba(46,49,146,0.05)] border transition-all min-h-[64px] ${
+                        <div className={`flex items-center gap-4 p-4 rounded-xl  border transition-all min-h-[64px] ${
                           selected 
-                            ? 'border-[#15157d] bg-[#e1e0ff] shadow-[0px_0px_0px_4px_rgba(99,102,241,0.2)]'
-                            : 'border-transparent bg-[#ffffff] hover:border-[#15157d] hover:bg-[#e6eeff]'
+                            ? 'border-[#15157d] dark:border-[#818cf8] bg-[#e1e0ff] shadow-[0px_0px_0px_4px_rgba(99,102,241,0.2)]'
+                            : 'border-transparent bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl hover:border-[#15157d] dark:border-[#818cf8] hover:bg-[#e6eeff] dark:bg-[#3730a3]'
                         }`}>
                           <div className={`flex-shrink-0 w-8 h-8 rounded-full border flex items-center justify-center font-semibold text-[13px] transition-colors relative ${
                             selected
-                              ? 'border-[#15157d] bg-[#15157d] text-white'
-                              : 'border-[#c7c5d4] text-[#464652]'
+                              ? 'border-[#15157d] dark:border-[#818cf8] bg-[#15157d] dark:bg-[#818cf8] text-white'
+                              : 'border-white/20 dark:border-[#334155] text-[#464652] dark:text-[#cbd5e1]'
                           }`}>
                             {selected ? (
                               <span className="material-symbols-outlined text-[16px] absolute" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
@@ -743,7 +747,7 @@ export default function QuizAttemptView({
                             )}
                           </div>
                           <span className={`text-[16px] leading-6 flex-1 break-words ${
-                            selected ? 'text-[#04006d] font-semibold' : 'text-[#0d1c2e] group-hover:text-[#15157d]'
+                            selected ? 'text-[#04006d] font-semibold' : 'text-[#0d1c2e] dark:text-[#ffffff] group-hover:text-[#15157d] dark:hover:text-[#818cf8] dark:text-[#818cf8]'
                           }`}>
                             {option}
                           </span>
@@ -759,7 +763,7 @@ export default function QuizAttemptView({
                       type="button"
                       onClick={() => clearAnswer(question.id)}
                       disabled={isSubmitting}
-                      className="text-sm font-medium text-[#777683] hover:text-[#ba1a1a] transition-colors flex items-center gap-1"
+                      className="text-sm font-medium text-[#777683] dark:text-[#94a3b8] hover:text-[#ba1a1a] transition-colors flex items-center gap-1"
                     >
                       <span className="material-symbols-outlined text-[16px]">backspace</span>
                       Clear selection
@@ -773,7 +777,7 @@ export default function QuizAttemptView({
 
         {/* --- Sticky Bottom Action Bar --------------------------------------- */}
         <nav className="fixed bottom-0 left-0 w-full flex justify-center z-50">
-          <div className="w-full max-w-4xl flex justify-between items-center px-4 py-3 bg-[#f8f9ff] shadow-[0_-4px_20px_rgba(46,49,146,0.05)] border-t border-[#dce9ff]">
+          <div className="w-full max-w-4xl flex justify-between items-center px-4 py-3 bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl shadow-[0_-4px_20px_rgba(46,49,146,0.05)] border-t border-[#dce9ff]">
             <div className="flex gap-2">
               <button
                 type="button"
@@ -782,7 +786,7 @@ export default function QuizAttemptView({
                   const targetIdx = currentIdx > 0 ? currentIdx - 1 : 0;
                   if (displayQuestions[targetIdx]) scrollToQuestion(displayQuestions[targetIdx].id);
                 }}
-                className="flex flex-col items-center justify-center text-[#464652] px-4 py-2 hover:bg-[#e6eeff] transition-colors rounded-lg active:scale-95"
+                className="flex flex-col items-center justify-center text-[#464652] dark:text-[#cbd5e1] px-4 py-2 hover:bg-[#e6eeff] dark:bg-[#3730a3] transition-colors rounded-lg active:scale-95"
               >
                 <span className="material-symbols-outlined mb-1 text-[20px]">expand_circle_up</span>
                 <span className="font-semibold text-[11px] uppercase tracking-wide">Prev Unanswered</span>
@@ -790,8 +794,8 @@ export default function QuizAttemptView({
             </div>
             
             <div className="flex items-center gap-4">
-              <div className="hidden sm:block text-sm text-[#464652]">
-                <span className="font-semibold text-[#0d1c2e]">{answeredCount}</span> answered
+              <div className="hidden sm:block text-sm text-[#464652] dark:text-[#cbd5e1]">
+                <span className="font-semibold text-[#0d1c2e] dark:text-[#ffffff]">{answeredCount}</span> answered
                 {unansweredCount > 0 && (
                   <>
                     {' · '}
@@ -803,7 +807,7 @@ export default function QuizAttemptView({
                 type="button"
                 onClick={handleOpenReview}
                 disabled={isSubmitting}
-                className="flex items-center justify-center bg-[#15157d] text-white rounded-full px-6 py-3 font-semibold text-[13px] shadow-md hover:bg-[#0c0092] hover:shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed group"
+                className="flex items-center justify-center bg-[#15157d] dark:bg-[#818cf8] text-white rounded-full px-6 py-3 font-semibold text-[13px] shadow-[4px_4px_8px_#BABECC,-4px_-4px_8px_#ffffff73] dark:shadow-[4px_4px_8px_#020617,-4px_-4px_8px_#1e293b73] hover:bg-[#0c0092] dark:bg-[#6366f1] hover:shadow-[inset_2px_2px_5px_#BABECC,inset_-2px_-2px_5px_#ffffff73] dark:hover:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed group"
               >
                 <span className="mr-2">
                   {isSubmitting && (phase as { auto?: boolean }).auto ? 'Auto-submitting…' : 'Review & Submit'}
@@ -825,20 +829,20 @@ export default function QuizAttemptView({
           aria-labelledby="review-title"
           className="fixed inset-0 bg-black/40 z-50 flex items-end justify-center motion-safe:animate-in motion-safe:fade-in backdrop-blur-sm"
         >
-          <div className="w-full max-w-lg bg-[#f8f9ff] rounded-t-3xl shadow-[0px_-4px_20px_rgba(46,49,146,0.15)] flex flex-col max-h-[85vh] motion-safe:animate-in motion-safe:slide-in-from-bottom-full">
+          <div className="w-full max-w-lg bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl rounded-t-3xl shadow-[0px_-4px_20px_rgba(46,49,146,0.15)] flex flex-col max-h-[85vh] motion-safe:animate-in motion-safe:slide-in-from-bottom-full">
             {/* Drag Handle / Header */}
-            <div className="flex flex-col items-center pt-4 pb-2 border-b border-[#dce9ff] bg-[#f8f9ff] rounded-t-3xl shrink-0 px-6 relative">
+            <div className="flex flex-col items-center pt-4 pb-2 border-b border-[#dce9ff] bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl rounded-t-3xl shrink-0 px-6 relative">
               <button 
                 type="button" 
                 onClick={() => setReviewOpen(false)}
-                className="absolute right-6 top-4 text-[#464652] hover:bg-[#e6eeff] p-2 rounded-full transition-colors"
+                className="absolute right-6 top-4 text-[#464652] dark:text-[#cbd5e1] hover:bg-[#e6eeff] dark:bg-[#3730a3] p-2 rounded-full transition-colors"
               >
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
               <div className="w-12 h-1.5 bg-[#c7c5d4] rounded-full mb-4"></div>
               <div className="flex justify-between items-center w-full">
-                <h2 id="review-title" className="text-[24px] leading-8 font-semibold text-[#0d1c2e] tracking-tight">Review Exam</h2>
-                <div className="flex items-center gap-2 bg-[#2e3192] text-white rounded-full px-4 py-1.5 shadow-sm">
+                <h2 id="review-title" className="text-[24px] leading-8 font-semibold text-[#0d1c2e] dark:text-[#ffffff] tracking-tight">Review Exam</h2>
+                <div className="flex items-center gap-2 bg-[#2e3192] text-white rounded-full px-4 py-1.5 shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73]">
                   <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: "'FILL' 1" }}>timer</span>
                   <span className="font-semibold text-[13px] tabular-nums tracking-wide">{formatTime(remainingSeconds)}</span>
                 </div>
@@ -849,32 +853,32 @@ export default function QuizAttemptView({
             <div className="flex-1 overflow-y-auto px-6 py-6">
               {/* Metrics Row */}
               <div className="grid grid-cols-3 gap-3 mb-6">
-                <div className="flex flex-col items-center gap-2 bg-[#eff4ff] border border-[#c7c5d4] rounded-xl p-3 shadow-sm">
+                <div className="flex flex-col items-center gap-2 bg-[#eff4ff] dark:bg-[#0f172a] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] border border-white/20 dark:border-[#334155] rounded-xl p-3 shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73]">
                   <div className="w-8 h-8 rounded-full bg-[#e6f4ea] text-[#137333] flex items-center justify-center">
                     <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
                   </div>
                   <div className="text-center">
-                    <span className="block font-semibold text-[16px] text-[#0d1c2e]">{answeredCount}</span>
-                    <span className="block text-[10px] text-[#777683] font-semibold uppercase tracking-wider">Answered</span>
+                    <span className="block font-semibold text-[16px] text-[#0d1c2e] dark:text-[#ffffff]">{answeredCount}</span>
+                    <span className="block text-[10px] text-[#777683] dark:text-[#94a3b8] font-semibold uppercase tracking-wider">Answered</span>
                   </div>
                 </div>
                 
-                <div className="flex flex-col items-center gap-2 bg-[#eff4ff] border border-[#ffdad6] rounded-xl p-3 shadow-sm">
+                <div className="flex flex-col items-center gap-2 bg-[#eff4ff] dark:bg-[#0f172a] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] border border-[#ffdad6] rounded-xl p-3 shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73]">
                   <div className="w-8 h-8 rounded-full bg-[#ffdad6] text-[#ba1a1a] flex items-center justify-center">
                     <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>error</span>
                   </div>
                   <div className="text-center">
-                    <span className="block font-semibold text-[16px] text-[#0d1c2e]">{unansweredCount}</span>
+                    <span className="block font-semibold text-[16px] text-[#0d1c2e] dark:text-[#ffffff]">{unansweredCount}</span>
                     <span className="block text-[10px] text-[#ba1a1a] font-semibold uppercase tracking-wider">Unanswered</span>
                   </div>
                 </div>
                 
-                <div className="flex flex-col items-center gap-2 bg-[#eff4ff] border border-[#fce8b2] rounded-xl p-3 shadow-sm">
+                <div className="flex flex-col items-center gap-2 bg-[#eff4ff] dark:bg-[#0f172a] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] border border-[#fce8b2] rounded-xl p-3 shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73]">
                   <div className="w-8 h-8 rounded-full bg-[#fef7e0] text-[#b06000] flex items-center justify-center">
                     <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>flag</span>
                   </div>
                   <div className="text-center">
-                    <span className="block font-semibold text-[16px] text-[#0d1c2e]">{markedCount}</span>
+                    <span className="block font-semibold text-[16px] text-[#0d1c2e] dark:text-[#ffffff]">{markedCount}</span>
                     <span className="block text-[10px] text-[#b06000] font-semibold uppercase tracking-wider">Marked</span>
                   </div>
                 </div>
@@ -883,14 +887,14 @@ export default function QuizAttemptView({
               {/* Attention List Header */}
               {(unansweredCount > 0 || markedCount > 0) ? (
                 <>
-                  <h3 className="text-[16px] leading-6 font-semibold text-[#464652] mb-3">Needs Attention</h3>
+                  <h3 className="text-[16px] leading-6 font-semibold text-[#464652] dark:text-[#cbd5e1] mb-3">Needs Attention</h3>
                   <div className="space-y-3 pb-4">
                     {displayQuestions.map((q, i) => {
                       const isAnswered = answers[q.id] !== undefined;
                       const isMarked = markedForReview.has(q.id);
                       if (isAnswered && !isMarked) return null;
                       return (
-                        <div key={q.id} className="flex items-center justify-between p-3 bg-[#ffffff] border border-[#c7c5d4] rounded-lg shadow-[0px_4px_20px_rgba(46,49,146,0.02)] transition-all">
+                        <div key={q.id} className="flex items-center justify-between p-3 bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl border border-white/20 dark:border-[#334155] rounded-lg shadow-[0px_4px_20px_rgba(46,49,146,0.02)] transition-all">
                           <div className="flex items-center gap-3">
                             {!isAnswered ? (
                               <span className="material-symbols-outlined text-[#ba1a1a]" style={{ fontVariationSettings: "'FILL' 1" }}>error</span>
@@ -898,7 +902,7 @@ export default function QuizAttemptView({
                               <span className="material-symbols-outlined text-[#b06000]" style={{ fontVariationSettings: "'FILL' 1" }}>flag</span>
                             )}
                             <div>
-                              <p className="font-semibold text-[13px] text-[#0d1c2e]">Question {i + 1}</p>
+                              <p className="font-semibold text-[13px] text-[#0d1c2e] dark:text-[#ffffff]">Question {i + 1}</p>
                               <p className={`text-[12px] ${!isAnswered ? 'text-[#ba1a1a]' : 'text-[#b06000]'}`}>
                                 {!isAnswered ? 'Unanswered' : 'Marked for Review'}
                               </p>
@@ -910,7 +914,7 @@ export default function QuizAttemptView({
                               setReviewOpen(false);
                               window.setTimeout(() => scrollToQuestion(q.id), 100);
                             }}
-                            className="font-semibold text-[13px] text-[#15157d] bg-[#eff4ff] px-4 py-2 rounded-lg hover:bg-[#dce9ff] transition-colors"
+                            className="font-semibold text-[13px] text-[#15157d] dark:text-[#818cf8] bg-[#eff4ff] dark:bg-[#0f172a] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] px-4 py-2 rounded-lg hover:bg-[#dce9ff] transition-colors"
                           >
                             Jump
                           </button>
@@ -920,18 +924,18 @@ export default function QuizAttemptView({
                   </div>
                 </>
               ) : (
-                <div className="py-8 text-center text-sm text-[#464652]">
+                <div className="py-8 text-center text-sm text-[#464652] dark:text-[#cbd5e1]">
                   <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#e6f4ea] text-[#137333] flex items-center justify-center">
                     <span className="material-symbols-outlined text-[32px]" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
                   </div>
-                  <h3 className="text-lg font-semibold text-[#0d1c2e] mb-1">All questions answered!</h3>
+                  <h3 className="text-lg font-semibold text-[#0d1c2e] dark:text-[#ffffff] mb-1">All questions answered!</h3>
                   <p>You're ready to submit your exam.</p>
                 </div>
               )}
             </div>
 
             {/* Sticky Footer */}
-            <div className="border-t border-[#dce9ff] bg-[#f8f9ff] px-6 py-4 shrink-0 shadow-[0px_-2px_10px_rgba(0,0,0,0.02)] pb-safe">
+            <div className="border-t border-[#dce9ff] bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl px-6 py-4 shrink-0 shadow-[0px_-2px_10px_rgba(0,0,0,0.02)] pb-safe">
               {unansweredCount > 0 && (
                 <p className="text-[#ba1a1a] text-center font-semibold text-[13px] mb-3">
                   <span className="material-symbols-outlined text-[14px] align-middle mr-1">warning</span>
@@ -941,7 +945,7 @@ export default function QuizAttemptView({
               <button 
                 type="button" 
                 onClick={handleConfirmSubmit}
-                className="w-full bg-gradient-to-r from-[#15157d] to-[#4f54b4] hover:from-[#0c0092] hover:to-[#3e4399] text-white font-semibold text-[14px] py-4 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                className="w-full bg-gradient-to-r from-[#15157d] to-[#4f54b4] hover:from-[#0c0092] hover:to-[#3e4399] text-white font-semibold text-[14px] py-4 rounded-xl shadow-[4px_4px_8px_#BABECC,-4px_-4px_8px_#ffffff73] dark:shadow-[4px_4px_8px_#020617,-4px_-4px_8px_#1e293b73] hover:shadow-[inset_2px_2px_5px_#BABECC,inset_-2px_-2px_5px_#ffffff73] dark:hover:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] transition-all active:scale-95 flex items-center justify-center gap-2"
               >
                 Submit
               </button>

@@ -12,6 +12,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@reticlehq/browser": "^2.2.0",
+    "@reticlehq/react": "^2.2.0",
     "@supabase/supabase-js": "^2.108.2",
     "framer-motion": "^12.42.2",
     "pdfjs-dist": "^4.6.82",

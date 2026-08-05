@@ -19,7 +19,6 @@ import {
   Checkbox,
   Badge,
   SkeletonLoader,
-  Popover,
 } from '@presentation/components/ui';
 
 export interface AttendanceOption {
@@ -74,12 +73,6 @@ export interface AttendancePersistence {
     readonly fromDate: string;
     readonly toDate: string;
   }): Promise<AttendanceRangeReportResult>;
-  loadStatusRangeReport?: (scope: {
-    readonly sectionId: string;
-    readonly subjectId?: string;
-    readonly fromDate: string;
-    readonly toDate: string;
-  }) => Promise<{ records: Array<{ date: string; status: string; studentId: string }> }>;
   loadMarkedSlots(scope: {
     readonly sectionId: string;
     readonly subjectId?: string;
@@ -370,103 +363,67 @@ const AttendanceTableRow = memo(function AttendanceTableRow({
   overallPercent: number | null;
   overallLoading: boolean;
   isSelected: boolean;
-  onStatusChange: (studentId: string, status: AttendanceStatus) => void;
-  onToggleSelection: (studentId: string, index: number, shiftKey: boolean) => void;
-  onClick?: (studentId: string) => void;
+  onStatusChange: (id: string, status: AttendanceStatus) => void;
+  onToggleSelection: (id: string, index: number, shiftKey: boolean) => void;
   index: number;
   disabled: boolean;
 }) {
   const studentCode = student.enrollmentNumber ?? student.id.slice(0, 8);
 
-  const initials = student.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  const statusColors: Record<AttendanceStatus, { activeClass: string }> = {
+    'present': { activeClass: 'bg-emerald-100 border-emerald-300 text-emerald-800' },
+    'absent': { activeClass: 'bg-red-100 border-red-300 text-red-800' },
+    'leave': { activeClass: 'bg-amber-100 border-amber-300 text-amber-800' },
+    'not-applicable': { activeClass: 'bg-sky-100 border-sky-300 text-sky-800' },
+  };
 
-  let percentColor = 'text-text-muted';
-  let percentBg = 'bg-transparent';
-  if (overallPercent !== null) {
-    if (overallPercent >= 75) { percentColor = 'text-[#166534]'; percentBg = 'bg-[#dcfce7]'; }
-    else if (overallPercent >= 60) { percentColor = 'text-[#854d0e]'; percentBg = 'bg-[#fef08a]'; }
-    else { percentColor = 'text-[#9f1239]'; percentBg = 'bg-[#ffe4e6]'; }
-  }
-
-  // Calculate pseudo-random streak based on ID for demo purposes
-  const pseudoStreak = student.id.length > 5 && student.id.charCodeAt(0) % 3 === 0 ? (student.id.charCodeAt(1) % 7) + 2 : 0;
-
-  const rowBg = status === 'absent' ? 'bg-red-50/80' : 'bg-white';
-  const leftIndicator = status === 'absent' ? 'bg-red-500' : 'bg-transparent';
-  
   return (
     <motion.tr
-      layout
-      initial={{ opacity: 0, y: 10, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ type: 'spring', stiffness: 400, damping: 30, delay: Math.min(index * 0.02, 0.2) }}
-      onClick={() => onClick?.(student.id)}
-      className={`group cursor-pointer transition-all duration-300 ${rowBg} hover:shadow-md hover:-translate-y-[2px] block sm:table-row bg-white rounded-xl sm:rounded-none mb-3 sm:mb-0 shadow-sm sm:shadow-none border border-border sm:border-transparent relative`}
+      initial={{ opacity: 0, y: 5 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.15, delay: Math.min(index * 0.01, 0.3) }}
+      className={`table-row hover:bg-surface-muted transition-colors ${isSelected ? 'bg-accent/5' : ''}`}
     >
-      <td className="hidden sm:table-cell w-8 sm:w-10 text-center py-3.5 rounded-l-xl relative">
-        <div className={`absolute left-0 top-1/2 -translate-y-1/2 h-2/3 w-[5px] rounded-r-md ${leftIndicator} transition-colors`} />
-        <span className="text-[11px] font-bold text-[#9ca3af] group-hover:text-text transition-colors">{index + 1}</span>
+      <td className="table-cell sticky left-0 z-10 w-12 text-center bg-inherit">
+        <Checkbox
+          checked={isSelected}
+          onChange={(e) => onToggleSelection(student.id, index, (e.nativeEvent as PointerEvent).shiftKey)}
+          label=""
+        />
       </td>
-      <td className="flex justify-between items-start sm:table-cell min-w-[140px] px-3 sm:px-2 pt-3 sm:pt-3.5 pb-2 sm:pb-3.5">
+      <td className="table-cell sticky left-12 z-10 bg-inherit min-w-[200px]">
         <div className="flex items-center gap-3">
-          <div className={`w-8 h-8 shrink-0 rounded-full bg-white border border-border flex items-center justify-center text-[11px] font-bold ${percentColor}`}>
-            {initials}
-          </div>
-          <div className="flex flex-col justify-center">
-            <span className="font-semibold text-text text-sm leading-tight">{student.name}</span>
-            <span className="text-muted font-medium text-[11px] leading-tight mt-0.5">{studentCode}</span>
-          </div>
+          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-surface-muted text-xs font-semibold text-text">
+            {index + 1}
+          </span>
+          <span className="font-semibold text-text">{student.name}</span>
         </div>
-        
-        {/* Mobile percentage view */}
-        <div className="sm:hidden shrink-0">
-          <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl ${leftIndicator} transition-colors`} />
-          {overallLoading ? (
-            <span className="text-xs text-muted">...</span>
-          ) : overallPercent === null ? (
-            <span className="text-xs text-muted">--</span>
-          ) : (
-            <span className={`inline-flex px-1.5 py-0.5 rounded-[4px] text-[11px] font-bold ${percentBg} ${percentColor}`}>
-              {overallPercent}%
+      </td>
+      <td className="table-cell text-muted">{studentCode}</td>
+      <td className="table-cell">
+        <Badge className={overallBadgeClass(overallPercent)}>
+          {overallLoading ? '...' : overallPercent === null ? '--' : `${overallPercent}%`}
+        </Badge>
+      </td>
+      <td className="table-cell text-right">
+        <div className="flex items-center justify-end gap-1.5">
+          {!status && (
+            <span className="mr-1 rounded-full bg-surface-muted px-2 py-0.5 text-[10px] font-bold text-muted">
+              Unmarked
             </span>
           )}
-        </div>
-      </td>
-      <td className="hidden sm:table-cell py-3.5">
-        {overallLoading ? (
-          <span className="text-xs text-muted">...</span>
-        ) : overallPercent === null ? (
-          <span className="text-xs text-muted">--</span>
-        ) : (
-          <span className={`inline-flex px-1.5 py-0.5 rounded-[4px] text-[11px] font-bold ${percentBg} ${percentColor}`}>
-            {overallPercent}%
-          </span>
-        )}
-      </td>
-      <td className="block sm:table-cell px-3 sm:px-2 pb-3 sm:pb-3.5 pt-1 sm:pt-3.5 pr-3 sm:pr-4 rounded-r-xl">
-        <div className="flex items-center gap-1.5 sm:gap-1 w-full sm:w-auto">
-          {STATUS_OPTIONS.filter(opt => opt.value !== 'not-applicable').map(opt => {
+          {STATUS_OPTIONS.map(opt => {
             const isActive = status === opt.value;
-            let activeStyle = '';
-            if (isActive) {
-              if (opt.value === 'present') activeStyle = 'border-emerald-500 text-emerald-700 bg-emerald-50 shadow-sm ring-2 ring-emerald-500/20';
-              else if (opt.value === 'absent') activeStyle = 'border-red-500 text-red-700 bg-red-50 shadow-sm ring-2 ring-red-500/20';
-              else if (opt.value === 'leave') activeStyle = 'border-amber-500 text-amber-700 bg-amber-50 shadow-sm ring-2 ring-amber-500/20';
-            } else {
-              activeStyle = 'border-transparent bg-[#f4f0e6] text-[#7a7268] hover:bg-[#e8e4db] hover:text-text';
-            }
-
             return (
               <button
                 key={opt.value}
                 disabled={disabled}
-                onClick={(e) => { e.stopPropagation(); onStatusChange(student.id, opt.value); }}
-                className={`flex-1 sm:flex-none sm:w-6 h-8 sm:h-6 flex items-center justify-center rounded-[5px] sm:rounded-[3px] border text-[13px] font-medium transition-all duration-150 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 ${activeStyle}`}
-                title={opt.label}
+                onClick={() => onStatusChange(student.id, opt.value)}
+                className={`min-h-8 min-w-8 rounded-button border px-2 text-xs font-bold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-60 ${
+                  isActive ? statusColors[opt.value].activeClass : 'border-border bg-white text-muted hover:border-accent/40 hover:bg-background hover:text-text'
+                }`}
               >
-                <span className="sm:hidden font-semibold">{opt.label}</span>
-                <span className="hidden sm:inline">{opt.shortLabel.charAt(0)}</span>
+                {opt.shortLabel}
               </button>
             )
           })}
@@ -523,10 +480,6 @@ export default function AttendanceView(props: AttendanceViewProps) {
     ambiguous: string[];
   } | null>(null);
   const [pendingSaveMarks, setPendingSaveMarks] = useState<AttendanceStatusMark[] | null>(null);
-  const [trendData, setTrendData] = useState<{ date: string; percent: number }[]>([]);
-  const [trendLoading, setTrendLoading] = useState(false);
-  const [focusedStudentId, setFocusedStudentId] = useState<string | null>(null);
-  const [quickMarkOpen, setQuickMarkOpen] = useState(false);
   const [preview, setPreview] = useState<PresentListPreview | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [pendingPeriodChange, setPendingPeriodChange] = useState<PendingPeriodChange | null>(null);
@@ -736,51 +689,6 @@ export default function AttendanceView(props: AttendanceViewProps) {
       active = false;
     };
   }, [attendance, overallRefreshVersion, sectionId, subjectId, visibleMonthDate]);
-
-  useEffect(() => {
-    if (!attendance.loadStatusRangeReport || !sectionId || roster.length === 0) {
-      setTrendData([]);
-      return;
-    }
-    let active = true;
-    setTrendLoading(true);
-    const toDate = date; // today or selected date
-    const fromDate = new Date(new Date(date).getTime() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    void attendance.loadStatusRangeReport({ sectionId, subjectId, fromDate, toDate })
-      .then((report) => {
-        if (!active) return;
-        // Compute daily percentages
-        const dailyCounts: Record<string, { present: number; total: number }> = {};
-        for (const record of report.records) {
-          if (!dailyCounts[record.date]) {
-            dailyCounts[record.date] = { present: 0, total: 0 };
-          }
-          if (record.status === 'present' || record.status === 'absent') {
-            dailyCounts[record.date].total += 1;
-            if (record.status === 'present') {
-              dailyCounts[record.date].present += 1;
-            }
-          }
-        }
-        
-        // Build 7 days array
-        const result = [];
-        for (let i = 6; i >= 0; i--) {
-          const d = new Date(new Date(date).getTime() - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-          const counts = dailyCounts[d];
-          const percent = counts && counts.total > 0 ? Math.round((counts.present / counts.total) * 100) : 0;
-          result.push({ date: d, percent });
-        }
-        setTrendData(result);
-        setTrendLoading(false);
-      })
-      .catch(() => {
-        if (!active) return;
-        setTrendData([]);
-        setTrendLoading(false);
-      });
-    return () => { active = false; };
-  }, [attendance, sectionId, subjectId, date, roster, overallRefreshVersion]);
 
   useEffect(() => {
     if (!periodKey || roster.length === 0) {
@@ -1128,40 +1036,8 @@ export default function AttendanceView(props: AttendanceViewProps) {
   );
   const pendingSaveSummary = pendingSaveMarks ? countMarks(pendingSaveMarks) : null;
 
-  function markAllPresent() {
-    if (saveDisabled) return;
-    setStatusById((prev) => {
-      const next = { ...prev };
-      for (const student of roster) {
-        next[student.id] = 'present';
-      }
-      return next;
-    });
-    setDirty(true);
-  }
-
-  const headerPortal = headerContainer ? createPortal(
-    <div className="flex flex-wrap items-center gap-2">
-      <Button 
-        variant="secondary" 
-        size="sm" 
-        disabled={saveDisabled} 
-        onClick={markAllPresent}
-        className="font-medium bg-surface hover:bg-surface-muted text-text-muted border-border"
-      >
-        <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-        </svg>
-        Mark All Present
-      </Button>
-      {renderSaveButton('bg-[#2c2822] hover:bg-[#37322B] text-white')}
-    </div>,
-    headerContainer
-  ) : null;
-
   return (
-    <div className="flex flex-col gap-6 pb-24">
-      {headerPortal}
+    <div className="mx-auto -mt-2 flex w-full max-w-5xl flex-col gap-3 pb-24">
       {loadError && (
         <Alert tone="danger" title="Unable to load attendance">
           {messages.error.generic}
@@ -1187,107 +1063,342 @@ export default function AttendanceView(props: AttendanceViewProps) {
         </div>
       )}
 
-      {/* Top Summary Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-surface-muted/50 p-4 sm:p-5 rounded-2xl border border-border mt-2">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-surface p-2 sm:p-2.5 rounded-xl border border-border shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 shadow-sm">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
-            Present: <strong className="ml-0.5">{summary.present}</strong>
-          </div>
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 text-rose-700 dark:text-rose-400 shadow-sm">
-            <span className="h-2 w-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]"></span>
-            Absent: <strong className="ml-0.5">{summary.absent}</strong>
-          </div>
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 text-amber-700 dark:text-amber-400 shadow-sm">
-            <span className="h-2 w-2 rounded-full bg-amber-500"></span>
-            Leave: <strong className="ml-0.5">{summary.leave}</strong>
-          </div>
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-muted border border-border text-text-muted">
-            Total: <strong className="ml-0.5">{roster.length}</strong>
-          </div>
-        </div>
-        
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {roster.length > 0 && (
-            <div className="inline-flex items-center rounded-full border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-700 dark:text-rose-400">
-              <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-rose-500" aria-hidden="true" />
-              Students below 75%: {roster.filter(s => overallPercentById[s.id] !== undefined && overallPercentById[s.id]! < 75).length}
-            </div>
-          )}
-
-          <Popover
-            open={quickMarkOpen}
-            onOpenChange={setQuickMarkOpen}
-            trigger={
-              <Button variant="outline" size="sm" className="font-semibold text-text">
-                Quick Mark
-              </Button>
-            }
-            widthClass="w-80 sm:w-96"
+      {/* Floating Bulk Actions Toolbar */}
+      <AnimatePresence>
+        {selectedRows.size > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.2 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 rounded-full border border-border bg-surface px-6 py-3 shadow-elevated"
           >
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-emerald-950 dark:text-emerald-400">Quick Mark</h3>
-                  <p className="text-[10px] font-medium text-emerald-800/75 dark:text-emerald-400/75">
-                    {quickListMode === 'present' ? 'Present roll entry' : 'Absent roll entry'}
-                  </p>
-                </div>
-                <Badge tone={isQuickCorrectionMode ? 'info' : 'success'} size="sm">
-                  {isQuickCorrectionMode ? 'Correction' : 'Fresh Save'}
-                </Badge>
+            <span className="text-sm font-semibold text-text">{selectedRows.size} selected</span>
+            <div className="h-6 w-px bg-border" />
+            <Button size="sm" variant="outline" className="text-emerald-700 border-emerald-200 bg-emerald-50 hover:bg-emerald-100" onClick={() => bulkMark('present')}>
+              Mark Present (P)
+            </Button>
+            <Button size="sm" variant="outline" className="text-red-700 border-red-200 bg-red-50 hover:bg-red-100" onClick={() => bulkMark('absent')}>
+              Mark Absent (A)
+            </Button>
+            <Button size="sm" variant="outline" className="text-amber-700 border-amber-200 bg-amber-50 hover:bg-amber-100" onClick={() => bulkMark('leave')}>
+              Mark Leave (L)
+            </Button>
+            <Button size="sm" variant="outline" className="text-cyan-700 border-cyan-200 bg-cyan-50 hover:bg-cyan-100" onClick={() => bulkMark('not-applicable')}>
+              Mark N/A (N)
+            </Button>
+            <IconButton icon={
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M11.7816 4.03157C12.0062 3.80702 12.0062 3.44295 11.7816 3.2184C11.5571 2.99385 11.193 2.99385 10.9685 3.2184L7.50005 6.68682L4.03164 3.2184C3.80708 2.99385 3.44301 2.99385 3.21846 3.2184C2.99391 3.44295 2.99391 3.80702 3.21846 4.03157L6.68688 7.49999L3.21846 10.9684C2.99391 11.193 2.99391 11.557 3.21846 11.7816C3.44301 12.0061 3.80708 12.0061 4.03164 11.7816L7.50005 8.31316L10.9685 11.7816C11.193 12.0061 11.5571 12.0061 11.7816 11.7816C12.0062 11.557 12.0062 11.193 11.7816 10.9684L8.31322 7.49999L11.7816 4.03157Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path></svg>
+            } label="Clear selection (Esc)" onClick={() => setSelectedRows(new Set())} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="grid w-full grid-cols-3 gap-3">
+        <SummaryTile
+          label="Present"
+          value={summary.present}
+          tone="present"
+          shortLabel="P"
+          fillPercent={roster.length > 0 ? (summary.present / roster.length) * 100 : 0}
+        />
+        <SummaryTile
+          label="Absent"
+          value={summary.absent}
+          tone="absent"
+          shortLabel="A"
+          fillPercent={roster.length > 0 ? (summary.absent / roster.length) * 100 : 0}
+        />
+        <SummaryTile
+          label="Total Students"
+          value={roster.length}
+          tone="total"
+          shortLabel="#"
+          fillPercent={roster.length > 0 ? 100 : 0}
+        />
+      </div>
+
+      <Card className="relative overflow-hidden border-emerald-200/70 bg-[linear-gradient(135deg,rgba(236,253,245,0.9),rgba(240,253,250,0.76)_52%,rgba(255,255,255,0.96))] p-0 shadow-[0_6px_16px_rgba(15,118,110,0.07)] dark:border-border dark:bg-[linear-gradient(135deg,rgba(45,37,26,0.92),rgba(24,24,27,0.94)_52%,rgba(18,19,22,0.98))] dark:shadow-[0_10px_28px_rgba(0,0,0,0.28)]">
+        <span className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 dark:from-accent dark:via-status-amber dark:to-status-blue" aria-hidden="true" />
+        <div className="p-3">
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center">
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold leading-6 text-emerald-950">Quick Mark</h3>
+                <p className="text-xs font-medium text-emerald-800/75">
+                  {quickListMode === 'present' ? 'Present roll entry' : 'Absent roll entry'}
+                </p>
               </div>
-              <div className="flex rounded-button border border-emerald-200 dark:border-emerald-500/20 bg-white dark:bg-[#1c1c1e] p-1 text-xs font-bold">
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex rounded-button border border-emerald-200 bg-white p-1 text-xs font-bold">
                 <button
                   type="button"
-                  className={['flex-1 rounded-[6px] px-2 py-1 transition-colors', quickListMode === 'present' ? 'bg-emerald-700 text-white' : 'text-emerald-800 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10'].join(' ')}
+                  className={[
+                    'rounded-[6px] px-3 py-1 transition-colors',
+                    quickListMode === 'present' ? 'bg-emerald-700 text-white' : 'text-emerald-800 hover:bg-emerald-50',
+                  ].join(' ')}
                   onClick={() => setQuickListMode('present')}
                 >
-                  Present
+                  Present list
                 </button>
                 <button
                   type="button"
-                  className={['flex-1 rounded-[6px] px-2 py-1 transition-colors', quickListMode === 'absent' ? 'bg-red-700 text-white' : 'text-emerald-800 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10'].join(' ')}
+                  className={[
+                    'rounded-[6px] px-3 py-1 transition-colors',
+                    quickListMode === 'absent' ? 'bg-red-700 text-white' : 'text-emerald-800 hover:bg-emerald-50',
+                  ].join(' ')}
                   onClick={() => setQuickListMode('absent')}
                 >
-                  Absent
+                  Absent list
                 </button>
               </div>
-              <input
-                value={presentInput}
-                onChange={(event) => setPresentInput(event.target.value)}
-                placeholder="e.g. 001, 004, 067"
-                className="h-9 rounded-button border border-border bg-background px-3 text-sm font-medium text-text placeholder:text-muted focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              />
-              <div className="flex items-center gap-2">
-                <Button
+              <Badge tone={isQuickCorrectionMode ? 'info' : 'success'} size="sm" className="self-start bg-white sm:self-center">
+                {isQuickCorrectionMode ? 'Correction Mode' : 'Fresh Save Mode'}
+              </Badge>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 rounded-control border border-emerald-200 bg-white/90 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] sm:flex-row sm:items-center">
+            <input
+              value={presentInput}
+              onChange={(event) => setPresentInput(event.target.value)}
+              placeholder="e.g. 001, 004, 067, D01"
+              className="min-h-10 flex-1 rounded-button border border-transparent bg-transparent px-2 text-sm font-medium text-text placeholder:text-muted focus:border-emerald-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            />
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className={[
+                  'min-w-32 text-white shadow-[0_6px_14px_rgba(4,120,87,0.16)]',
+                  quickListMode === 'present' ? 'bg-emerald-700 hover:bg-emerald-800' : 'bg-red-700 hover:bg-red-800',
+                ].join(' ')}
+                disabled={roster.length === 0 || saving || isFutureDate}
+                onClick={openPreview}
+              >
+                {quickListMode === 'present' ? 'Mark Present' : 'Mark Absent'}
+              </Button>
+              <Button type="button" size="sm" variant="secondary" className="bg-white/80 text-emerald-900 hover:bg-emerald-50" disabled={saving} onClick={clearQuick}>
+                Clear
+              </Button>
+            </div>
+          </div>
+          {quickResult && (
+            <div className="mt-3 rounded-control border border-emerald-200 bg-white/80 px-3 py-2 text-xs">
+              <span className="font-semibold text-emerald-700">
+                {isQuickCorrectionMode
+                  ? `${quickResult.matchedCount} updated, rest unchanged`
+                  : quickListMode === 'present'
+                    ? `${quickResult.matchedCount} present, rest blank until save`
+                    : `${quickResult.matchedCount} absent, rest blank until save`}
+              </span>
+              {quickResult.notFound.length > 0 && (
+                <p className="mt-1 font-medium text-status-red">
+                  Not found: {quickResult.notFound.join(', ')}
+                </p>
+              )}
+              {quickResult.ambiguous.length > 0 && (
+                <p className="mt-1 font-medium text-amber-600">
+                  Skipped ambiguous: {quickResult.ambiguous.join(', ')}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </Card>
+
+      <Card padded={false} className="-mt-1 flex flex-col overflow-visible">
+        <div className="border-b border-border bg-surface px-3 py-1.5">
+          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {calendarExpanded && (
+                <button
                   type="button"
-                  size="sm"
-                  className={['flex-1 text-white', quickListMode === 'present' ? 'bg-emerald-700 hover:bg-emerald-800' : 'bg-red-700 hover:bg-red-800'].join(' ')}
-                  disabled={roster.length === 0 || saving || isFutureDate}
-                  onClick={() => { setQuickMarkOpen(false); openPreview(); }}
+                  className="flex h-7 items-center justify-center rounded-button border border-border bg-background px-2.5 text-[11px] font-bold text-text hover:border-accent/40 hover:bg-surface-muted"
+                  onClick={showPreviousMonth}
+                  aria-label="Previous month"
+                  title="Previous month"
                 >
-                  Mark {quickListMode === 'present' ? 'Present' : 'Absent'}
-                </Button>
-                <Button type="button" size="sm" variant="secondary" disabled={saving} onClick={clearQuick}>Clear</Button>
-              </div>
-              {quickResult && (
-                <div className="rounded-control border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2 text-[10px]">
-                  <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                    {quickResult.matchedCount} updated
-                  </span>
-                  {quickResult.notFound.length > 0 && <p className="text-status-red dark:text-red-400 mt-1">Not found: {quickResult.notFound.join(', ')}</p>}
+                  Prev
+                </button>
+              )}
+
+              {calendarExpanded && (
+                <button
+                  type="button"
+                  className="flex h-7 items-center justify-center rounded-button border border-border bg-background px-2.5 text-[11px] font-bold text-text hover:border-accent/40 hover:bg-surface-muted"
+                  onClick={showNextMonth}
+                  aria-label="Next month"
+                  title="Next month"
+                >
+                  Next
+                </button>
+              )}
+              {date !== maxAttendanceDate && (
+                <button
+                  type="button"
+                  className="h-7 rounded-button border border-accent/30 bg-accent/10 px-2.5 text-[11px] font-bold text-accent hover:bg-accent/15"
+                  onClick={showTodayDate}
+                  title="Jump to today"
+                >
+                  Today
+                </button>
+              )}
+              {calendarExpanded && visibleMonthDate.slice(0, 7) !== date.slice(0, 7) && (
+                <button
+                  type="button"
+                  className="h-7 rounded-button border border-border bg-background px-2.5 text-[11px] font-bold text-muted hover:border-accent/40 hover:text-text"
+                  onClick={showCurrentMonth}
+                  title="Return to selected attendance month"
+                >
+                  Selected month
+                </button>
+              )}
+              <button
+                type="button"
+                className="h-7 rounded-button border border-border bg-background px-2.5 text-[11px] font-bold text-muted hover:border-accent/40 hover:text-text"
+                onClick={() => setCalendarExpanded((expanded) => !expanded)}
+                aria-expanded={calendarExpanded}
+              >
+                {calendarExpanded ? 'Collapse' : 'Expand month'}
+              </button>
+            </div>
+            <div className="flex flex-col items-start gap-1 sm:items-end">
+              <p className="text-[11px] font-medium text-muted">
+                {periodMeta.lastSavedAt ? `Last saved ${formatDateTime(periodMeta.lastSavedAt)}` : 'No saved record for this period'}
+              </p>
+              {calendarExpanded && (
+                <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase text-muted">
+                <span className="inline-flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-accent" aria-hidden="true" />
+                  Selected
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
+                  Saved
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full border border-border bg-background" aria-hidden="true" />
+                  Empty
+                </span>
                 </div>
               )}
             </div>
-          </Popover>
+          </div>
+          <div
+            className={
+              calendarExpanded
+                ? 'grid grid-cols-7 gap-1'
+                : '-mx-1 flex snap-x gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]'
+            }
+          >
+            {displayedCalendarDays.map((day) => {
+              const isSelectedDay = day === date;
+              const isMarkedDay = markedDates.has(day);
+              const isFutureDay = day > maxAttendanceDate;
+              const isToday = day === maxAttendanceDate;
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  disabled={isFutureDay}
+                  onClick={() => requestPeriodChange('date', day)}
+                  className={[
+                    'relative flex h-10 items-center justify-center gap-1 rounded-button border px-1.5 text-center text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-40',
+                    calendarExpanded ? '' : 'min-w-[4.35rem] snap-center',
+                    isSelectedDay
+                      ? 'border-accent bg-accent text-white'
+                      : isMarkedDay
+                        ? 'border-emerald-300 bg-gradient-to-br from-emerald-50 via-white to-teal-50 text-emerald-800 shadow-[0_8px_18px_rgba(16,185,129,0.14)] ring-1 ring-emerald-200/80'
+                        : 'border-border bg-background text-muted hover:border-accent/30 hover:text-text',
+                  ].join(' ')}
+                  title={[
+                    formatDate(day),
+                    isSelectedDay ? 'Selected date' : isMarkedDay ? 'Attendance saved' : 'No attendance saved',
+                    isToday ? 'Today' : '',
+                    isFutureDay ? 'Future date disabled' : '',
+                  ].filter(Boolean).join(' - ')}
+                >
+                  <span className={isSelectedDay ? 'hidden text-[10px] text-white/80 sm:inline' : 'hidden text-[10px] text-muted sm:inline'}>{formatWeekdayShort(day)}</span>
+                  <span className="text-sm leading-none">{parseLocalDate(day).getDate()}</span>
+                  <span
+                    className={[
+                      'h-1.5 w-1.5 rounded-full',
+                      isSelectedDay ? 'bg-white' : isMarkedDay ? 'bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.16)]' : isToday ? 'bg-accent' : 'bg-transparent',
+                    ].join(' ')}
+                    aria-hidden="true"
+                  />
+                  {isMarkedDay && !isSelectedDay && (
+                    <span
+                      className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-black leading-none text-white shadow-[0_6px_12px_rgba(16,185,129,0.28)]"
+                      aria-hidden="true"
+                    >
+                      ✓
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 px-0 sm:px-1">
-        
-        {/* Left Column: Table container */}
-        <div className="flex flex-col min-w-0 border-y sm:border-y-0 sm:border-t border-border bg-[#ece7db] dark:bg-transparent shadow-sm sm:rounded-card -mx-4 sm:mx-0">
+        {/* ── Organised Filter Toolbar ── */}
+        <div className="sticky top-[3.75rem] z-40 flex flex-col gap-2 border-b border-border bg-surface/95 px-3 py-2.5 shadow-[0_4px_12px_rgba(15,23,42,0.06)] backdrop-blur-xl">
+          {/* Row 1: Date badge + search + filters */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex shrink-0 flex-col rounded-lg border border-border bg-background px-2.5 py-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-muted">Date</span>
+              <span className="text-xs font-bold text-text">{formatDate(date)}</span>
+            </div>
+            <div className="h-6 w-px shrink-0 bg-border" aria-hidden="true" />
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <SearchInput
+                placeholder="Search student or roll..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="min-w-[140px] max-w-xs flex-1"
+              />
+              <Select
+                options={timeSlots.map(s => ({ label: markedSlots.has(s) ? `${s} ✓` : s, value: s }))}
+                value={timeSlot}
+                onChange={e => requestPeriodChange('timeSlot', e.target.value)}
+                className="w-[120px]"
+              />
+              <Select
+                options={[
+                  { label: 'All Statuses', value: 'all' },
+                  { label: 'Present', value: 'present' },
+                  { label: 'Absent', value: 'absent' },
+                  { label: 'Leave', value: 'leave' },
+                  { label: 'N/A', value: 'not-applicable' },
+                  { label: 'Unmarked', value: 'unmarked' }
+                ]}
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className="w-[130px]"
+              />
+            </div>
+          </div>
+          {/* Row 2: Actions */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
+              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">P {summary.present}</span>
+              <span className="rounded-full bg-red-50 px-2 py-0.5 text-red-700">A {summary.absent}</span>
+              <span className="rounded-full bg-surface-muted px-2 py-0.5 text-muted">Unmarked {summary.unmarked}</span>
+              {dirty && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+                  Unsaved
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => { setSearchQuery(''); setStatusFilter('all'); }}>
+                Reset
+              </Button>
+              {renderSaveButton('shadow-[0_4px_12px_rgba(15,23,42,0.1)]')}
+            </div>
+          </div>
+        </div>
 
         {busy ? (
           <div className="p-6 space-y-4">
@@ -1305,17 +1416,24 @@ export default function AttendanceView(props: AttendanceViewProps) {
             <p className="text-muted">No students match your filters.</p>
           </div>
         ) : (
-          <div className="px-0 sm:px-2 pb-6">
-            <table className="block sm:table table-base w-full border-separate border-spacing-y-2 relative text-left">
-              <thead className="hidden sm:table-header-group table-head">
+          <div className="overflow-x-auto">
+            <table className="table-base w-full min-w-[800px] border-collapse relative text-left">
+              <thead className="table-head bg-surface shadow-sm">
                 <tr>
-                  <th className="table-header-cell w-8 sm:w-10 text-center pb-2 px-1 sm:px-2 text-xs font-bold uppercase tracking-wider text-text/90">#</th>
-                  <th className="table-header-cell pb-2 px-2 sm:px-4 text-xs font-bold uppercase tracking-wider text-text/90">Student</th>
-                  <th className="table-header-cell pb-2 px-2 sm:px-4 text-xs font-bold uppercase tracking-wider text-text/90">Overall %</th>
-                  <th className="table-header-cell pb-2 px-2 sm:px-4 text-xs font-bold uppercase tracking-wider text-text/90">Today's Status</th>
+                  <th className="table-header-cell sticky left-0 z-20 w-12 text-center bg-surface border-b border-border py-2.5 px-4 text-[11px] font-bold uppercase text-muted">
+                    <Checkbox
+                      checked={selectedRows.size > 0 && selectedRows.size === filteredRoster.length}
+                      onChange={toggleAllSelection}
+                      label=""
+                    />
+                  </th>
+                  <th className="table-header-cell sticky left-12 z-20 bg-surface border-b border-border py-2.5 px-4 text-[11px] font-bold uppercase text-muted">Student</th>
+                  <th className="table-header-cell bg-surface border-b border-border py-2.5 px-4 text-[11px] font-bold uppercase text-muted">Roll Number</th>
+                  <th className="table-header-cell bg-surface border-b border-border py-2.5 px-4 text-[11px] font-bold uppercase text-muted">Attendance</th>
+                  <th className="table-header-cell text-right bg-surface pr-6 border-b border-border py-2.5 px-4 text-[11px] font-bold uppercase text-muted">Mark</th>
                 </tr>
               </thead>
-              <tbody className="block sm:table-row-group">
+              <tbody className="divide-y divide-border">
                 <AnimatePresence>
                   {filteredRoster.map((student, index) => (
                     <AttendanceTableRow
@@ -1327,7 +1445,6 @@ export default function AttendanceView(props: AttendanceViewProps) {
                       isSelected={selectedRows.has(student.id)}
                       onStatusChange={setStudentStatus}
                       onToggleSelection={toggleRowSelection}
-                      onClick={setFocusedStudentId}
                       index={index}
                       disabled={saving || busy || isFutureDate}
                     />
@@ -1337,138 +1454,7 @@ export default function AttendanceView(props: AttendanceViewProps) {
             </table>
           </div>
         )}
-      </div>
-      {/* End Left Column */}
-
-      {/* Right Column: Quick Stats & Focus */}
-      <div>
-        <div className="flex flex-col gap-6 sticky top-24">
-          {/* Quick Stats Widget */}
-          <Card className="flex flex-col p-4 shadow-sm" padded={false}>
-          <h3 className="text-sm font-bold text-text mb-4">Quick Stats (Last 7 Days)</h3>
-          {trendLoading ? (
-            <div className="flex justify-center py-6"><SkeletonLoader variant="block" className="h-16 w-full" /></div>
-          ) : trendData.length === 0 ? (
-            <div className="flex items-center justify-center py-8 text-xs text-muted font-medium bg-surface-muted rounded-lg border border-dashed border-border">
-              No trend data available.
-            </div>
-          ) : (
-            <div className="flex items-end justify-between h-24 gap-1.5 mt-2">
-              {trendData.map((day, idx) => {
-                const dateObj = new Date(day.date);
-                const isSelected = day.date === date;
-                const percent = day.percent;
-                // Height between 10% and 100%
-                const height = Math.max(10, percent);
-                return (
-                  <div key={day.date} className="flex flex-col items-center flex-1 gap-2 relative group">
-                    {/* Tooltip */}
-                    <div className="absolute -top-8 bg-surface-inverted text-surface rounded px-2 py-1 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
-                      {percent}%
-                    </div>
-                    {/* Bar */}
-                    <div className="w-full bg-surface-muted rounded-sm h-full flex flex-col justify-end overflow-hidden relative">
-                      <motion.div 
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: `${height}%`, opacity: 1 }}
-                        transition={{ type: 'spring', stiffness: 300, damping: 25, delay: idx * 0.05 }}
-                        className={`w-full rounded-sm transition-colors duration-500 ${isSelected ? 'bg-accent shadow-[0_0_10px_rgba(0,0,0,0.1)]' : percent < 75 ? 'bg-rose-400' : 'bg-emerald-400 group-hover:bg-emerald-500'}`}
-                      />
-                    </div>
-                    <span className={`text-[10px] font-bold ${isSelected ? 'text-accent' : 'text-muted'}`}>
-                      {['S','M','T','W','T','F','S'][dateObj.getDay()]}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <div className="mt-4 pt-4 border-t border-border grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-[10px] font-bold uppercase text-muted tracking-wider mb-1">Class Avg</p>
-              <p className="text-lg font-bold text-text">
-                {trendData.length > 0 
-                  ? Math.round(trendData.reduce((acc, d) => acc + d.percent, 0) / trendData.filter(d => d.percent > 0).length || 1) + '%' 
-                  : '--'}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase text-muted tracking-wider mb-1">Low Attd.</p>
-              <p className="text-lg font-bold text-rose-600">
-                {roster.filter(s => overallPercentById[s.id] !== undefined && overallPercentById[s.id]! < 75).length}
-              </p>
-            </div>
-          </div>
-        </Card>
-
-        {/* Student Focus Widget */}
-        <Card className="flex flex-col p-4 shadow-sm" padded={false}>
-          <h3 className="text-sm font-bold text-text mb-4 flex items-center justify-between">
-            Student Focus
-            {focusedStudentId && (
-               <button onClick={() => setFocusedStudentId(null)} className="text-[10px] font-bold text-muted hover:text-text">Clear</button>
-            )}
-          </h3>
-          {!focusedStudentId ? (
-            <div className="flex flex-col items-center justify-center py-10 px-4 text-center border-2 border-dashed border-border rounded-xl bg-surface-muted/50">
-              <svg width="24" height="24" viewBox="0 0 15 15" fill="none" className="text-muted/50 mb-2"><path d="M7.5 0.875C5.49797 0.875 3.875 2.49797 3.875 4.5C3.875 6.15288 4.98124 7.54738 6.49373 7.98351C5.2997 8.12901 4.27557 8.55134 3.50468 9.32223C2.52987 10.297 2.04233 11.7107 2.05103 13.5654C2.05141 13.6453 2.08339 13.7218 2.13992 13.7783C2.19645 13.8349 2.27299 13.8668 2.35294 13.8668C2.43288 13.8668 2.50943 13.8349 2.56596 13.7783C2.62248 13.7218 2.65446 13.6453 2.65485 13.5654C2.64627 11.7456 3.09033 10.4398 3.93126 9.5989C4.60677 8.92338 5.61864 8.53982 7.03906 8.53982C7.23439 8.53982 7.42971 8.53982 7.62503 8.53982C9.04546 8.53982 10.0573 8.92338 10.7328 9.5989C11.5738 10.4398 12.0178 11.7456 12.0092 13.5654C12.0096 13.6453 12.0416 13.7218 12.0981 13.7783C12.1547 13.8349 12.2312 13.8668 12.3111 13.8668C12.3911 13.8668 12.4676 13.8349 12.5242 13.7783C12.5807 13.7218 12.6127 13.6453 12.6131 13.5654C12.6218 11.7107 12.1342 10.297 11.1594 9.32223C10.3885 8.55134 9.3644 8.12901 8.17037 7.98351C9.68285 7.54738 10.7891 6.15288 10.7891 4.5C10.7891 2.49797 9.16613 0.875 7.1641 0.875H7.5ZM4.475 4.5C4.475 2.82939 5.82939 1.475 7.5 1.475C9.17061 1.475 10.525 2.82939 10.525 4.5C10.525 6.17061 9.17061 7.525 7.5 7.525C5.82939 7.525 4.475 6.17061 4.475 4.5Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path></svg>
-              <p className="text-xs text-muted font-medium">Select a student row to see details, past 30 days, and parent info.</p>
-            </div>
-          ) : (
-            (() => {
-              const student = roster.find(s => s.id === focusedStudentId);
-              if (!student) return null;
-              const percent = overallPercentById[student.id];
-              return (
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                  className="flex flex-col gap-4"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 rounded-full bg-gradient-to-br from-accent/20 to-accent/5 flex items-center justify-center font-bold text-accent text-lg shadow-sm border border-accent/10">
-                      {student.name.charAt(0)}
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-text text-base leading-tight mb-0.5">{student.name}</h4>
-                      <p className="text-xs font-semibold text-muted bg-surface-muted px-2 py-0.5 rounded-md inline-block">{studentCode || student.id.slice(0,6)}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-surface-muted rounded-lg p-3 border border-border">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-xs font-semibold text-muted">Overall Attendance</span>
-                      <span className={`text-sm font-bold ${percent !== undefined && percent < 75 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                        {percent !== undefined ? `${percent}%` : '--'}
-                      </span>
-                    </div>
-                    {percent !== undefined && (
-                      <div className="h-1.5 w-full bg-border rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full rounded-full ${percent < 75 ? 'bg-rose-500' : 'bg-emerald-500'}`} 
-                          style={{ width: `${percent}%` }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="flex flex-col gap-2">
-                    <Button variant="outline" size="sm" className="w-full text-xs font-semibold justify-center">
-                      View Full Report
-                    </Button>
-                    <Button variant="outline" size="sm" className="w-full text-xs font-semibold justify-center text-sky-700 border-sky-200 bg-sky-50 hover:bg-sky-100">
-                      Send Notice to Parents
-                    </Button>
-                  </div>
-                </motion.div>
-              );
-            })()
-          )}
-        </Card>
-        </div>
-      </div>
-      </div>
+      </Card>
 
       {pendingPeriodChange && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" onClick={() => setPendingPeriodChange(null)}>
@@ -1518,10 +1504,10 @@ export default function AttendanceView(props: AttendanceViewProps) {
 
             <div className="grid grid-cols-2 gap-2 px-5 py-4 sm:grid-cols-4">
               {[
-                { label: 'Present', value: pendingSaveSummary.present, className: 'border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' },
-                { label: 'Absent', value: pendingSaveSummary.absent, className: 'border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400' },
-                { label: 'Leave', value: pendingSaveSummary.leave, className: 'border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400' },
-                { label: 'N/A', value: pendingSaveSummary.notApplicable, className: 'border-sky-200 dark:border-sky-500/20 bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-400' },
+                { label: 'Present', value: pendingSaveSummary.present, className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+                { label: 'Absent', value: pendingSaveSummary.absent, className: 'border-rose-200 bg-rose-50 text-rose-700' },
+                { label: 'Leave', value: pendingSaveSummary.leave, className: 'border-amber-200 bg-amber-50 text-amber-700' },
+                { label: 'N/A', value: pendingSaveSummary.notApplicable, className: 'border-sky-200 bg-sky-50 text-sky-700' },
               ].map((item) => (
                 <div key={item.label} className={`rounded-control border px-3 py-2 ${item.className}`}>
                   <p className="text-[11px] font-bold uppercase tracking-wide">{item.label}</p>

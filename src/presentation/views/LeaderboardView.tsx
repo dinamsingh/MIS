@@ -364,8 +364,8 @@ export default function LeaderboardView({ persistence }: LeaderboardViewProps) {
               </p>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-border">
-                <table className="w-full text-sm">
-                  <thead>
+                <table className="block sm:table w-full text-sm">
+                  <thead className="hidden sm:table-header-group">
                     <tr className="bg-muted/20">
                       <th className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wider text-muted">
                         Rank
@@ -387,7 +387,7 @@ export default function LeaderboardView({ persistence }: LeaderboardViewProps) {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody className="block sm:table-row-group sm:divide-y divide-border p-3 sm:p-0">
                     {rankedStudents.map((student, idx) => {
                       const rank = idx + 1;
                       const badge = getBadge(rank, student, rankedStudents.length);
@@ -397,6 +397,7 @@ export default function LeaderboardView({ persistence }: LeaderboardViewProps) {
                         <tr
                           key={student.studentId}
                           className={
+                            `block sm:table-row relative border border-border sm:border-none rounded-xl sm:rounded-none mb-3 sm:mb-0 ` +
                             (isTopThree
                               ? 'bg-accent/5 '
                               : idx % 2 === 0
@@ -406,57 +407,74 @@ export default function LeaderboardView({ persistence }: LeaderboardViewProps) {
                           }
                         >
                           {/* Rank */}
-                          <td className="py-3 px-4">
-                            <span
-                              className={
-                                'inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ' +
-                                (rank === 1
-                                  ? 'bg-yellow-200 text-yellow-900'
-                                  : rank === 2
-                                    ? 'bg-gray-200 text-gray-800'
-                                    : rank === 3
-                                      ? 'bg-orange-200 text-orange-900'
-                                      : 'bg-muted/20 text-muted')
-                              }
-                            >
-                              #{rank}
-                            </span>
+                          <td className="block sm:table-cell py-3 px-4 border-b border-border/50 sm:border-none">
+                            <div className="flex items-center gap-3">
+                              <span
+                                className={
+                                  'inline-flex items-center justify-center w-8 h-8 sm:w-7 sm:h-7 shrink-0 rounded-full text-sm sm:text-xs font-bold shadow-sm ' +
+                                  (rank === 1
+                                    ? 'bg-yellow-200 text-yellow-900'
+                                    : rank === 2
+                                      ? 'bg-gray-200 text-gray-800'
+                                      : rank === 3
+                                        ? 'bg-orange-200 text-orange-900'
+                                        : 'bg-muted/20 text-muted')
+                                }
+                              >
+                                #{rank}
+                              </span>
+                              <div className="sm:hidden font-bold text-text text-base truncate">
+                                {student.name}
+                              </div>
+                            </div>
                           </td>
 
                           {/* Student name */}
-                          <td className="py-3 px-4 font-medium text-text">
+                          <td className="hidden sm:table-cell py-3 px-4 font-medium text-text">
                             {student.name}
                           </td>
 
                           {/* Quiz avg */}
-                          <td className="py-3 px-4 text-right text-soft">
-                            {student.quizScore.toFixed(1)}%
+                          <td className="block sm:table-cell py-2 sm:py-3 px-4 sm:text-right text-soft sm:w-auto w-full pt-3 sm:pt-3">
+                            <div className="flex justify-between sm:block">
+                              <span className="sm:hidden text-xs font-semibold text-muted">Quiz avg</span>
+                              <span>{student.quizScore.toFixed(1)}%</span>
+                            </div>
                           </td>
 
                           {/* On-time (attendance) */}
-                          <td className="py-3 px-4 text-right text-soft">
-                            {student.attendancePercent.toFixed(1)}%
+                          <td className="block sm:table-cell py-2 sm:py-3 px-4 sm:text-right text-soft sm:w-auto w-full">
+                            <div className="flex justify-between sm:block">
+                              <span className="sm:hidden text-xs font-semibold text-muted">On-time</span>
+                              <span>{student.attendancePercent.toFixed(1)}%</span>
+                            </div>
                           </td>
 
                           {/* Badge */}
-                          <td className="py-3 px-4 text-center">
-                            {badge ? (
-                              <span
-                                className={
-                                  'inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ' +
-                                  badge.color
-                                }
-                              >
-                                {badge.label}
-                              </span>
-                            ) : (
-                              <span className="text-muted">—</span>
-                            )}
+                          <td className="block sm:table-cell py-2 sm:py-3 px-4 sm:text-center sm:w-auto w-full">
+                            <div className="flex justify-between sm:block items-center">
+                              <span className="sm:hidden text-xs font-semibold text-muted">Badge</span>
+                              {badge ? (
+                                <span
+                                  className={
+                                    'inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ' +
+                                    badge.color
+                                  }
+                                >
+                                  {badge.label}
+                                </span>
+                              ) : (
+                                <span className="text-muted">—</span>
+                              )}
+                            </div>
                           </td>
 
                           {/* Points */}
-                          <td className="py-3 px-4 text-right font-semibold text-accent">
-                            {combinedScore(student, weights).toFixed(1)}
+                          <td className="block sm:table-cell py-3 px-4 sm:text-right font-semibold text-accent sm:w-auto w-full border-t border-border/20 sm:border-none bg-surface/50 sm:bg-transparent rounded-b-xl sm:rounded-none mt-1 sm:mt-0">
+                            <div className="flex justify-between sm:block">
+                              <span className="sm:hidden text-xs font-bold text-accent uppercase tracking-wider">Total Points</span>
+                              <span className="text-lg sm:text-base font-black">{combinedScore(student, weights).toFixed(1)}</span>
+                            </div>
                           </td>
                         </tr>
                       );

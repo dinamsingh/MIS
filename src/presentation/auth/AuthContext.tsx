@@ -49,6 +49,10 @@ export interface AuthContextValue {
   verifyStudentEmailOtp(email: string, token: string): Promise<Result<Actor, AuthError>>;
   /** Start Google OAuth for a teacher or student (Req 1.3, 2.3). */
   signInWithGoogle(intent: LoginIntent, options?: GoogleSignInOptions): Promise<Result<void, AuthError>>;
+  /** Send password reset email to a registered teacher email. */
+  sendPasswordResetEmail(email: string): Promise<Result<void, AuthError>>;
+  /** Update password for the currently signed-in (or recovering) user. */
+  updatePassword(password: string): Promise<Result<void, AuthError>>;
   /** Terminate the active session (Req 1.6). */
   signOut(): Promise<void>;
 }
@@ -115,6 +119,8 @@ export function AuthProvider({ service = defaultAuthService, children }: AuthPro
       sendStudentEmailOtp: (email) => service.sendStudentEmailOtp(email),
       verifyStudentEmailOtp: (email, token) => service.verifyStudentEmailOtp(email, token),
       signInWithGoogle: (intent, options) => service.signInWithGoogle(intent, options),
+      sendPasswordResetEmail: (email) => service.sendPasswordResetEmail(email),
+      updatePassword: (password) => service.updatePassword(password),
       signOut: () => service.signOut(),
     }),
     [actor, isLoading, service],

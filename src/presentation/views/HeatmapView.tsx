@@ -21,11 +21,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  attendancePercent,
-  DEFAULTER_THRESHOLD,
-  type StudentAttendance,
-} from '@domain/services/heatmapService';
 import { messages } from '@domain/shared/messages';
 import { formatSectionLabel } from '@presentation/format/sectionLabel';
 import { CalendarSkeleton } from '@presentation/components/skeletons';
@@ -43,31 +38,22 @@ export interface HeatmapSectionOption {
   readonly department?: string | null;
 }
 
-/** A student entry to display in the defaulter list. */
-export interface HeatmapStudent {
-  readonly id: string;
-  readonly name: string;
-  readonly enrollmentNumber?: string;
-}
+
 
 /**
  * Persistence port: the contract the view depends on. Structurally compatible
  * with `HeatmapAccess` from the data layer.
  */
 export interface HeatmapPersistence {
-  loadStudentAttendance(sectionId: string): Promise<StudentAttendance[]>;
-  loadDefaulters(sectionId: string): Promise<string[]>;
   loadDayHeatLevels(sectionId: string): Promise<Record<string, number>>;
 }
 
-/** Loads student info for display in the defaulter list. */
-export type LoadStudents = (sectionId: string) => Promise<HeatmapStudent[]>;
+
 
 export interface HeatmapViewProps {
   /** Sections the teacher can view heatmap for. */
   sections: readonly HeatmapSectionOption[];
-  /** Loads student info (name, enrollment) for the selected section. */
-  loadStudents: LoadStudents;
+
   /** The heatmap persistence port. */
   heatmap: HeatmapPersistence;
   /** Render as an embedded panel inside another report page. */
@@ -118,12 +104,7 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-/** Extract initials from a name (first letter of first and last word). */
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? '';
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
+
 
 // ---------------------------------------------------------------------------
 // Component
@@ -131,7 +112,7 @@ function getInitials(name: string): string {
 
 export default function HeatmapView({
   sections,
-  loadStudents,
+
   heatmap,
   compact = false,
 }: HeatmapViewProps) {
@@ -144,9 +125,7 @@ export default function HeatmapView({
 
   // Data state
   const [dayLevels, setDayLevels] = useState<Record<string, number>>({});
-  const [studentAttendance, setStudentAttendance] = useState<StudentAttendance[]>([]);
-  const [defaulterIds, setDefaulterIds] = useState<string[]>([]);
-  const [students, setStudents] = useState<HeatmapStudent[]>([]);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
@@ -165,9 +144,6 @@ export default function HeatmapView({
   useEffect(() => {
     if (!sectionId) {
       setDayLevels({});
-      setStudentAttendance([]);
-      setDefaulterIds([]);
-      setStudents([]);
       return;
     }
     let active = true;
@@ -176,16 +152,10 @@ export default function HeatmapView({
 
     Promise.all([
       heatmap.loadDayHeatLevels(sectionId),
-      heatmap.loadStudentAttendance(sectionId),
-      heatmap.loadDefaulters(sectionId),
-      loadStudents(sectionId),
     ])
-      .then(([levels, attendance, dIds, studs]) => {
+      .then(([levels]) => {
         if (!active) return;
         setDayLevels(levels);
-        setStudentAttendance(attendance);
-        setDefaulterIds(dIds);
-        setStudents(studs);
         setLoading(false);
       })
       .catch(() => {
@@ -195,7 +165,7 @@ export default function HeatmapView({
       });
 
     return () => { active = false; };
-  }, [sectionId, heatmap, loadStudents]);
+  }, [sectionId, heatmap]);
 
   // Calendar grid cells for the current view month
   const grid = useMemo(() => calendarGrid(viewYear, viewMonth), [viewYear, viewMonth]);
@@ -221,35 +191,7 @@ export default function HeatmapView({
     });
   }, []);
 
-  // Defaulters with student info
-  const defaulterList = useMemo(() => {
-    const idSet = new Set(defaulterIds);
-    return students
-      .filter((s) => idSet.has(s.id))
-      .map((s) => {
-        const att = studentAttendance.find((a) => a.studentId === s.id);
-        const pct = att ? attendancePercent(att.attendedPeriods, att.totalHeldPeriods) : 0;
-        return { ...s, attendancePercent: pct };
-      })
-      .sort((a, b) => a.attendancePercent - b.attendancePercent);
-  }, [defaulterIds, students, studentAttendance]);
 
-  // Export defaulter list as CSV
-  const handleExport = useCallback(() => {
-    if (defaulterList.length === 0) return;
-    const header = 'Name,Roll Number,Attendance %';
-    const rows = defaulterList.map(
-      (s) => `${s.name},${s.enrollmentNumber ?? ''},${s.attendancePercent.toFixed(1)}`
-    );
-    const csv = [header, ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'defaulters.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [defaulterList]);
 
   const FIELD_CLASS =
     'w-full rounded-button border border-border bg-surface px-3 py-2 text-sm text-text ' +
@@ -299,11 +241,8 @@ export default function HeatmapView({
           </p>
         </div>
       ) : (
-        /* Two-column layout: Calendar (left, larger) | Defaulters (right) */
-        <div className={compact ? 'grid grid-cols-1 gap-3 xl:grid-cols-[1.25fr_0.75fr]' : 'grid grid-cols-1 lg:grid-cols-3 gap-6'}>
-          {/* Left column — Daily attendance calendar */}
-          <div className={compact ? 'rounded-control border border-border bg-background p-3 shadow-soft xl:col-span-1' : 'lg:col-span-2 card p-5 sm:p-6'}>
-            <div className={compact ? 'mb-3 flex items-center justify-between gap-3' : 'flex items-center justify-between mb-5'}>
+        <div className={compact ? 'w-full flex flex-col p-2' : 'w-full card p-5 sm:p-6 flex flex-col'}>
+          <div className={compact ? 'mb-3 flex items-center justify-between gap-3' : 'flex items-center justify-between mb-5'}>
               <h3 className={compact ? 'text-sm font-black text-text' : 'text-base font-semibold text-text'}>Daily attendance</h3>
               <div className="flex items-center gap-2">
                 <button
@@ -393,61 +332,6 @@ export default function HeatmapView({
               </>
             )}
           </div>
-
-          {/* Right column — Defaulters list */}
-          <div className={compact ? 'flex flex-col rounded-control border border-border bg-background p-3 shadow-soft xl:col-span-1' : 'lg:col-span-1 card p-5 sm:p-6 flex flex-col'}>
-            <div className={compact ? 'mb-3 flex items-center justify-between gap-3' : 'flex items-center justify-between mb-4'}>
-              <h3 className={compact ? 'text-sm font-black text-text' : 'text-base font-semibold text-text'}>
-                Defaulters (&lt;{DEFAULTER_THRESHOLD}%)
-              </h3>
-              <button
-                type="button"
-                className="rounded-button bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent-hover"
-                onClick={handleExport}
-                disabled={defaulterList.length === 0}
-              >
-                Export
-              </button>
-            </div>
-
-            {defaulterList.length === 0 ? (
-              <p className="text-sm text-text-soft flex-1 flex items-center">
-                {messages.emptyState.noDefaulters}
-              </p>
-            ) : (
-              <ul className={compact ? 'flex max-h-[250px] flex-col gap-2 overflow-y-auto pr-1' : 'flex flex-col gap-3 overflow-y-auto max-h-[420px] pr-1'}>
-                {defaulterList.map((student) => (
-                  <li
-                    key={student.id}
-                    className={compact ? 'flex items-center gap-2 rounded-button bg-surface px-2.5 py-2 transition-colors hover:bg-secondary' : 'flex items-center gap-3 p-3 rounded-xl bg-background hover:bg-gray-100 transition-colors'}
-                  >
-                    {/* Avatar with initials */}
-                    <div className={compact ? 'flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-tint text-[11px] font-bold text-accent' : 'w-9 h-9 rounded-full bg-accent-tint text-accent flex items-center justify-center text-xs font-bold shrink-0'}>
-                      {getInitials(student.name)}
-                    </div>
-
-                    {/* Name & roll */}
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-text">
-                        {student.name}
-                      </p>
-                      {student.enrollmentNumber && (
-                        <p className="truncate text-xs text-text-muted">
-                          {student.enrollmentNumber}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Red percentage badge */}
-                    <span className="shrink-0 rounded-full bg-red-100 text-status-red px-2.5 py-0.5 text-xs font-semibold">
-                      {student.attendancePercent.toFixed(1)}%
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
       )}
     </section>
   );

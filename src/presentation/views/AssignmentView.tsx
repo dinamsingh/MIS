@@ -695,9 +695,9 @@ export default function AssignmentGridView({
                   <span className="text-xs text-muted">Loading submissions…</span>
                 </div>
               )}
-              <table className="w-full text-left text-sm">
+              <table className="block sm:table w-full text-left text-sm">
                 {/* ── Column header ── */}
-                <thead>
+                <thead className="hidden sm:table-header-group">
                   <tr className="border-b border-border bg-gray-50">
                     <th className="py-3 pl-4 pr-2 text-xs font-semibold uppercase tracking-wide text-muted w-10">
                       SN
@@ -740,9 +740,9 @@ export default function AssignmentGridView({
                 </thead>
 
                 {/* ── Student rows ── */}
-                <tbody className="divide-y divide-border">
+                <tbody className="block sm:table-row-group sm:divide-y divide-border p-3 sm:p-0">
                   {filteredStudents.length === 0 ? (
-                    <tr>
+                    <tr className="block sm:table-row">
                       <td
                         colSpan={3 + activeSlotNumbers.length + 1}
                         className="py-8 text-center text-sm text-muted"
@@ -754,33 +754,34 @@ export default function AssignmentGridView({
                     filteredStudents.map((student, idx) => (
                       <tr
                         key={student.id}
-                        className="transition-colors hover:bg-gray-50/60"
+                        className="transition-colors hover:bg-gray-50/60 block sm:table-row border border-border sm:border-none rounded-xl sm:rounded-none mb-3 sm:mb-0 bg-white"
                       >
                         {/* SN */}
-                        <td className="py-2.5 pl-4 pr-2 text-xs font-medium text-muted">
+                        <td className="hidden sm:table-cell py-2.5 pl-4 pr-2 text-xs font-medium text-muted">
                           {idx + 1}
                         </td>
 
                         {/* Enrollment */}
-                        <td className="px-3 py-2.5 font-mono text-xs text-muted whitespace-nowrap">
+                        <td className="hidden sm:table-cell px-3 py-2.5 font-mono text-xs text-muted whitespace-nowrap">
                           {student.enrollmentNumber ?? '—'}
                         </td>
 
                         {/* Name */}
-                        <td className="px-3 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <div className="h-7 w-7 flex-shrink-0 rounded-full bg-accent/10
-                                            flex items-center justify-center text-[11px]
+                        <td className="block sm:table-cell px-4 sm:px-3 py-3 sm:py-2.5 border-b border-border/50 sm:border-none">
+                          <div className="flex items-center gap-3 sm:gap-2">
+                            <div className="h-10 w-10 sm:h-7 sm:w-7 flex-shrink-0 rounded-full bg-accent/10
+                                            flex items-center justify-center text-sm sm:text-[11px]
                                             font-bold text-accent">
                               {getInitials(student.name)}
                             </div>
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-text">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-base sm:text-sm font-medium text-text">
                                 {student.name}
                               </p>
                               {student.sectionLabel && (
                                 <p className="text-[11px] text-muted">{student.sectionLabel}</p>
                               )}
+                              <p className="sm:hidden text-[11px] text-muted font-mono mt-0.5">{student.enrollmentNumber ?? '—'}</p>
                             </div>
                           </div>
                         </td>
@@ -790,7 +791,8 @@ export default function AssignmentGridView({
                           const key = slotKey(student.id, n);
                           const status = assignGrid[student.id]?.[n] ?? 'not-submitted';
                           return (
-                            <td key={n} className="px-3 py-2.5 text-center">
+                            <td key={n} className="flex sm:table-cell justify-between items-center px-4 sm:px-3 py-2 sm:py-2.5 text-center border-b border-border/20 sm:border-none">
+                              <span className="sm:hidden text-xs font-semibold text-muted">Assign {n}</span>
                               <StatusCell
                                 status={status}
                                 saving={savingCells[key] === true}
@@ -803,7 +805,8 @@ export default function AssignmentGridView({
                         })}
 
                         {/* Lab File */}
-                        <td className="px-3 py-2.5 text-center">
+                        <td className="flex sm:table-cell justify-between items-center px-4 sm:px-3 py-2 sm:py-2.5 mb-2 sm:mb-0 text-center">
+                          <span className="sm:hidden text-xs font-semibold text-blue-600/80">Lab File</span>
                           <StatusCell
                             status={labGrid[student.id] ?? 'not-submitted'}
                             saving={savingLab[student.id] === true}
@@ -819,7 +822,7 @@ export default function AssignmentGridView({
 
                 {/* ── Footer totals row ── */}
                 {filteredStudents.length > 0 && (
-                  <tfoot>
+                  <tfoot className="hidden sm:table-footer-group">
                     <tr className="border-t-2 border-border bg-gray-50">
                       <td
                         colSpan={3}

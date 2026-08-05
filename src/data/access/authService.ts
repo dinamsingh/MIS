@@ -156,8 +156,12 @@ export interface AuthService {
    * Start Google OAuth for a teacher or student (Req 1.3, 2.3, 2.4). This
    * redirects the browser to Google; the session is established on return and
    * surfaced via {@link AuthService.getCurrentActor} / {@link AuthService.subscribe}.
-   */
+  /** Start Google OAuth for a teacher or student (Req 1.3, 2.3, 2.4). */
   signInWithGoogle(intent: LoginIntent, options?: GoogleSignInOptions): Promise<Result<void, AuthError>>;
+  /** Send password reset email to a registered teacher email. */
+  sendPasswordResetEmail(email: string): Promise<Result<void, AuthError>>;
+  /** Update password for the currently signed-in (or recovering) user. */
+  updatePassword(password: string): Promise<Result<void, AuthError>>;
   /** Terminate the active session (Req 1.6). */
   signOut(): Promise<void>;
   /** Resolve the current actor from the restored session (Req 1.5). */
@@ -312,11 +316,35 @@ export function createAuthService(
       });
       if (error) {
         return err<AuthError>({
-          code: 'oauth_failed',
-          message: messages.error.generic,
+          code: 'unknown_auth_error',
+          message: error.message,
         });
       }
-      return ok(undefined);
+      return ok<void, AuthError>(undefined);
+    },
+
+    async sendPasswordResetEmail(email: string): Promise<Result<void, AuthError>> {
+      const { error } = await client.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/sign-in',
+      });
+      if (error) {
+        return err<AuthError>({
+          code: 'unknown_auth_error',
+          message: error.message,
+        });
+      }
+      return ok<void, AuthError>(undefined);
+    },
+
+    async updatePassword(password: string): Promise<Result<void, AuthError>> {
+      const { error } = await client.auth.updateUser({ password });
+      if (error) {
+        return err<AuthError>({
+          code: 'unknown_auth_error',
+          message: error.message,
+        });
+      }
+      return ok<void, AuthError>(undefined);
     },
 
     async signOut(): Promise<void> {

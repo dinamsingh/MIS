@@ -39,10 +39,6 @@ export const navGroups: NavGroup[] = [
         label: 'Attendance',
         icon: '✓',
         path: '/attendance',
-        children: [
-          { id: 'take-attendance', label: 'Take Attendance', icon: 'TA', path: '/attendance' },
-          { id: 'attendance-report', label: 'Attendance Report', icon: 'AR', path: '/attendance/report', badge: 'NEW' },
-        ],
       },
       { id: 'syllabus', label: 'Syllabus', icon: '📖', path: '/syllabus' },
       { id: 'timetable', label: 'Timetable', icon: '🕛', path: '/timetable', badge: 'NEW' },

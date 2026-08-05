@@ -525,9 +525,9 @@ export default function MarksCalculatorView({
             {messages.emptyState.noStudents}
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
+          <div className="overflow-x-auto sm:px-0 px-3 pb-6 sm:pb-0">
+            <table className="block sm:table w-full text-sm">
+              <thead className="hidden sm:table-header-group">
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Student
@@ -545,7 +545,7 @@ export default function MarksCalculatorView({
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="block sm:table-row-group sm:divide-y divide-gray-100">
                 {students.map((student, idx) => {
                   const liveTotal = computeInternalMarks(components, markValuesFor(student.id));
                   const savedTotal = savedTotals[student.id];
@@ -554,9 +554,9 @@ export default function MarksCalculatorView({
                   return (
                     <tr
                       key={student.id}
-                      className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}
+                      className={`block sm:table-row mb-4 sm:mb-0 rounded-xl sm:rounded-none border sm:border-none border-gray-200 p-4 sm:p-0 shadow-sm sm:shadow-none ${idx % 2 === 0 ? 'bg-white' : 'bg-white sm:bg-gray-50/50'}`}
                     >
-                      <td className="px-4 py-3 text-left font-medium text-gray-900 whitespace-nowrap">
+                      <td className="block sm:table-cell px-0 sm:px-4 pb-3 sm:py-3 text-left font-medium text-gray-900 whitespace-nowrap border-b sm:border-none border-gray-100 mb-2 sm:mb-0">
                         {student.name}
                         {student.enrollmentNumber !== undefined && (
                           <span className="ml-2 text-xs font-normal text-gray-400">
@@ -567,49 +567,55 @@ export default function MarksCalculatorView({
                       {components.map((component) => {
                         const cellError = rowErrors[component.id] ?? null;
                         return (
-                          <td key={component.id} className="px-4 py-2 text-center">
-                            <input
-                              type="number"
-                              min={0}
-                              max={component.maxValue}
-                              aria-label={`${student.name} — ${component.name}`}
-                              aria-invalid={cellError !== null}
-                              className={`w-16 rounded-md border px-2 py-1.5 text-center text-sm transition-colors focus:outline-none focus:ring-1 ${
-                                cellError !== null
-                                  ? 'border-red-300 bg-red-50 text-red-700 focus:border-red-500 focus:ring-red-500'
-                                  : 'border-gray-300 bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500'
-                              }`}
-                              value={studentRow[component.id] ?? ''}
-                              onChange={(e) =>
-                                handleValueChange(student.id, component, e.target.value)
-                              }
-                            />
-                            {cellError !== null && (
-                              <p role="alert" className="mt-0.5 text-[10px] font-medium text-red-600">
-                                {cellError}
-                              </p>
-                            )}
+                          <td key={component.id} className="flex sm:table-cell justify-between items-center sm:items-stretch px-0 sm:px-4 py-1.5 sm:py-2 text-left sm:text-center border-b sm:border-none border-gray-50/50">
+                            <span className="sm:hidden text-xs font-semibold text-gray-500 uppercase">{component.name} <span className="lowercase font-normal">/{formatMarks(component.maxValue)}</span></span>
+                            <div className="flex flex-col items-end sm:items-center">
+                              <input
+                                type="number"
+                                min={0}
+                                max={component.maxValue}
+                                aria-label={`${student.name} — ${component.name}`}
+                                aria-invalid={cellError !== null}
+                                className={`w-24 sm:w-16 rounded-md border px-2 py-1.5 text-center text-sm transition-colors focus:outline-none focus:ring-1 ${
+                                  cellError !== null
+                                    ? 'border-red-300 bg-red-50 text-red-700 focus:border-red-500 focus:ring-red-500'
+                                    : 'border-gray-300 bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500'
+                                }`}
+                                value={studentRow[component.id] ?? ''}
+                                onChange={(e) =>
+                                  handleValueChange(student.id, component, e.target.value)
+                                }
+                              />
+                              {cellError !== null && (
+                                <p role="alert" className="mt-0.5 text-[10px] font-medium text-red-600">
+                                  {cellError}
+                                </p>
+                              )}
+                            </div>
                           </td>
                         );
                       })}
-                      <td className="px-4 py-3 text-center">
-                        <span className="text-sm font-bold text-gray-900">
-                          {formatMarks(liveTotal)}
-                        </span>
-                        {savedTotal !== undefined && (
-                          <span className="ml-1 text-[10px] font-medium text-green-600">
-                            ✓
+                      <td className="flex sm:table-cell justify-between items-center px-0 sm:px-4 py-2 sm:py-3 text-left sm:text-center mt-2 sm:mt-0">
+                        <span className="sm:hidden text-xs font-semibold text-gray-700">Internal Total:</span>
+                        <div className="flex items-center sm:justify-center">
+                          <span className="text-base sm:text-sm font-bold text-gray-900 bg-gray-100 sm:bg-transparent px-2 sm:px-0 py-0.5 sm:py-0 rounded">
+                            {formatMarks(liveTotal)} <span className="sm:hidden">/ {formatMarks(totalWeightage)}</span>
                           </span>
-                        )}
+                          {savedTotal !== undefined && (
+                            <span className="ml-1 text-[10px] font-medium text-green-600">
+                              ✓
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="block sm:table-cell px-0 sm:px-4 pt-3 sm:py-3 text-center">
                         <button
                           type="button"
-                          className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                          className="w-full sm:w-auto rounded-md bg-indigo-600 px-2.5 py-2 sm:py-1 text-sm sm:text-xs font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                           disabled={savingStudent === student.id || rowHasError(student.id)}
                           onClick={() => void saveStudent(student.id)}
                         >
-                          {savingStudent === student.id ? '…' : 'Save'}
+                          {savingStudent === student.id ? '…' : 'Save Marks'}
                         </button>
                       </td>
                     </tr>

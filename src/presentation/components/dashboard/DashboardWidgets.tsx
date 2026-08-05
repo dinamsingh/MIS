@@ -129,18 +129,18 @@ export const DashboardStatCard = memo(function DashboardStatCard({
       type={onClick ? 'button' : undefined}
       onClick={onClick}
       className={[
-        'card group relative min-h-[7.5rem] overflow-hidden p-3 text-left transition-all duration-fast ease-standard sm:p-3.5',
+        'card group relative flex min-h-[5.5rem] items-center gap-4 rounded-[14px] border border-border bg-surface p-4 text-left transition-all duration-fast ease-standard',
         'hover:-translate-y-0.5 hover:shadow-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:hover:translate-y-0',
         onClick ? 'w-full cursor-pointer' : '',
       ].join(' ')}
       aria-label={onClick ? `${label}: ${formatted}${suffix}` : undefined}
     >
-      <div className={`absolute right-3 top-3 h-14 w-14 rounded-full ${toneClass.soft} opacity-60 blur-xl`} />
-      <div className="relative flex h-full flex-col justify-between gap-3">
-        <div className="flex items-start justify-between gap-2">
-          <span className={`flex h-8 w-8 items-center justify-center rounded-button text-sm ${toneClass.soft} ${toneClass.text} ring-1 ${toneClass.ring}`}>
-            {icon}
-          </span>
+      <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${toneClass.soft} ${toneClass.text} text-xl shadow-soft ring-1 ${toneClass.ring}`}>
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-1">
+          <p className="truncate text-xs font-medium text-text-soft">{label}</p>
           {trend && (
             <span className={`rounded-sm bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold leading-4 ${trendClass}`}>
               {trendDirection === 'up' ? '+' : trendDirection === 'down' ? '-' : ''}
@@ -148,14 +148,11 @@ export const DashboardStatCard = memo(function DashboardStatCard({
             </span>
           )}
         </div>
-        <div>
-          <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</p>
-          <p className="mt-1.5 text-2xl font-semibold leading-none text-text">
-            {formatted}
-            <span className="text-sm text-soft">{suffix}</span>
-          </p>
-          {description && <p className="mt-1 truncate text-[11px] leading-4 text-muted">{description}</p>}
-        </div>
+        <p className="mt-0.5 text-2xl font-bold leading-tight text-accent">
+          {formatted}
+          <span className="text-sm font-normal text-text-soft">{suffix}</span>
+        </p>
+        {description && <p className="truncate text-[11px] text-text-muted">{description}</p>}
       </div>
     </Wrapper>
   );
@@ -239,15 +236,14 @@ export interface ScheduleItem {
 }
 
 export const TodaySchedule = memo(function TodaySchedule({ classes }: { readonly classes: readonly ScheduleItem[] }) {
+  const navigate = useNavigate();
   return (
-    <section className="card p-5" aria-labelledby="schedule-title">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 id="schedule-title" className="text-card-title">Today's Schedule</h2>
-          <p className="mt-1 text-xs text-muted">Timeline for the selected section.</p>
-        </div>
-        <span className="badge-neutral">{classes.length} classes</span>
+    <div className="bg-surface rounded-[14px] p-6 border border-border h-full">
+      <div className="flex justify-between items-center mb-6">
+        <h3 className="font-headline font-semibold text-lg text-accent">Today's Schedule</h3>
+        <button className="text-sm text-[#0D746A] hover:underline font-medium" onClick={() => navigate('/timetable')}>View Full Timetable</button>
       </div>
+      
       {classes.length === 0 ? (
         <DashboardEmptyState
           title="No classes today"
@@ -255,37 +251,58 @@ export const TodaySchedule = memo(function TodaySchedule({ classes }: { readonly
           actionLabel="Open timetable"
         />
       ) : (
-        <ol className="mt-5 space-y-4">
+        <div className="flex flex-col gap-4 relative">
+          <div className="absolute left-[60px] top-4 bottom-4 w-px bg-border z-0"></div>
+          
           {classes.map((item) => {
             const active = item.status === 'next';
+            const done = item.status === 'done';
+            
             return (
-              <li key={item.id} className="relative flex gap-3">
-                <span className="mt-1 flex flex-col items-center">
-                  <span
-                    className={[
-                      'h-3 w-3 rounded-full ring-4',
-                      active ? 'bg-accent ring-accent/15 animate-pulse' : item.status === 'done' ? 'bg-status-green ring-status-green/15' : 'bg-border ring-border/50',
-                    ].join(' ')}
-                  />
-                  <span className="mt-2 h-full min-h-10 w-px bg-border" />
-                </span>
-                <div className={['flex-1 rounded-card border p-3', active ? 'border-accent/20 bg-accent-tint' : 'border-border bg-background'].join(' ')}>
-                  <div className="flex items-start justify-between gap-3">
+              <div key={item.id} className={`flex items-start gap-6 relative z-10 ${!done && !active ? 'group' : ''}`}>
+                <div className="w-12 text-right pt-1 shrink-0">
+                  <p className={`text-xs font-bold ${active ? 'text-[#0D746A]' : 'text-text-soft'}`}>{item.time.split(' ')[0] || item.time}</p>
+                  <p className={`text-[10px] ${active ? 'text-[#0D746A]' : 'text-text-muted'}`}>{item.time.split(' ')[1] || 'AM'}</p>
+                </div>
+                
+                {active ? (
+                  <div className="w-4 h-4 rounded-full bg-[#0D746A] shadow-[0_0_0_4px_rgba(13,116,106,0.2)] shrink-0 mt-1"></div>
+                ) : done ? (
+                  <div className="w-4 h-4 rounded-full bg-surface border-4 border-border shrink-0 mt-1 relative"></div>
+                ) : (
+                  <div className="w-4 h-4 rounded-full bg-surface border-2 border-border shrink-0 mt-1"></div>
+                )}
+                
+                <div className={`flex-1 ${active ? 'bg-white border-2 border-[#0D746A]/30 shadow-sm relative overflow-hidden group' : done ? 'bg-background/50 border border-border opacity-70' : 'bg-background/50 border border-border border-dashed hover:bg-surface transition-colors cursor-pointer'} rounded-xl p-4`}>
+                  {active && <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-[#064E4B] to-[#14B8A6]"></div>}
+                  
+                  <div className="flex justify-between items-center">
                     <div>
-                      <p className="text-sm font-semibold text-text">{item.subject}</p>
-                      <p className="mt-1 text-xs text-muted">{item.time} / {item.room}</p>
+                      <h4 className={`font-bold ${active ? 'text-accent text-lg' : done ? 'text-text-soft line-through' : 'text-accent'}`}>{item.subject}</h4>
+                      <p className={`text-xs ${active ? 'text-text-soft mt-0.5 flex items-center gap-2 text-sm' : 'text-text-muted mt-1'}`}>
+                        {active && <span className="material-symbols-outlined text-[16px]">location_on</span>}
+                        {item.room}
+                      </p>
                     </div>
-                    <span className={active ? 'badge-neutral bg-accent text-surface' : item.status === 'done' ? 'badge-success' : 'badge-neutral'}>
-                      {item.status === 'next' ? 'current' : item.status}
-                    </span>
+                    
+                    {active ? (
+                      <button onClick={() => navigate('/attendance')} className="bg-[#0D746A] hover:bg-[#064E4B] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm flex items-center gap-2 opacity-0 group-hover:opacity-100 transform translate-x-2 group-hover:translate-x-0 duration-200">
+                        <span className="material-symbols-outlined text-[18px]">how_to_reg</span>
+                        Take Attendance
+                      </button>
+                    ) : done ? (
+                      <span className="bg-surface-muted text-text-soft text-xs px-2 py-1 rounded-md flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[14px]">check</span> Done
+                      </span>
+                    ) : null}
                   </div>
                 </div>
-              </li>
+              </div>
             );
           })}
-        </ol>
+        </div>
       )}
-    </section>
+    </div>
   );
 });
 

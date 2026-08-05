@@ -615,8 +615,8 @@ export default function QuizCreationView({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
-              <thead>
+            <table className="block sm:table w-full sm:min-w-[720px] text-left text-sm">
+              <thead className="hidden sm:table-header-group">
                 <tr className="border-b border-border bg-surface-muted/40">
                   <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Quiz</th>
                   <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Section</th>
@@ -627,37 +627,53 @@ export default function QuizCreationView({
                   <th className="px-4 py-2.5 text-right text-[11px] font-bold uppercase text-muted">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody className="block sm:table-row-group sm:divide-y divide-border p-3 sm:p-0">
                 {savedQuizzes.map((quiz) => {
                   return (
-                    <tr key={quiz.id} className="align-top">
-                      <td className="px-4 py-3">
-                        <p className="font-semibold text-text">{quiz.unitName}</p>
+                    <tr key={quiz.id} className="relative block sm:table-row align-top border border-border sm:border-none rounded-xl sm:rounded-none mb-3 sm:mb-0 bg-white dark:bg-transparent hover:bg-surface-muted/30 transition-colors">
+                      <td className="block sm:table-cell px-4 py-3 border-b border-border/50 sm:border-none">
+                        <p className="font-semibold text-text pr-16 sm:pr-0 truncate">{quiz.unitName}</p>
                         <p className="mt-0.5 text-xs text-muted">
                           {formatWindow(quiz.activeFrom, quiz.activeUntil)} · {quiz.timeLimitMinutes} min
                         </p>
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted">
-                        {quiz.sections.length === 0 ? (
-                          <span className="italic text-muted">All sections</span>
-                        ) : (
-                          quiz.sections.map((section) => section.name).join(', ')
-                        )}
+                      <td className="block sm:table-cell px-4 py-2 sm:py-3 text-xs text-muted">
+                        <div className="flex justify-between sm:block items-center">
+                          <span className="sm:hidden font-semibold text-text">Section</span>
+                          {quiz.sections.length === 0 ? (
+                            <span className="italic">All sections</span>
+                          ) : (
+                            quiz.sections.map((section) => section.name).join(', ')
+                          )}
+                        </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="absolute top-3 right-3 sm:static sm:table-cell sm:px-4 sm:py-3">
                         <Badge tone={STATUS_TONE[quiz.status]} size="sm">
                           {STATUS_LABEL[quiz.status]}
                         </Badge>
                       </td>
-                      <td className="px-4 py-3 text-text">{quiz.questionCount}</td>
-                      <td className="px-4 py-3 text-text">{quiz.responseCount}</td>
-                      <td className="px-4 py-3 text-text">
-                        {quiz.averageScore !== null
-                          ? `${quiz.averageScore.toFixed(1)} / ${quiz.totalMarks}`
-                          : '—'}
+                      <td className="block sm:table-cell px-4 py-2 sm:py-3 text-text">
+                        <div className="flex justify-between sm:block items-center">
+                          <span className="sm:hidden text-xs font-semibold text-muted">Questions</span>
+                          {quiz.questionCount}
+                        </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-2">
+                      <td className="block sm:table-cell px-4 py-2 sm:py-3 text-text">
+                        <div className="flex justify-between sm:block items-center">
+                          <span className="sm:hidden text-xs font-semibold text-muted">Responses</span>
+                          {quiz.responseCount}
+                        </div>
+                      </td>
+                      <td className="block sm:table-cell px-4 py-2 sm:py-3 text-text">
+                        <div className="flex justify-between sm:block items-center">
+                          <span className="sm:hidden text-xs font-semibold text-muted">Average</span>
+                          {quiz.averageScore !== null
+                            ? `${quiz.averageScore.toFixed(1)} / ${quiz.totalMarks}`
+                            : '—'}
+                        </div>
+                      </td>
+                      <td className="block sm:table-cell px-4 py-3 border-t border-border/20 sm:border-none">
+                        <div className="flex items-center sm:justify-end flex-wrap gap-2">
                           {quiz.responseCount === 0 && (
                             <Button size="sm" variant="ghost" loading={busyKey === `edit-${quiz.id}`} onClick={() => void handleEditQuiz(quiz)}>
                               Edit
@@ -906,6 +922,7 @@ export default function QuizCreationView({
         }}
         title={resultsQuiz ? `Results: ${resultsQuiz.unitName}` : 'Quiz Results'}
         description={resultsQuiz ? `Submissions log for ${resultsQuiz.title}` : undefined}
+        maxWidth="4xl"
       >
         {resultsQuiz && (
           <div className="space-y-4">
@@ -931,14 +948,14 @@ export default function QuizCreationView({
                       </div>
                     </div>
                     <div className="space-y-6">
-                      {detailByStudent[`${resultsQuiz.id}-${detailViewStudentId}`]?.questions.map((q, idx) => (
+                      {(detailByStudent[`${resultsQuiz.id}-${detailViewStudentId}`]?.questions || []).map((q, idx) => (
                         <div key={q.questionId} className="space-y-2 rounded-control border border-border bg-surface p-4">
                           <div className="flex justify-between items-start gap-4">
                             <p className="font-medium text-text">{idx + 1}. {q.text}</p>
                             <span className="shrink-0 text-xs font-bold text-muted">{q.marks} {q.marks === 1 ? 'mark' : 'marks'}</span>
                           </div>
                           <div className="space-y-1.5 pt-2">
-                            {q.options.map((opt, optIdx) => {
+                            {Array.isArray(q.options) ? q.options.map((opt, optIdx) => {
                               const isCorrect = q.correctIndex === optIdx;
                               const isSelected = q.studentAnswerIndex === optIdx;
                               let ringClass = 'border-border bg-surface-muted/30';
@@ -956,7 +973,7 @@ export default function QuizCreationView({
                                   {!isCorrect && isSelected && <span className="ml-auto text-xs font-bold uppercase tracking-wider">Incorrect</span>}
                                 </div>
                               );
-                            })}
+                            }) : <p className="text-sm text-status-red">Invalid options data</p>}
                           </div>
                         </div>
                       ))}
@@ -1033,21 +1050,20 @@ export default function QuizCreationView({
                         <Button size="sm" variant={resultsSortOrder === 'name' ? 'secondary' : 'ghost'} onClick={() => setResultsSortOrder('name')}>Sort by Name</Button>
                       </div>
                       <div className="overflow-hidden rounded-control border border-border bg-surface">
-                        <table className="w-full text-left text-xs">
-                          <thead>
-                            <tr className="border-b border-border bg-surface-muted/40">
-                              <th className="px-3 py-2 font-bold uppercase text-muted">Student</th>
-                              <th className="px-3 py-2 font-bold uppercase text-muted">Enrollment</th>
-                              <th className="px-3 py-2 font-bold uppercase text-muted">Section</th>
-                              <th className="px-3 py-2 font-bold uppercase text-muted">Score</th>
-                              <th className="px-3 py-2 font-bold uppercase text-muted">Submitted</th>
-                              <th className="px-3 py-2 text-right font-bold uppercase text-muted">Action</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border">
+                        <div className="overflow-x-auto">
+                          <table className="block sm:table w-full text-left text-xs sm:whitespace-nowrap">
+                            <thead className="hidden sm:table-header-group">
+                              <tr className="border-b border-border bg-surface-muted/40">
+                                <th className="px-3 py-2 font-bold uppercase text-muted">Student</th>
+                                <th className="px-3 py-2 font-bold uppercase text-muted">Enrollment</th>
+                                <th className="px-3 py-2 font-bold uppercase text-muted">Section</th>
+                                <th className="px-3 py-2 font-bold uppercase text-muted">Score</th>
+                                <th className="px-3 py-2 font-bold uppercase text-muted">Submitted</th>
+                                <th className="px-3 py-2 text-right font-bold uppercase text-muted">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody className="block sm:table-row-group sm:divide-y divide-border p-2 sm:p-0">
                             {[...(resultsByQuiz[resultsQuiz.id] ?? [])]
-                              // Section filter only applies to genuinely multi-section quizzes,
-                              // and never hides rows whose section didn't resolve (r.section null).
                               .filter((r) =>
                                 resultsQuiz.sections.length <= 1 ||
                                 resultsSectionFilter === null ||
@@ -1058,13 +1074,33 @@ export default function QuizCreationView({
                               if (resultsSortOrder === 'score') return b.score - a.score;
                               return a.studentName.localeCompare(b.studentName);
                             }).map((r) => (
-                              <tr key={r.studentId} className="hover:bg-surface-muted/30 cursor-pointer" onClick={() => void openAttemptDetail(resultsQuiz.id, r.studentId)}>
-                                <td className="px-3 py-2 font-medium text-text">{r.studentName}</td>
-                                <td className="px-3 py-2 font-mono text-muted">{r.enrollmentNumber ?? '—'}</td>
-                                <td className="px-3 py-2 text-muted">{r.section ? formatSectionLabel(r.section) : '—'}</td>
-                                <td className="px-3 py-2 font-black text-accent">{r.score} / {r.totalMarks}</td>
-                                <td className="px-3 py-2 text-muted">{formatDateTime(r.submittedAt)}</td>
-                                <td className="px-3 py-2 text-right">
+                              <tr key={r.studentId} className="relative block sm:table-row hover:bg-surface-muted/30 cursor-pointer border border-border sm:border-none rounded-lg sm:rounded-none mb-2 sm:mb-0" onClick={() => void openAttemptDetail(resultsQuiz.id, r.studentId)}>
+                                <td className="block sm:table-cell px-3 pt-3 pb-1 sm:py-2 font-medium text-text border-b border-border/50 sm:border-none">
+                                  <div className="flex justify-between sm:block">
+                                    <span className="truncate">{r.studentName}</span>
+                                    <span className="sm:hidden font-mono text-muted text-[10px]">{r.enrollmentNumber ?? '—'}</span>
+                                  </div>
+                                </td>
+                                <td className="hidden sm:table-cell px-3 py-2 font-mono text-muted">{r.enrollmentNumber ?? '—'}</td>
+                                <td className="block sm:table-cell px-3 py-1.5 sm:py-2 text-muted">
+                                  <div className="flex justify-between sm:block items-center">
+                                    <span className="sm:hidden font-semibold">Section</span>
+                                    {r.section ? formatSectionLabel(r.section) : '—'}
+                                  </div>
+                                </td>
+                                <td className="block sm:table-cell px-3 py-1.5 sm:py-2 font-black text-accent">
+                                  <div className="flex justify-between sm:block items-center">
+                                    <span className="sm:hidden font-semibold text-text">Score</span>
+                                    {r.score} / {r.totalMarks}
+                                  </div>
+                                </td>
+                                <td className="block sm:table-cell px-3 py-1.5 sm:py-2 text-muted">
+                                  <div className="flex justify-between sm:block items-center">
+                                    <span className="sm:hidden font-semibold">Submitted</span>
+                                    {formatDateTime(r.submittedAt)}
+                                  </div>
+                                </td>
+                                <td className="block sm:table-cell px-3 py-2 sm:text-right border-t border-border/20 sm:border-none">
                                   <div className="flex justify-end gap-2">
                                     <Button
                                       size="sm"
@@ -1074,9 +1110,9 @@ export default function QuizCreationView({
                                         e.stopPropagation();
                                         void handleRemoveAttempt(resultsQuiz.id, r);
                                       }}
-                                      className="text-status-red hover:bg-status-red/10"
+                                      className="!text-status-red hover:!bg-status-red/10 w-full sm:w-auto"
                                     >
-                                      Remove
+                                      Remove Attempt
                                     </Button>
                                   </div>
                                 </td>
@@ -1084,6 +1120,7 @@ export default function QuizCreationView({
                             ))}
                           </tbody>
                         </table>
+                        </div>
                       </div>
                     </div>
                   )
@@ -1098,24 +1135,36 @@ export default function QuizCreationView({
                         </Button>
                       </div>
                       <div className="overflow-hidden rounded-control border border-border bg-surface">
-                        <table className="w-full text-left text-xs">
-                          <thead>
-                            <tr className="border-b border-border bg-surface-muted/40">
-                              <th className="px-3 py-2 font-bold uppercase text-muted">Enrollment</th>
-                              <th className="px-3 py-2 font-bold uppercase text-muted">Name</th>
-                              <th className="px-3 py-2 font-bold uppercase text-muted">Section</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border">
-                            {(nonAttemptersByQuiz[resultsQuiz.id] ?? []).map((r) => (
-                              <tr key={r.enrollmentNumber} className="hover:bg-surface-muted/30">
-                                <td className="px-3 py-2 font-mono text-muted">{r.enrollmentNumber}</td>
-                                <td className="px-3 py-2 font-medium text-text">{r.name}</td>
-                                <td className="px-3 py-2 text-muted">{r.section ? typeof r.section === 'string' ? r.section : r.section.name : '—'}</td>
+                        <div className="overflow-x-auto">
+                          <table className="block sm:table w-full text-left text-xs sm:whitespace-nowrap">
+                            <thead className="hidden sm:table-header-group">
+                              <tr className="border-b border-border bg-surface-muted/40">
+                                <th className="px-3 py-2 font-bold uppercase text-muted">Enrollment</th>
+                                <th className="px-3 py-2 font-bold uppercase text-muted">Name</th>
+                                <th className="px-3 py-2 font-bold uppercase text-muted">Section</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody className="block sm:table-row-group sm:divide-y divide-border p-2 sm:p-0">
+                              {(nonAttemptersByQuiz[resultsQuiz.id] ?? []).map((r) => (
+                                <tr key={r.enrollmentNumber} className="block sm:table-row hover:bg-surface-muted/30 border border-border sm:border-none rounded-lg sm:rounded-none mb-2 sm:mb-0">
+                                  <td className="block sm:table-cell px-3 pt-3 pb-1 sm:py-2 font-mono text-muted border-b border-border/50 sm:border-none">
+                                    <div className="flex justify-between sm:block">
+                                      <span className="sm:hidden font-medium text-text truncate">{r.name}</span>
+                                      <span>{r.enrollmentNumber}</span>
+                                    </div>
+                                  </td>
+                                  <td className="hidden sm:table-cell px-3 py-2 font-medium text-text">{r.name}</td>
+                                  <td className="block sm:table-cell px-3 py-1.5 sm:py-2 text-muted">
+                                    <div className="flex justify-between sm:block items-center">
+                                      <span className="sm:hidden font-semibold">Section</span>
+                                      {r.section ? typeof r.section === 'string' ? r.section : r.section.name : '—'}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     </div>
                   )
@@ -1127,19 +1176,21 @@ export default function QuizCreationView({
                       <div className="space-y-4">
                         {(statsByQuiz[resultsQuiz.id] ?? []).map((stat, idx) => {
                           const correctCount = stat.pickCounts[stat.correctIndex] ?? 0;
-                          const percentCorrect = stat.totalAttempts > 0 ? (correctCount / stat.totalAttempts) * 100 : 0;
-                          const needsWarning = stat.totalAttempts > 0 && percentCorrect < 50;
+                          const accuracy = stat.totalAttempts > 0 ? (correctCount / stat.totalAttempts) * 100 : 0;
                           
                           return (
-                            <div key={stat.questionId} className={`space-y-3 rounded-control border p-4 ${needsWarning ? 'border-status-red/30 bg-status-red/5' : 'border-border bg-surface'}`}>
+                            <div key={stat.questionId} className="space-y-3 rounded-control border border-border bg-surface p-4">
                               <div className="flex justify-between items-start gap-4">
                                 <p className="font-medium text-text">{idx + 1}. {stat.text}</p>
-                                <span className={`shrink-0 text-xs font-bold ${needsWarning ? 'text-status-red' : 'text-status-green'}`}>
-                                  {percentCorrect.toFixed(0)}% correct
-                                </span>
+                                <div className="text-right shrink-0">
+                                  <span className={`text-xs font-bold ${accuracy >= 50 ? 'text-status-green' : 'text-status-red'}`}>
+                                    {accuracy.toFixed(0)}% Accuracy
+                                  </span>
+                                  <p className="text-[10px] text-muted">{stat.totalAttempts} attempts</p>
+                                </div>
                               </div>
-                              <div className="space-y-2">
-                                {stat.options.map((opt, optIdx) => {
+                              <div className="space-y-1.5 pt-1">
+                                {Array.isArray(stat.options) ? stat.options.map((opt, optIdx) => {
                                   const count = stat.pickCounts[optIdx] ?? 0;
                                   const percent = stat.totalAttempts > 0 ? (count / stat.totalAttempts) * 100 : 0;
                                   const isCorrect = stat.correctIndex === optIdx;
@@ -1151,14 +1202,12 @@ export default function QuizCreationView({
                                         style={{ width: `${percent}%` }}
                                       />
                                       <div className="relative flex justify-between gap-4">
-                                        <span className={isCorrect ? 'font-medium' : ''}>
-                                          {opt} {isCorrect && <span className="ml-1 text-xs font-bold uppercase text-status-green tracking-wider">(Correct)</span>}
-                                        </span>
-                                        <span className="shrink-0 font-mono text-muted">{count} ({percent.toFixed(0)}%)</span>
+                                        <span className="font-medium">{opt} {isCorrect && <span className="text-xs uppercase tracking-wider text-status-green ml-1">(Correct)</span>}</span>
+                                        <span className="text-muted tabular-nums shrink-0">{count} ({percent.toFixed(0)}%)</span>
                                       </div>
                                     </div>
                                   );
-                                })}
+                                }) : <p className="text-sm text-status-red">Invalid options data</p>}
                               </div>
                             </div>
                           );

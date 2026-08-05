@@ -49,7 +49,7 @@ const NOT_APPROVED_TEACHER_STATE: SignInRedirectState = { notApprovedTeacher: tr
 const DashboardPage = lazy(() => import('@presentation/pages/DashboardPage'));
 const TimetablePage = lazy(() => import('@presentation/pages/TimetablePage'));
 const AttendancePage = lazy(() => import('@presentation/pages/AttendancePage'));
-const AttendanceReportPage = lazy(() => import('@presentation/pages/AttendanceReportPage'));
+
 const SyllabusTrackerPage = lazy(() => import('@presentation/pages/SyllabusTrackerPage'));
 const MarksCalculatorPage = lazy(() => import('@presentation/pages/MarksCalculatorPage'));
 const QuizCreationPage = lazy(() => import('@presentation/pages/QuizCreationPage'));
@@ -244,7 +244,9 @@ function SignInRoute() {
     return null;
   }
 
-  if (isTeacher || isPendingTeacher) {
+  const isRecovery = location.hash.includes('type=recovery');
+
+  if ((isTeacher || isPendingTeacher) && !isRecovery) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -256,7 +258,7 @@ function SignInRoute() {
     return <Navigate to="/admin" replace />;
   }
 
-  if (actor.kind !== 'anonymous') {
+  if (actor.kind !== 'anonymous' && !isRecovery) {
     void signOut();
   }
 
@@ -306,7 +308,7 @@ export default function App() {
               <Route path="/timetable" element={<TimetablePage />} />
               <Route path="/roster" element={<RosterPage />} />
               <Route path="/attendance" element={<AttendancePage />} />
-              <Route path="/attendance/report" element={<AttendanceReportPage />} />
+
               <Route path="/syllabus" element={<SyllabusTrackerPage />} />
               <Route path="/marks" element={<MarksCalculatorPage />} />
               <Route path="/quizzes" element={<QuizCreationPage />} />

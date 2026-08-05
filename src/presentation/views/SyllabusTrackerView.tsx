@@ -317,7 +317,7 @@ export default function SyllabusTrackerView({ subjects, sectionId, access }: Syl
 
   if (subjects.length === 0 || effectiveSectionId === '') {
     return (
-      <Card className="p-8 text-center">
+      <Card className="p-4 sm:p-8 text-center">
         <h2 className="text-lg font-semibold text-text">Syllabus Tracker</h2>
         <p className="mt-2 text-sm text-muted">
           Select a section and a subject from the top bar to track its syllabus.
@@ -358,7 +358,7 @@ export default function SyllabusTrackerView({ subjects, sectionId, access }: Syl
       {units === null ? (
         <FormSkeleton fields={4} />
       ) : units.length === 0 ? (
-        <Card className="p-8 text-center">
+        <Card className="p-4 sm:p-8 text-center">
           <p className="text-sm font-medium text-text">No syllabus loaded for this subject yet.</p>
           <p className="mt-1 text-xs text-muted">
             The department curriculum for this subject hasn't been added yet — contact your admin to seed it.

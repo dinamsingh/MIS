@@ -7,25 +7,17 @@
  */
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@presentation/auth';
-import { messages } from '@domain/shared/messages';
+
 import { isAtRisk, classAverage } from '@domain/services/analyticsService';
 import { todaysClasses, type DayOfWeek, type TimetableEntry } from '@domain/services/timetableService';
 import { combinedScore, type LeaderboardWeights, type StudentMetrics } from '@domain/services/leaderboardService';
 import { DashboardSkeleton } from '@presentation/components/skeletons';
 import SkeletonPulse from '@presentation/components/skeletons/SkeletonPulse';
 import {
-  DashboardEmptyState,
-  DashboardStatCard,
-  PendingTasks,
-  RecentActivity,
   StudentDirectoryModal,
   TodaySchedule,
-  deriveActivities,
   scheduleFromEntries,
-  type PendingTask,
 } from '@presentation/components/dashboard/DashboardWidgets';
 
 const DashboardCharts = lazy(() => import('@presentation/components/dashboard/DashboardCharts'));
@@ -80,12 +72,7 @@ function daysAgo(n: number): string {
   return toISODate(d);
 }
 
-function getGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
-}
+
 
 function chartFallback() {
   return (
@@ -105,14 +92,9 @@ export default function DashboardView({
   subjectNames = {},
   sectionNames = {},
 }: DashboardViewProps) {
-  const { actor } = useAuth();
+
   const navigate = useNavigate();
-  const teacherName = useMemo(
-    () => actor.kind === 'teacher'
-      ? actor.email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-      : 'Teacher',
-    [actor],
-  );
+
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [timetableEntries, setTimetableEntries] = useState<TimetableEntry[]>([]);
@@ -123,6 +105,9 @@ export default function DashboardView({
     quizScores: 1,
     attendance: 1,
   });
+  const [showGraphModal, setShowGraphModal] = useState(false);
+  const [hoveredPoint, setHoveredPoint] = useState<{ date: string; percent: number; x: number; y: number } | null>(null);
+
   const [isLoading, setIsLoading] = useState(true);
   const [showStudentsModal, setShowStudentsModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -227,6 +212,38 @@ export default function DashboardView({
     syllabusProgressPercent: 0,
   };
 
+  const attPct = resolvedSummary.avgAttendancePercent;
+  const openAttendanceReport = useCallback(() => navigate('/attendance'), [navigate]);
+
+  // Computed data points for mini & full graph
+  const displayPoints = useMemo(() => {
+    return trendPoints;
+  }, [trendPoints]);
+
+  // Compute SVG line path points (normalized to 160x45)
+  const lineGraphSvgPoints = useMemo(() => {
+    const width = 140;
+    const height = 40;
+    const padding = 10;
+    const miniPoints = displayPoints.slice(-7);
+    const count = miniPoints.length;
+    if (count === 0) return { pathString: '', areaString: '', points: [] };
+
+    const pts = miniPoints.map((pt, i) => {
+      const x = padding + (i / Math.max(1, count - 1)) * (width - 2 * padding);
+      const normalizedPct = Math.max(0, Math.min(100, pt.percent));
+      const y = height - (normalizedPct / 100) * (height - 10) + 5;
+      return { ...pt, x, y };
+    });
+
+    const pathString = pts.reduce((acc, p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`), '');
+    const firstX = pts[0]?.x ?? 0;
+    const lastX = pts[pts.length - 1]?.x ?? width;
+    const areaString = `${pathString} L ${lastX} ${height + 5} L ${firstX} ${height + 5} Z`;
+
+    return { pathString, areaString, points: pts };
+  }, [displayPoints]);
+
   const subjectCount = useMemo(
     () => new Set(timetableEntries.map((entry) => entry.subjectId)).size,
     [timetableEntries],
@@ -237,251 +254,213 @@ export default function DashboardView({
     return studentMetrics.reduce((sum, student) => sum + student.quizScore, 0) / studentMetrics.length;
   }, [studentMetrics]);
 
-  const pendingAssignments = needsAttention.length;
   const scheduleItems = useMemo(
     () => scheduleFromEntries(todayClasses, subjectNames, sectionNames, getClassStatus),
     [getClassStatus, sectionNames, subjectNames, todayClasses],
   );
 
-  const pendingTasks = useMemo<PendingTask[]>(
-    () => [
-      {
-        id: 'attention',
-        label: 'Students need attention',
-        detail: 'Review attendance, marks, or quiz performance.',
-        count: needsAttention.length,
-        tone: needsAttention.length > 0 ? 'red' : 'green',
-        href: '/analytics',
-      },
-      {
-        id: 'syllabus',
-        label: 'Syllabus remaining',
-        detail: 'Complete planned topics for this section.',
-        count: Math.max(0, Math.round(100 - resolvedSummary.syllabusProgressPercent)),
-        tone: resolvedSummary.syllabusProgressPercent >= 80 ? 'green' : 'amber',
-        href: '/syllabus',
-      },
-      {
-        id: 'classes',
-        label: 'Classes today',
-        detail: 'Prepare attendance and class material.',
-        count: todayClasses.length,
-        tone: 'blue',
-        href: '/timetable',
-      },
-    ],
-    [needsAttention.length, resolvedSummary.syllabusProgressPercent, todayClasses.length],
-  );
 
-  const recentActivities = useMemo(
-    () => deriveActivities(studentMetrics, pendingAssignments),
-    [studentMetrics, pendingAssignments],
-  );
 
-  const attPct = resolvedSummary.avgAttendancePercent;
-  const attColor = attPct >= 75 ? 'bg-status-green' : attPct >= 60 ? 'bg-status-amber' : 'bg-status-red';
-  const openStudentsModal = useCallback(() => setShowStudentsModal(true), []);
-  const openAttendanceReport = useCallback(() => navigate('/attendance/report'), [navigate]);
 
-  const statCards = useMemo(() => [
-    {
-      key: 'students',
-      icon: '👥',
-      label: 'Students',
-      value: resolvedSummary.totalStudents,
-      suffix: undefined as string | undefined,
-      precision: 0,
-      trend: 'view list',
-      trendDirection: 'flat' as const,
-      tone: 'blue' as const,
-      description: 'Current roster size',
-      onClick: openStudentsModal,
-    },
-    {
-      key: 'attendance',
-      icon: '📊',
-      label: 'Attendance',
-      value: resolvedSummary.avgAttendancePercent,
-      suffix: '%',
-      precision: 1,
-      trend: resolvedSummary.avgAttendancePercent >= 75 ? 'healthy' : 'review',
-      trendDirection: resolvedSummary.avgAttendancePercent >= 75 ? 'up' as const : 'down' as const,
-      tone: resolvedSummary.avgAttendancePercent >= 75 ? 'green' as const : 'amber' as const,
-      description: 'Average class attendance',
-      onClick: openAttendanceReport,
-    },
-    {
-      key: 'subjects',
-      icon: '📚',
-      label: 'Subjects',
-      value: subjectCount,
-      suffix: undefined,
-      precision: 0,
-      trend: 'active',
-      trendDirection: 'flat' as const,
-      tone: 'neutral' as const,
-      description: 'From timetable entries',
-      onClick: undefined,
-    },
-    {
-      key: 'pending',
-      icon: '⚠️',
-      label: 'Need Attention',
-      value: pendingAssignments,
-      suffix: undefined,
-      precision: 0,
-      trend: pendingAssignments > 0 ? 'due soon' : 'clear',
-      trendDirection: pendingAssignments > 0 ? 'down' as const : 'up' as const,
-      tone: pendingAssignments > 0 ? 'red' as const : 'green' as const,
-      description: 'Students at risk',
-      onClick: undefined,
-    },
-    {
-      key: 'quiz',
-      icon: '🧠',
-      label: 'Quiz Average',
-      value: averageQuizScore,
-      suffix: undefined,
-      precision: 1,
-      trend: 'class signal',
-      trendDirection: 'flat' as const,
-      tone: 'amber' as const,
-      description: 'Average quiz score',
-      onClick: undefined,
-    },
-    {
-      key: 'syllabus',
-      icon: '📋',
-      label: 'Syllabus',
-      value: resolvedSummary.syllabusProgressPercent,
-      suffix: '%',
-      precision: 0,
-      trend: resolvedSummary.syllabusProgressPercent >= 80 ? 'on track' : 'pending',
-      trendDirection: resolvedSummary.syllabusProgressPercent >= 80 ? 'up' as const : 'flat' as const,
-      tone: resolvedSummary.syllabusProgressPercent >= 80 ? 'green' as const : 'blue' as const,
-      description: 'Completion progress',
-      onClick: undefined,
-    },
-  ], [
-    averageQuizScore,
-    openAttendanceReport,
-    openStudentsModal,
-    pendingAssignments,
-    resolvedSummary.avgAttendancePercent,
-    resolvedSummary.syllabusProgressPercent,
-    resolvedSummary.totalStudents,
-    subjectCount,
-  ]);
 
   if (isLoading) {
     return <DashboardSkeleton />;
   }
 
   return (
-    <section className="flex flex-col gap-5">
-      {/* ── Welcome Section ── */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22, ease: 'easeOut' }}
-        className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between"
-      >
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-text">
-          {getGreeting()}, {teacherName} 👋
-        </h1>
-      </motion.div>
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto w-full flex flex-col gap-6">
 
-      {/* ── Stat Cards (staggered entrance) ── */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {statCards.map((card, i) => (
-          <motion.div
-            key={card.key}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.045, duration: 0.2, ease: 'easeOut' }}
-          >
-            <DashboardStatCard
-              icon={card.icon}
-              label={card.label}
-              value={card.value}
-              suffix={card.suffix}
-              precision={card.precision}
-              trend={card.trend}
-              trendDirection={card.trendDirection}
-              tone={card.tone}
-              description={card.description}
-              onClick={card.onClick}
-            />
-          </motion.div>
-        ))}
-      </div>
 
-      {/* ── Attendance Overview Strip ── */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.3, duration: 0.2 }}
-        className="card overflow-hidden p-4"
-        aria-label={`Average attendance: ${attPct.toFixed(1)}%`}
-      >
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Attendance Overview</p>
-            <p className="mt-0.5 text-sm text-soft">Average across all students in selected section</p>
-          </div>
-          <span className={`text-2xl font-bold ${
-            attPct >= 75 ? 'text-status-green' : attPct >= 60 ? 'text-status-amber' : 'text-status-red'
-          }`}>
-            {attPct.toFixed(1)}%
-          </span>
-        </div>
-        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-border">
-          <motion.div
-            className={`h-full rounded-full ${attColor}`}
-            initial={{ width: 0 }}
-            animate={{ width: `${Math.min(100, attPct)}%` }}
-            transition={{ delay: 0.35, duration: 0.5, ease: 'easeOut' }}
-          />
-        </div>
-        <div className="mt-1.5 flex justify-between text-[10px] text-muted">
-          <span>0%</span>
-          <span className="text-status-amber">75% threshold</span>
-          <span>100%</span>
-        </div>
-      </motion.div>
-
-      {/* ── Charts (lazy) ── */}
-      <Suspense fallback={chartFallback()}>
-        <DashboardCharts
-          trendPoints={trendPoints}
-        />
-      </Suspense>
-
-      {/* ── Schedule + Pending Tasks ── */}
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-        <TodaySchedule classes={scheduleItems} />
-        <PendingTasks tasks={pendingTasks} />
-      </div>
-
-      {/* ── Recent Activity ── */}
-      {recentActivities.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.2 }}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div 
+          role="button"
+          tabIndex={0}
+          onClick={() => setShowStudentsModal(true)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowStudentsModal(true); }}
+          className="bg-surface rounded-[14px] p-4 border border-border flex items-center gap-4 cursor-pointer hover:bg-surface-muted hover:border-accent/40 transition-colors shadow-sm hover:shadow-elevated group"
         >
-          <RecentActivity items={recentActivities} />
-        </motion.div>
-      )}
+          <div className="w-12 h-12 rounded-full bg-accent-tint flex items-center justify-center text-accent">
+            <span className="material-symbols-outlined">groups</span>
+          </div>
+          <div>
+            <p className="text-sm text-text-soft font-medium">Total Students</p>
+            <p className="text-2xl font-bold text-accent">{resolvedSummary.totalStudents}</p>
+          </div>
+        </div>
+        <div className="bg-surface rounded-[14px] p-4 border border-border flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-[#E0E7FF] flex items-center justify-center text-[#4338CA]">
+            <span className="material-symbols-outlined">book</span>
+          </div>
+          <div>
+            <p className="text-sm text-text-soft font-medium">Subjects</p>
+            <p className="text-2xl font-bold text-accent">{subjectCount}</p>
+          </div>
+        </div>
+        <div className="bg-surface rounded-[14px] p-4 border border-border flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-[#FEF3C7] flex items-center justify-center text-[#B45309]">
+            <span className="material-symbols-outlined">quiz</span>
+          </div>
+          <div>
+            <p className="text-sm text-text-soft font-medium">Quiz Avg</p>
+            <p className="text-2xl font-bold text-accent">{averageQuizScore.toFixed(1)}%</p>
+          </div>
+        </div>
+        <div className="bg-surface rounded-[14px] p-4 border border-border flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-[#DCFCE7] flex items-center justify-center text-[#15803D]">
+            <span className="material-symbols-outlined">task_alt</span>
+          </div>
+          <div>
+            <p className="text-sm text-text-soft font-medium">Syllabus</p>
+            <p className="text-2xl font-bold text-accent">{resolvedSummary.syllabusProgressPercent}%</p>
+          </div>
+        </div>
+      </div>
 
-      {/* ── Empty state when no students loaded yet ── */}
-      {studentMetrics.length === 0 && (
-        <DashboardEmptyState
-          title="Dashboard is ready for data"
-          message={messages.emptyState.noStudents}
-          actionLabel="Open roster"
-        />
-      )}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="col-span-1 lg:col-span-6 bg-surface rounded-[14px] p-6 border border-border relative overflow-hidden flex flex-col justify-between">
+          <div className="absolute -right-10 -top-10 w-40 h-40 bg-status-green opacity-5 rounded-full blur-2xl"></div>
+          <div className="flex justify-between items-start relative z-10">
+            <div>
+              <h3 className="font-headline font-semibold text-lg text-accent flex items-center gap-2">
+                Class Attendance
+                <span className={`${attPct >= 75 ? 'bg-status-green/10 text-status-green' : 'bg-status-red/10 text-status-red'} text-xs px-2 py-0.5 rounded-full font-bold`}>
+                  {attPct >= 75 ? 'Excellent' : 'Needs Review'}
+                </span>
+              </h3>
+              <p className="text-sm text-text-soft mt-1">Average for {selectedSectionFilter === 'All' ? 'All Sections' : selectedSectionFilter}</p>
+            </div>
+            <button className="text-text-soft hover:text-accent" onClick={openAttendanceReport}><span className="material-symbols-outlined">more_horiz</span></button>
+          </div>
+          <div className="mt-8 flex items-end justify-between relative z-10">
+            <div>
+              <div className={`text-5xl font-black ${attPct >= 75 ? 'text-status-green' : 'text-status-red'} tracking-tight`}>
+                {attPct.toFixed(1)}<span className="text-2xl">%</span>
+              </div>
+              <p className={`text-sm ${attPct >= 75 ? 'text-status-green' : 'text-status-red'} flex items-center gap-1 mt-2 font-medium`}>
+                <span className="material-symbols-outlined text-[16px]">{attPct >= 75 ? 'check_circle' : 'warning'}</span>
+                {attPct >= 75 ? 'Above 75% threshold' : 'Below 75% threshold'}
+              </p>
+            </div>
+            
+            <div 
+              role="button"
+              tabIndex={0}
+              onClick={() => setShowGraphModal(true)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowGraphModal(true); }}
+              className="w-32 h-16 flex items-end gap-1 opacity-80 cursor-pointer hover:opacity-100 transition-opacity group/graph relative"
+              title="Click to view interactive full trend graph"
+            >
+              {hoveredPoint && (
+                <div className="pointer-events-none absolute -top-8 left-1/2 z-20 -translate-x-1/2 rounded bg-accent px-2 py-1 text-[10px] font-bold text-white shadow-elevated transition-all whitespace-nowrap">
+                  {hoveredPoint.date}: {hoveredPoint.percent}%
+                </div>
+              )}
+              <svg className="w-full h-full overflow-visible" viewBox="0 0 140 45">
+                <defs>
+                  <linearGradient id="miniGraphGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={attPct >= 75 ? '#27966F' : '#C2802F'} stopOpacity="0.3" />
+                    <stop offset="100%" stopColor={attPct >= 75 ? '#27966F' : '#C2802F'} stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+                {lineGraphSvgPoints.areaString && (
+                  <path d={lineGraphSvgPoints.areaString} fill="url(#miniGraphGrad)" />
+                )}
+                <line x1="0" y1="15" x2="140" y2="15" stroke="#C2802F" strokeDasharray="3 3" strokeWidth="1" opacity="0.6" />
+                {lineGraphSvgPoints.pathString && (
+                  <path
+                    d={lineGraphSvgPoints.pathString}
+                    fill="none"
+                    stroke={attPct >= 75 ? '#27966F' : '#C2802F'}
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                )}
+                {lineGraphSvgPoints.points.map((pt) => (
+                  <circle
+                    key={pt.date}
+                    cx={pt.x}
+                    cy={pt.y}
+                    r={hoveredPoint?.date === pt.date ? '5' : '3'}
+                    className="transition-all duration-150"
+                    fill={hoveredPoint?.date === pt.date ? '#ffffff' : attPct >= 75 ? '#27966F' : '#C2802F'}
+                    stroke={attPct >= 75 ? '#27966F' : '#C2802F'}
+                    strokeWidth="2"
+                    onMouseEnter={() => setHoveredPoint(pt)}
+                    onMouseLeave={() => setHoveredPoint(null)}
+                  />
+                ))}
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className={`col-span-1 lg:col-span-6 bg-surface rounded-[14px] p-6 border ${needsAttention.length > 0 ? 'border-status-red/30' : 'border-border'} relative overflow-hidden flex flex-col`}>
+          {needsAttention.length > 0 && <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-status-red opacity-5 rounded-full blur-2xl"></div>}
+          <div className="flex justify-between items-start relative z-10">
+            <div>
+              <h3 className="font-headline font-semibold text-lg text-accent flex items-center gap-2">
+                Needs Attention
+                <span className={`${needsAttention.length > 0 ? 'bg-status-red text-white' : 'bg-status-green text-white'} text-xs px-2 py-0.5 rounded-full font-bold flex items-center justify-center min-w-[24px]`}>
+                  {needsAttention.length}
+                </span>
+              </h3>
+              <p className="text-sm text-text-soft mt-1">Students below 75% attendance</p>
+            </div>
+            <span className={`material-symbols-outlined ${needsAttention.length > 0 ? 'text-status-red bg-status-red/10' : 'text-status-green bg-status-green/10'} p-2 rounded-lg`}>
+              {needsAttention.length > 0 ? 'warning' : 'check_circle'}
+            </span>
+          </div>
+          <div className="mt-6 flex-1 relative z-10">
+            <ul className="flex flex-col gap-3">
+              {needsAttention.length > 0 ? needsAttention.slice(0, 3).map(student => {
+                const initials = student.name.split(' ').map(n => n[0]).join('').substring(0, 2);
+                return (
+                  <li key={student.studentId} className="flex items-center justify-between bg-background/50 p-2 rounded-lg border border-border/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-accent-tint flex items-center justify-center text-xs font-bold text-accent">
+                        {initials}
+                      </div>
+                      <span className="text-sm font-medium text-accent">{student.name}</span>
+                    </div>
+                    <span className="text-sm font-bold text-status-red">{student.attendancePercent.toFixed(0)}%</span>
+                  </li>
+                );
+              }) : (
+                <li className="flex items-center justify-center h-full text-sm text-muted">No students currently require academic intervention.</li>
+              )}
+            </ul>
+          </div>
+          <button onClick={() => navigate('/analytics')} className="mt-4 w-full bg-white border border-border hover:bg-surface-muted text-accent font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm relative z-10 shadow-sm">
+            Review Students
+            <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+          </button>
+        </div>
+
+        <div className="col-span-1 lg:col-span-12">
+           <TodaySchedule classes={scheduleItems} />
+        </div>
+        
+        <div className="col-span-1 lg:col-span-12 bg-surface rounded-[14px] p-6 border border-border">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h3 className="font-headline font-semibold text-lg text-accent">Attendance Trend</h3>
+              <p className="text-sm text-text-soft">Weekly overview for {selectedSectionFilter === 'All' ? 'All Sections' : selectedSectionFilter}</p>
+            </div>
+            <select className="bg-background border border-border text-sm rounded-lg px-3 py-1.5 focus:ring-[#0D746A] focus:border-[#0D746A] outline-none">
+              <option>This Month</option>
+              <option>Last Month</option>
+              <option>Semester</option>
+            </select>
+          </div>
+          <Suspense fallback={chartFallback()}>
+            <div className="-mx-2 mt-4">
+              <DashboardCharts trendPoints={trendPoints} />
+            </div>
+          </Suspense>
+        </div>
+      </div>
+
 
       {showStudentsModal && (
         <StudentDirectoryModal
@@ -495,10 +474,77 @@ export default function DashboardView({
           onClose={() => {
             setShowStudentsModal(false);
             setSearchQuery('');
-            setSelectedSectionFilter('All');
           }}
         />
       )}
-    </section>
+
+      {/* ── Attendance Trend Pop-up Modal ── */}
+      {showGraphModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-accent/40 p-4 backdrop-blur-sm animate-foundation-fade-in">
+          <div className="card max-h-[90vh] w-full max-w-3xl overflow-y-auto p-6 shadow-elevated">
+            <div className="flex items-start justify-between border-b border-border/70 pb-4">
+              <div>
+                <span className="badge-success">Interactive Graph</span>
+                <h3 className="mt-1 text-xl font-bold text-text">Attendance Trend Analysis</h3>
+                <p className="text-xs text-muted">Weekly average attendance for selected section</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGraphModal(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-muted text-lg text-text hover:bg-border"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Stats Summary in Modal */}
+            <div className="mt-5 grid grid-cols-3 gap-3">
+              <div className="rounded-card border border-border/70 bg-surface p-3 text-center">
+                <p className="text-[11px] font-semibold text-muted">CURRENT AVERAGE</p>
+                <p className={`mt-1 text-2xl font-bold ${attPct >= 75 ? 'text-status-green' : 'text-status-amber'}`}>
+                  {attPct.toFixed(1)}%
+                </p>
+              </div>
+              <div className="rounded-card border border-border/70 bg-surface p-3 text-center">
+                <p className="text-[11px] font-semibold text-muted">TARGET THRESHOLD</p>
+                <p className="mt-1 text-2xl font-bold text-status-amber">75.0%</p>
+              </div>
+              <div className="rounded-card border border-border/70 bg-surface p-3 text-center">
+                <p className="text-[11px] font-semibold text-muted">TOTAL DAYS ANALYZED</p>
+                <p className="mt-1 text-2xl font-bold text-text">{displayPoints.length} Days</p>
+              </div>
+            </div>
+
+            {/* Detailed Interactive SVG Chart */}
+            <div className="mt-6 rounded-card border border-border/70 bg-surface p-5">
+              <Suspense fallback={chartFallback()}>
+                <DashboardCharts trendPoints={trendPoints} />
+              </Suspense>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="mt-6 flex items-center justify-between border-t border-border/70 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowGraphModal(false)}
+                className="btn-secondary text-xs"
+              >
+                Close Modal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowGraphModal(false);
+                  openAttendanceReport();
+                }}
+                className="btn-accent text-xs font-semibold"
+              >
+                Open Full Attendance Report →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

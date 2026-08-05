@@ -87,27 +87,30 @@ const RosterTableRow = memo(function RosterTableRow({
       initial={{ opacity: 0, y: 5 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.15, delay: Math.min(index * 0.005, 0.12) }}
-      className={`table-row cursor-pointer hover:bg-surface-muted transition-colors ${selected ? 'bg-accent/5' : ''}`}
+      className={`relative block sm:table-row cursor-pointer border border-border sm:border-none rounded-xl sm:rounded-none mb-3 sm:mb-0 bg-white dark:bg-transparent hover:bg-surface-muted transition-colors ${selected ? 'bg-accent/5' : ''}`}
       onClick={() => onOpenStudent(student)}
     >
-      <td className="table-cell sticky left-0 z-10 w-12 text-center bg-inherit" onClick={e => e.stopPropagation()}>
+      <td className="absolute top-4 right-4 sm:static sm:table-cell sm:sticky left-0 z-10 sm:w-12 text-center bg-inherit" onClick={e => e.stopPropagation()}>
         <Checkbox
           checked={selected}
           onChange={(e) => onToggleSelection(student.id, index, (e.nativeEvent as PointerEvent).shiftKey)}
           label=""
         />
       </td>
-      <td className="table-cell sticky left-12 z-10 bg-inherit min-w-[200px]">
+      <td className="block sm:table-cell px-4 pt-4 pb-2 sm:px-3 sm:py-2.5 sm:sticky left-12 z-10 bg-inherit min-w-[200px] border-b border-border/50 sm:border-none">
         <div className="flex items-center gap-3">
-          <Avatar name={student.name} size="sm" />
-          <span className="font-semibold text-text">{student.name}</span>
+          <Avatar name={student.name} size="sm" className="h-10 w-10 sm:h-8 sm:w-8" />
+          <div className="flex flex-col pr-8 sm:pr-0">
+            <span className="font-semibold text-text">{student.name}</span>
+            <span className="sm:hidden text-muted font-mono text-xs mt-0.5">{student.enrollmentNumber ?? student.id.slice(0, 8)}</span>
+          </div>
         </div>
       </td>
-      <td className="table-cell text-muted font-mono text-sm">{student.enrollmentNumber ?? student.id.slice(0, 8)}</td>
-      <td className="table-cell">
+      <td className="hidden sm:table-cell text-muted font-mono text-sm">{student.enrollmentNumber ?? student.id.slice(0, 8)}</td>
+      <td className="block sm:table-cell px-4 py-3 sm:px-3 sm:py-2.5">
         <Badge tone="success" size="sm">Active</Badge>
       </td>
-      <td className="table-cell text-right pr-6" onClick={e => e.stopPropagation()}>
+      <td className="hidden sm:table-cell text-right pr-6" onClick={e => e.stopPropagation()}>
         <Button variant="ghost" size="sm" onClick={() => onOpenStudent(student)}>
           View Profile
         </Button>
@@ -397,8 +400,8 @@ export default function RosterView({ persistence, sections, loadRoster }: Roster
           </div>
         ) : (
           <div className="overflow-x-auto max-h-[70vh]">
-            <table className="table-base w-full min-w-[800px] border-collapse relative text-left">
-              <thead className="table-head sticky top-0 z-20 bg-surface shadow-sm">
+            <table className="block sm:table w-full sm:min-w-[800px] border-collapse relative text-left">
+              <thead className="hidden sm:table-header-group sticky top-0 z-20 bg-surface shadow-sm">
                 <tr>
                   <th className="table-header-cell sticky left-0 z-30 w-12 text-center bg-surface border-b border-border py-2.5 px-4 text-[11px] font-bold uppercase text-muted">
                     <Checkbox
@@ -413,7 +416,7 @@ export default function RosterView({ persistence, sections, loadRoster }: Roster
                   <th className="table-header-cell text-right bg-surface pr-6 border-b border-border py-2.5 px-4 text-[11px] font-bold uppercase text-muted">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody className="block sm:table-row-group sm:divide-y divide-border p-3 sm:p-0">
                 <AnimatePresence>
                   {filteredRoster.map((student, index) => (
                     <RosterTableRow

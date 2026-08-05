@@ -32,6 +32,8 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useAuth } from '@presentation/auth/AuthContext';
+import { ThemeToggle } from '../components/ui/ThemeToggle';
+import { OtpInput } from '../components/ui/OtpInput';
 import {
   isValidEnrollmentNumber,
   type QuizAccess,
@@ -130,9 +132,9 @@ export const DENIED_COPY: Record<QuizAccessDeniedReason, { title: string; body: 
 /** Shared shell every step of the flow renders inside — centered, branded, on the app's own background. */
 function QuizShell({ children, quizMeta }: { children: ReactNode; quizMeta?: QuizMeta }) {
   return (
-    <div className="min-h-screen flex flex-col font-['Inter'] antialiased bg-[#f8f9ff] text-[#0d1c2e]">
+    <div className="min-h-screen flex flex-col font-['Inter'] antialiased bg-transparent text-[#0d1c2e] dark:text-[#ffffff] transition-colors duration-500">
       <style dangerouslySetInnerHTML={{__html: `
-        .shadow-ambient { box-shadow: 0px 4px 20px rgba(46, 49, 146, 0.05); }
+        . { box-shadow: 0px 4px 20px rgba(46, 49, 146, 0.05); }
         .focus-glow:focus-within { box-shadow: 0px 0px 0px 4px rgba(99, 102, 241, 0.2); }
         input:-webkit-autofill,
         input:-webkit-autofill:hover, 
@@ -143,43 +145,48 @@ function QuizShell({ children, quizMeta }: { children: ReactNode; quizMeta?: Qui
           transition: background-color 5000s ease-in-out 0s;
         }
       `}} />
-      <header className="bg-[#ffffff] shadow-ambient w-full top-0 z-50 sticky transition-all duration-300">
+      <header className="bg-white/40 dark:bg-[#0f172a]/40 backdrop-blur-xl shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] dark:shadow-[5px_5px_10px_#020617,-5px_-5px_10px_#1e293b73] w-full top-0 z-50 sticky transition-all duration-300">
         <div className="flex justify-between items-center px-6 h-16 w-full max-w-[1280px] mx-auto">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-[#2e3192] flex items-center justify-center text-[#9da1ff] shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-[#2e3192] flex items-center justify-center text-[#9da1ff] shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73]">
               <span className="material-symbols-outlined text-[18px]">school</span>
             </div>
-            <h1 className="text-xl font-semibold text-[#15157d] tracking-tight">Quiz Verification</h1>
+            <h1 className="text-xl font-semibold text-[#15157d] dark:text-[#818cf8] tracking-tight">Quiz Verification</h1>
           </div>
+          <ThemeToggle />
         </div>
       </header>
 
       <main className="flex-grow flex flex-col items-center justify-center p-4 w-full max-w-[1280px] mx-auto">
         <div className="w-full max-w-md flex flex-col gap-8">
           <div className="text-center space-y-2 mt-4">
-            <div className="inline-flex items-center justify-center p-6 bg-[#d5e3fc] rounded-full mb-2 shadow-ambient">
-              <span className="material-symbols-outlined text-[32px] text-[#15157d]" style={{ fontVariationSettings: "'FILL' 1" }}>assignment</span>
+            <div className="inline-flex items-center justify-center p-6 bg-[#d5e3fc] dark:bg-[#1e1b4b] rounded-full mb-2 ">
+              <span className="material-symbols-outlined text-[32px] text-[#15157d] dark:text-[#818cf8]" style={{ fontVariationSettings: "'FILL' 1" }}>assignment</span>
             </div>
-            <h2 className="text-[32px] leading-10 font-bold text-[#0d1c2e]">
+            <h2 className="text-[32px] leading-10 font-bold text-[#0d1c2e] dark:text-[#ffffff]">
                {quizMeta?.title || 'Quiz Assessment'}
             </h2>
-            <p className="text-[15px] text-[#464652]">
+            <p className="text-[15px] text-[#464652] dark:text-[#cbd5e1]">
                {quizMeta?.sectionNames && quizMeta.sectionNames.length > 0 
                   ? `For sections: ${quizMeta.sectionNames.join(', ')}`
                   : 'Please complete your verification to proceed.'}
             </p>
           </div>
 
-          <div className="bg-[#ffffff] rounded-2xl p-6 md:p-8 shadow-ambient border border-[#c7c5d4]/30 flex flex-col gap-6">
-             {children}
+          <div className="bg-white/60 dark:bg-[#0f172a]/40 backdrop-blur-2xl rounded-[32px] p-6 md:p-8 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05),0_0_0_1px_rgba(255,255,255,0.4)_inset] dark:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.1)_inset] border border-white/20 dark:border-white/5 flex flex-col gap-6 relative overflow-hidden">
+             {/* Soft inner glow top edge */}
+             <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/60 dark:via-white/20 to-transparent"></div>
+             <div className="relative z-10 flex flex-col gap-6">
+               {children}
+             </div>
           </div>
 
           <div className="flex flex-col items-center gap-6 text-center mt-2 mb-8">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#eff4ff] rounded-full border border-[#d5e3fc]">
-              <span className="material-symbols-outlined text-[#15157d] text-[16px]" style={{ fontVariationSettings: "'FILL' 1" }}>verified_user</span>
-              <span className="text-sm font-semibold text-[#464652]">Verified Access Only</span>
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#eff4ff] dark:bg-[#0f172a] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] rounded-full border border-[#d5e3fc]">
+              <span className="material-symbols-outlined text-[#15157d] dark:text-[#818cf8] text-[16px]" style={{ fontVariationSettings: "'FILL' 1" }}>verified_user</span>
+              <span className="text-sm font-semibold text-[#464652] dark:text-[#cbd5e1]">Verified Access Only</span>
             </div>
-            <div className="flex gap-8 justify-center text-[#464652] text-sm">
+            <div className="flex gap-8 justify-center text-[#464652] dark:text-[#cbd5e1] text-sm">
               <div className="flex items-center gap-1">
                 <span className="material-symbols-outlined text-[18px]">timer</span>
                 <span>Timed Assessment</span>
@@ -201,38 +208,38 @@ function StepTracker({ step }: { step: 1 | 2 | 3 }) {
     <>
       <div className="flex items-center justify-center px-4 mb-8 mt-2 relative">
         {/* Connecting lines */}
-        <div className="absolute left-[15%] right-[50%] top-4 h-[2px] -z-10" style={{ backgroundColor: step > 1 ? '#15157d' : '#c7c5d4' }}></div>
-        <div className="absolute left-[50%] right-[15%] top-4 h-[2px] -z-10" style={{ backgroundColor: step > 2 ? '#15157d' : '#c7c5d4' }}></div>
+        <div className={`absolute left-[15%] right-[50%] top-4 h-[2px] -z-10 transition-colors duration-500 ${step > 1 ? 'bg-[#15157d] dark:bg-[#818cf8] shadow-[0_0_8px_rgba(21,21,125,0.5)] dark:shadow-[0_0_8px_rgba(129,140,248,0.5)]' : 'bg-[#e2e8f0] dark:bg-white/10'}`}></div>
+        <div className={`absolute left-[50%] right-[15%] top-4 h-[2px] -z-10 transition-colors duration-500 ${step > 2 ? 'bg-[#15157d] dark:bg-[#818cf8] shadow-[0_0_8px_rgba(21,21,125,0.5)] dark:shadow-[0_0_8px_rgba(129,140,248,0.5)]' : 'bg-[#e2e8f0] dark:bg-white/10'}`}></div>
         
         <div className="flex flex-col items-center relative z-10 flex-1">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center shadow-sm transition-transform ${step > 1 ? 'bg-[#0c0092] text-white' : 'bg-[#15157d] text-white'}`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${step > 1 ? 'bg-[#0c0092] dark:bg-[#6366f1] text-white shadow-[4px_4px_8px_#BABECC,-4px_-4px_8px_#ffffff73] dark:shadow-[4px_4px_8px_#020617,-4px_-4px_8px_#1e293b73]' : 'bg-[#15157d] dark:bg-[#818cf8] text-white shadow-[inset_2px_2px_5px_rgba(0,0,0,0.2)]'}`}>
             <span className="material-symbols-outlined text-[16px]">{step > 1 ? 'check' : 'mail'}</span>
           </div>
-          <span className={`absolute -bottom-6 whitespace-nowrap text-[13px] font-semibold ${step >= 1 ? 'text-[#15157d]' : 'text-[#777683]'}`}>Email</span>
+          <span className={`absolute -bottom-6 whitespace-nowrap text-[13px] font-semibold transition-colors duration-300 ${step >= 1 ? 'text-[#15157d] dark:text-[#818cf8]' : 'text-[#777683] dark:text-[#94a3b8]'}`}>Email</span>
         </div>
         
         <div className="flex flex-col items-center relative z-10 flex-1">
-          <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-transform ${step > 2 ? 'bg-[#0c0092] text-white border-transparent' : step === 2 ? 'bg-[#15157d] text-white border-[#15157d]' : 'bg-[#ffffff] border-[#c7c5d4] text-[#777683]'}`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${step > 2 ? 'bg-[#0c0092] dark:bg-[#6366f1] text-white shadow-[4px_4px_8px_#BABECC,-4px_-4px_8px_#ffffff73] dark:shadow-[4px_4px_8px_#020617,-4px_-4px_8px_#1e293b73]' : step === 2 ? 'bg-[#15157d] dark:bg-[#818cf8] text-white shadow-[0_0_10px_rgba(21,21,125,0.4)] dark:shadow-[0_0_10px_rgba(129,140,248,0.4)]' : 'bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl border border-white/20 dark:border-white/10 text-[#777683] dark:text-[#94a3b8] shadow-[inset_2px_2px_5px_#BABECC,inset_-2px_-2px_5px_#ffffff73] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73]'}`}>
             <span className="material-symbols-outlined text-[16px]">{step > 2 ? 'check' : 'lock'}</span>
           </div>
-          <span className={`absolute -bottom-6 whitespace-nowrap text-[13px] font-semibold ${step >= 2 ? 'text-[#15157d]' : 'text-[#777683]'}`}>OTP</span>
+          <span className={`absolute -bottom-6 whitespace-nowrap text-[13px] font-semibold transition-colors duration-300 ${step >= 2 ? 'text-[#15157d] dark:text-[#818cf8]' : 'text-[#777683] dark:text-[#94a3b8]'}`}>OTP</span>
         </div>
         
         <div className="flex flex-col items-center relative z-10 flex-1">
-          <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-transform ${step >= 3 ? 'bg-[#15157d] text-white border-[#15157d]' : 'bg-[#ffffff] border-[#c7c5d4] text-[#777683]'}`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${step >= 3 ? 'bg-[#15157d] dark:bg-[#818cf8] text-white shadow-[4px_4px_8px_#BABECC,-4px_-4px_8px_#ffffff73] dark:shadow-[4px_4px_8px_#020617,-4px_-4px_8px_#1e293b73]' : 'bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl border border-white/20 dark:border-white/10 text-[#777683] dark:text-[#94a3b8] shadow-[inset_2px_2px_5px_#BABECC,inset_-2px_-2px_5px_#ffffff73] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73]'}`}>
             <span className="material-symbols-outlined text-[16px]">how_to_reg</span>
           </div>
-          <span className={`absolute -bottom-6 whitespace-nowrap text-[13px] font-semibold ${step >= 3 ? 'text-[#15157d]' : 'text-[#777683]'}`}>Access</span>
+          <span className={`absolute -bottom-6 whitespace-nowrap text-[13px] font-semibold transition-colors duration-300 ${step >= 3 ? 'text-[#15157d] dark:text-[#818cf8]' : 'text-[#777683] dark:text-[#94a3b8]'}`}>Access</span>
         </div>
       </div>
-      <div className="h-px w-full bg-[#d5e3fc] mb-6"></div>
+      <div className="h-px w-full bg-white/20 dark:bg-white/10 shadow-[0_1px_2px_rgba(0,0,0,0.05)] mb-6 mt-4"></div>
     </>
   );
 }
 
 const fieldLabelClass = 'block text-xs font-semibold uppercase tracking-wide text-muted';
 const inputClass =
-  'input mt-2 text-sm';
+  'block w-full px-4 py-4 mt-2 border border-white/20 dark:border-white/10 rounded-xl bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl text-[#0d1c2e] dark:text-[#ffffff] font-medium placeholder:text-[#777683]/80 dark:placeholder:text-[#94a3b8]/80 focus:border-[#15157d] dark:border-[#818cf8] focus:ring-0 transition-colors shadow-[inset_2px_2px_5px_#BABECC,inset_-2px_-2px_5px_#ffffff73] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] text-sm';
 
 /** Student-facing quiz access gate with OTP verification and the one-time enrollment prompt. */
 export default function StudentQuizAccessView({
@@ -400,6 +407,16 @@ export default function StudentQuizAccessView({
     };
   }, [actor.kind, quizId, resolveAccess, applyDecision]);
 
+  // Reset to email phase if the student logs out.
+  useEffect(() => {
+    if (actor.kind === 'anonymous' && phase.kind === 'granted') {
+      setPhase({ kind: 'email-required', submitting: false, error: null });
+      setEmailInput('');
+      setOtpInput('');
+      setEnrollmentInput('');
+    }
+  }, [actor.kind, phase.kind]);
+
   async function submitEmail(value: string) {
     const trimmed = value.trim().toLowerCase();
     if (trimmed === '' || !trimmed.includes('@')) {
@@ -562,13 +579,13 @@ export default function StudentQuizAccessView({
         <QuizShell>
           <StepTracker step={1} />
           <div className="flex flex-col gap-2">
-            <h1 className="text-[24px] leading-8 font-semibold text-[#0d1c2e] tracking-tight">Welcome</h1>
-            <p className="text-[#464652]">Enter your registered email address to begin the quiz.</p>
+            <h1 className="text-[24px] leading-8 font-semibold text-text tracking-tight">Access Your Quiz</h1>
+            <p className="text-soft">Enter your official college email to securely access this quiz.</p>
 
             <form className="mt-4 flex flex-col gap-6" onSubmit={handleEmailSubmit} noValidate>
               <div className="flex flex-col gap-2">
-                <div className="relative group-input focus-glow rounded transition-all duration-200">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#777683]">
+                <div className="relative rounded transition-all duration-200">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[#15157d] dark:text-[#818cf8]">
                     <span className="material-symbols-outlined">alternate_email</span>
                   </div>
                   <input
@@ -579,21 +596,18 @@ export default function StudentQuizAccessView({
                     required
                     value={emailInput}
                     onChange={(e) => setEmailInput(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-4 border border-[#c7c5d4] rounded bg-[#ffffff] text-[#0d1c2e] font-medium focus:border-[#15157d] focus:ring-0 transition-colors peer"
-                    placeholder=" "
+                    className="block w-full pl-12 pr-4 py-4 border border-white/20 dark:border-white/10 rounded-xl bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl text-[#0d1c2e] dark:text-[#ffffff] font-medium placeholder:text-[#777683]/80 dark:placeholder:text-[#94a3b8]/80 focus:border-[#15157d] dark:border-[#818cf8] focus:ring-0 transition-colors shadow-[inset_2px_2px_5px_#BABECC,inset_-2px_-2px_5px_#ffffff73] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73]"
+                    placeholder="e.g. student@college.edu"
                   />
-                  <label htmlFor="email" className="absolute left-10 top-4 text-[#777683] transition-all duration-200 pointer-events-none px-1 bg-[#ffffff] peer-focus:-translate-y-5 peer-focus:scale-[0.85] peer-focus:text-[#15157d] peer-[:not(:placeholder-shown)]:-translate-y-5 peer-[:not(:placeholder-shown)]:scale-[0.85]">
-                    Your Email
-                  </label>
                 </div>
                 {phase.error !== null && (
-                  <p role="alert" className="mt-1 text-sm font-medium text-[#ba1a1a]">
+                  <p role="alert" className="mt-1 text-sm font-medium text-status-red">
                     {phase.error}
                   </p>
                 )}
               </div>
 
-              <button type="submit" disabled={emailInput.trim() === '' || phase.submitting} className="w-full bg-[#15157d] hover:bg-[#04006d] text-white font-semibold py-4 rounded-lg shadow-[0px_4px_20px_rgba(46,49,146,0.05)] hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed">
+              <button type="submit" disabled={emailInput.trim() === '' || phase.submitting} className="w-full bg-accent hover:bg-accent/90 text-white font-semibold py-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed">
                 {phase.submitting ? (
                   <><span className="material-symbols-outlined animate-spin">progress_activity</span> Sending code…</>
                 ) : (
@@ -615,32 +629,18 @@ export default function StudentQuizAccessView({
         <QuizShell>
           <StepTracker step={2} />
           <div className="flex flex-col gap-2">
-            <h1 className="text-[24px] leading-8 font-semibold text-[#0d1c2e] tracking-tight">Check your email</h1>
-            <p className="text-[#464652]">
-              We sent a verification code to <span className="font-semibold text-[#15157d]">{phase.email}</span>.
+            <h1 className="text-[24px] leading-8 font-semibold text-[#0d1c2e] dark:text-[#ffffff] tracking-tight">Check your email</h1>
+            <p className="text-[#464652] dark:text-[#cbd5e1]">
+              We sent a verification code to <span className="font-semibold text-[#15157d] dark:text-[#818cf8]">{phase.email}</span>.
             </p>
 
             <form className="mt-4 flex flex-col gap-6" onSubmit={handleOtpSubmit} noValidate>
-              <div className="flex flex-col gap-2">
-                <div className="relative group-input focus-glow rounded transition-all duration-200">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#777683]">
-                    <span className="material-symbols-outlined">pin</span>
-                  </div>
-                  <input
-                    id="otp"
-                    type="text"
-                    autoComplete="one-time-code"
-                    autoFocus
-                    required
-                    value={otpInput}
-                    onChange={(e) => setOtpInput(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-4 border border-[#c7c5d4] rounded bg-[#ffffff] text-[#0d1c2e] font-medium focus:border-[#15157d] focus:ring-0 transition-colors peer tracking-widest"
-                    placeholder=" "
-                  />
-                  <label htmlFor="otp" className="absolute left-10 top-4 text-[#777683] transition-all duration-200 pointer-events-none px-1 bg-[#ffffff] peer-focus:-translate-y-5 peer-focus:scale-[0.85] peer-focus:text-[#15157d] peer-[:not(:placeholder-shown)]:-translate-y-5 peer-[:not(:placeholder-shown)]:scale-[0.85]">
-                    One-Time Password
-                  </label>
-                </div>
+              <div className="flex flex-col gap-4 items-center w-full">
+                <OtpInput 
+                  value={otpInput} 
+                  onChange={setOtpInput} 
+                  disabled={phase.submitting} 
+                />
                 {phase.error !== null && (
                   <p role="alert" className="mt-1 text-sm font-medium text-[#ba1a1a]">
                     {phase.error}
@@ -648,7 +648,7 @@ export default function StudentQuizAccessView({
                 )}
               </div>
 
-              <button type="submit" disabled={otpInput.trim().length < 6 || phase.submitting} className="w-full bg-[#15157d] hover:bg-[#04006d] text-white font-semibold py-4 rounded-lg shadow-[0px_4px_20px_rgba(46,49,146,0.05)] hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed">
+              <button type="submit" disabled={otpInput.trim().length < 6 || phase.submitting} className="w-full bg-[#15157d] dark:bg-[#818cf8] hover:bg-[#04006d] text-white font-semibold py-4 rounded-lg  hover:shadow-[inset_2px_2px_5px_#BABECC,inset_-2px_-2px_5px_#ffffff73] dark:hover:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] transition-all duration-300 flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed">
                 {phase.submitting ? (
                   <><span className="material-symbols-outlined animate-spin">progress_activity</span> Verifying…</>
                 ) : (
@@ -663,14 +663,14 @@ export default function StudentQuizAccessView({
               type="button"
               onClick={() => resendOtp(phase.email)}
               disabled={resendSecondsLeft > 0}
-              className="font-semibold text-[#15157d] hover:text-[#0c0092] disabled:text-[#777683]"
+              className="font-semibold text-[#15157d] dark:text-[#818cf8] hover:text-[#0c0092] dark:hover:text-[#6366f1] dark:text-[#6366f1] disabled:text-[#777683] dark:text-[#94a3b8]"
             >
               {resendSecondsLeft > 0 ? `Resend code in ${resendSecondsLeft}s` : 'Resend code'}
             </button>
             <button
               type="button"
               onClick={() => setPhase({ kind: 'email-required', submitting: false, error: null })}
-              className="text-[#464652] hover:text-[#0d1c2e]"
+              className="text-[#464652] dark:text-[#cbd5e1] hover:text-[#0d1c2e] dark:hover:text-[#ffffff] dark:text-[#ffffff]"
             >
               Change email
             </button>
@@ -775,12 +775,12 @@ export default function StudentQuizAccessView({
     case 'denied':
       return (
         <QuizShell>
-          <div className="bg-[#ffffff] p-8 rounded-2xl shadow-[0px_4px_20px_rgba(46,49,146,0.05)] border border-[#e6eeff] flex flex-col items-center text-center">
+          <div className="bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl p-8 rounded-2xl  border border-white/20 flex flex-col items-center text-center">
             <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#ffebee] text-[32px] text-[#ba1a1a]" aria-hidden="true">
               <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>error</span>
             </span>
-            <h1 className="mt-4 text-[24px] font-bold text-[#0d1c2e]">{DENIED_COPY[phase.reason].title}</h1>
-            <p className="mt-2 text-[15px] text-[#464652]">{DENIED_COPY[phase.reason].body}</p>
+            <h1 className="mt-4 text-[24px] font-bold text-[#0d1c2e] dark:text-[#ffffff]">{DENIED_COPY[phase.reason].title}</h1>
+            <p className="mt-2 text-[15px] text-[#464652] dark:text-[#cbd5e1]">{DENIED_COPY[phase.reason].body}</p>
           </div>
         </QuizShell>
       );
@@ -788,17 +788,17 @@ export default function StudentQuizAccessView({
     case 'already-attempted':
       return (
         <QuizShell>
-          <div className="bg-[#ffffff] p-8 rounded-2xl shadow-[0px_4px_20px_rgba(46,49,146,0.05)] border border-[#e6eeff] flex flex-col items-center text-center">
-            <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#dce9ff] text-[32px] text-[#15157d]" aria-hidden="true">
+          <div className="bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl p-8 rounded-2xl  border border-white/20 flex flex-col items-center text-center">
+            <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#dce9ff] text-[32px] text-[#15157d] dark:text-[#818cf8]" aria-hidden="true">
               <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
             </span>
-            <h1 className="mt-4 text-[24px] font-bold text-[#0d1c2e]">Attempt already submitted</h1>
-            <p className="mt-2 text-[15px] text-[#464652]">{messages.auth.alreadyAttempted}</p>
-            <div className="mt-6 rounded-xl border border-[#c7c5d4] bg-[#f8f9ff] px-6 py-4 w-full">
-              <p className="text-[32px] font-bold text-[#15157d]">
-                {phase.score} <span className="text-lg font-semibold text-[#777683]">/ {phase.totalMarks}</span>
+            <h1 className="mt-4 text-[24px] font-bold text-[#0d1c2e] dark:text-[#ffffff]">Attempt already submitted</h1>
+            <p className="mt-2 text-[15px] text-[#464652] dark:text-[#cbd5e1]">{messages.auth.alreadyAttempted}</p>
+            <div className="mt-6 rounded-xl border border-white/20 dark:border-[#334155] bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl px-6 py-4 w-full">
+              <p className="text-[32px] font-bold text-[#15157d] dark:text-[#818cf8]">
+                {phase.score} <span className="text-lg font-semibold text-[#777683] dark:text-[#94a3b8]">/ {phase.totalMarks}</span>
               </p>
-              <p className="mt-1 text-sm font-medium text-[#464652] uppercase tracking-wider">Your recorded score</p>
+              <p className="mt-1 text-sm font-medium text-[#464652] dark:text-[#cbd5e1] uppercase tracking-wider">Your recorded score</p>
             </div>
           </div>
         </QuizShell>
@@ -815,19 +815,19 @@ export default function StudentQuizAccessView({
                 Teacher preview — this is exactly what students will see. Answers are hidden and no
                 attempt is recorded.
               </div>
-              <div className="bg-[#ffffff] p-8 rounded-2xl shadow-[0px_4px_20px_rgba(46,49,146,0.05)] border border-[#e6eeff]">
-                <p className="text-xs font-semibold uppercase tracking-wide text-[#777683]">
+              <div className="bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl p-8 rounded-2xl  border border-white/20">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#777683] dark:text-[#94a3b8]">
                   {phase.quiz.questions.length} questions · {phase.quiz.timeLimitMinutes} min
                 </p>
                 <ol className="mt-4 flex flex-col gap-4">
                   {phase.quiz.questions.map((q, i) => (
-                    <li key={q.id} className="rounded-xl border border-[#c7c5d4] bg-[#f8f9ff] p-5 text-left">
-                      <p className="text-sm font-medium text-[#0d1c2e]">
+                    <li key={q.id} className="rounded-xl border border-white/20 dark:border-[#334155] bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl p-5 text-left">
+                      <p className="text-sm font-medium text-[#0d1c2e] dark:text-[#ffffff]">
                         {i + 1}. {q.text}
                       </p>
                       <ul className="mt-3 flex flex-col gap-2">
                         {q.options.map((opt, oi) => (
-                          <li key={oi} className="flex items-center gap-3 text-sm text-[#464652]">
+                          <li key={oi} className="flex items-center gap-3 text-sm text-[#464652] dark:text-[#cbd5e1]">
                             <input type="radio" disabled className="h-4 w-4 accent-[#15157d]" />
                             {opt}
                           </li>
@@ -846,14 +846,14 @@ export default function StudentQuizAccessView({
       if (!phase.session.startedAt) {
         return (
           <QuizShell quizMeta={quizMeta}>
-            <div className="bg-[#ffffff] p-8 rounded-2xl shadow-[0px_4px_20px_rgba(46,49,146,0.05)] border border-[#e6eeff] flex flex-col items-center text-center">
-              <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#dce9ff] text-[32px] text-[#15157d]" aria-hidden="true">
+            <div className="bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl p-8 rounded-2xl  border border-white/20 flex flex-col items-center text-center">
+              <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#dce9ff] text-[32px] text-[#15157d] dark:text-[#818cf8]" aria-hidden="true">
                 <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
               </span>
-              <h1 className="mt-4 text-[24px] font-bold text-[#0d1c2e] break-words">
+              <h1 className="mt-4 text-[24px] font-bold text-[#0d1c2e] dark:text-[#ffffff] break-words">
                 {phase.quiz.title ?? 'You have been granted access'}
               </h1>
-              <p className="mt-2 text-[15px] text-[#464652] break-words">
+              <p className="mt-2 text-[15px] text-[#464652] dark:text-[#cbd5e1] break-words">
                 {phase.quiz.questions.length} questions · {phase.quiz.timeLimitMinutes} minute time limit. The
                 timer starts as soon as you click "Start Quiz" — make sure you're ready before continuing.
               </p>
@@ -901,9 +901,9 @@ export default function StudentQuizAccessView({
             onGranted(phase.quiz, phase.session, phase.email)
           ) : (
             <QuizShell quizMeta={quizMeta}>
-              <div className="bg-[#ffffff] p-8 rounded-2xl shadow-[0px_4px_20px_rgba(46,49,146,0.05)] border border-[#e6eeff] flex flex-col items-center text-center">
-                <h1 className="text-[24px] font-bold text-[#0d1c2e]">Access granted</h1>
-                <p className="mt-2 text-[15px] text-[#464652]">You may now attempt the quiz.</p>
+              <div className="bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl p-8 rounded-2xl  border border-white/20 flex flex-col items-center text-center">
+                <h1 className="text-[24px] font-bold text-[#0d1c2e] dark:text-[#ffffff]">Access granted</h1>
+                <p className="mt-2 text-[15px] text-[#464652] dark:text-[#cbd5e1]">You may now attempt the quiz.</p>
               </div>
             </QuizShell>
           )}

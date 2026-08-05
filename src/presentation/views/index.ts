@@ -51,8 +51,6 @@ export {
   type HeatmapViewProps,
   type HeatmapPersistence,
   type HeatmapSectionOption,
-  type HeatmapStudent,
-  type LoadStudents as LoadHeatmapStudents,
 } from './HeatmapView';
 export {
   default as DashboardView,

@@ -165,6 +165,7 @@ export default function TimetableView({
 
   // Current day for column highlighting
   const today: DayOfWeek | undefined = DAY_INDEX_MAP[new Date().getDay()];
+  const [selectedMobileDay, setSelectedMobileDay] = useState<DayOfWeek>(today ?? 'monday');
 
   // Load the Period_Catalog once on mount.
   useEffect(() => {
@@ -504,23 +505,36 @@ export default function TimetableView({
         </div>
       ) : (
         <div className="card overflow-hidden">
+          {/* Mobile Day Selector */}
+          <div className="sm:hidden flex overflow-x-auto no-scrollbar border-b border-border/50 bg-surface p-2 gap-2">
+            {DAYS.map(day => (
+              <button
+                key={day.value}
+                onClick={() => setSelectedMobileDay(day.value)}
+                className={`flex-none px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${selectedMobileDay === day.value ? 'bg-accent text-white shadow-sm' : 'bg-accent/5 text-soft hover:text-text'}`}
+              >
+                {day.label}
+              </button>
+            ))}
+          </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[700px] border-collapse text-sm">
+            <table className="w-full min-w-full sm:min-w-[700px] border-collapse text-sm">
               <thead>
                 <tr className="bg-surface">
-                  <th className="w-20 border-b border-border px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-soft">
+                  <th className="w-[60px] sm:w-20 border-b border-border px-2 sm:px-3 py-3 text-left text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-soft">
                     Time
                   </th>
                   {DAYS.map((day) => (
                     <th
                       key={day.value}
-                      className={`border-b border-border px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider ${
+                      className={`border-b border-border px-2 sm:px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider ${
                         today === day.value
                           ? 'bg-accent/5 text-accent'
                           : 'text-text'
-                      }`}
+                      } ${day.value === selectedMobileDay ? '' : 'hidden sm:table-cell'}`}
                     >
-                      {day.label}
+                      <span className="hidden sm:inline">{day.label}</span>
+                      <span className="sm:hidden text-accent">{day.label} Schedule</span>
                       {today === day.value && (
                         <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-accent" />
                       )}
@@ -549,7 +563,7 @@ export default function TimetableView({
                           key={day.value}
                           className={`border-b border-border/50 px-2 py-2 ${
                             isToday ? 'bg-accent/[0.03]' : ''
-                          }`}
+                          } ${day.value === selectedMobileDay ? '' : 'hidden sm:table-cell'}`}
                         >
                           <div className="flex flex-col gap-1.5 min-h-[40px]">
                             {cellEntries.map((entry) => (

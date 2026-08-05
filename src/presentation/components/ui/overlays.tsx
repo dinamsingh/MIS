@@ -15,14 +15,27 @@ export interface DialogProps extends OpenLayerProps {
   readonly children: ReactNode;
   readonly footer?: ReactNode;
   readonly closeLabel?: string;
+  readonly maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | 'full';
 }
 
-export function Dialog({ open, onOpenChange, title, description, children, footer, closeLabel = 'Close dialog' }: DialogProps) {
+export function Dialog({ open, onOpenChange, title, description, children, footer, closeLabel = 'Close dialog', maxWidth = 'lg' }: DialogProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const closeDialog = () => onOpenChange(false);
   useEscapeClose(open, onOpenChange);
   useDialogFocus(open, panelRef);
   useFocusTrap(open, panelRef);
+
+  const maxWidthClass = {
+    sm: 'max-w-sm',
+    md: 'max-w-md',
+    lg: 'max-w-lg',
+    xl: 'max-w-xl',
+    '2xl': 'max-w-2xl',
+    '3xl': 'max-w-3xl',
+    '4xl': 'max-w-4xl',
+    '5xl': 'max-w-5xl',
+    full: 'max-w-full',
+  }[maxWidth];
 
   return (
     <AnimatePresence>
@@ -31,7 +44,7 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
           <motion.button type="button" className="absolute inset-0 bg-black/35 backdrop-blur-[2px]" aria-label={closeLabel} onPointerDown={closeDialog} onClick={closeDialog} {...overlayBackdropMotion} />
           <motion.div
             ref={panelRef}
-            className="relative flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-dialog border border-border bg-surface shadow-overlay"
+            className={`relative flex max-h-[88vh] w-full ${maxWidthClass} flex-col overflow-hidden rounded-dialog border border-border bg-surface shadow-overlay`}
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => event.stopPropagation()}
             {...dialogMotion}

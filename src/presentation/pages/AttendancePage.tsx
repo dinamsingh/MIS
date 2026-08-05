@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import AttendanceView, { type AttendanceOption, type AttendanceSectionOption, type RosterStudent } from '@presentation/views/AttendanceView';
+import { AttendanceTabs, type AttendanceTab } from '@presentation/components/attendance/AttendanceTabs';
+import { SelectDateView } from '@presentation/components/attendance/SelectDateView';
+import { ReportModeView } from '@presentation/components/attendance/ReportModeView';
 import { createAttendanceAccess, migrateLocalStatusStore } from '@data/access/attendanceAccess';
 import { createLocalDemoAttendanceAccess, isLocalDemoMode, listDemoRoster } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
@@ -17,13 +20,7 @@ const DEFAULT_TIME_SLOTS = [
 
 /** Map JS Date.getDay() (0=Sun) to our DayOfWeek type. */
 const DAY_INDEX_MAP: Record<number, DayOfWeek> = {
-  0: 'sunday',
-  1: 'monday',
-  2: 'tuesday',
-  3: 'wednesday',
-  4: 'thursday',
-  5: 'friday',
-  6: 'saturday',
+  0: 'sunday', 1: 'monday', 2: 'tuesday', 3: 'wednesday', 4: 'thursday', 5: 'friday', 6: 'saturday',
 };
 
 /** Derive the DayOfWeek from an ISO date string (YYYY-MM-DD). */
@@ -49,7 +46,6 @@ async function loadRoster(sectionId: string): Promise<RosterStudent[]> {
     }
   }
 
-  // Query public.students table which actually contains section_id (unlike student_roster)
   const { data } = await supabase
     .from('students')
     .select('id, name, enrollment_number')
@@ -63,9 +59,14 @@ async function loadRoster(sectionId: string): Promise<RosterStudent[]> {
   }));
 }
 
+export type ExtendedAttendanceTab = AttendanceTab | 'mark-past-date';
+
 export default function AttendancePage() {
   const { actor } = useAuth();
   const { selectedSection, subjects, selectedSubjectId } = useSelectedSection();
+  const [activeTab, setActiveTab] = useState<ExtendedAttendanceTab>('today');
+  const [selectedPastDate, setSelectedPastDate] = useState<string | null>(null);
+
   const attendance = useMemo(
     () => (isLocalDemoMode() ? createLocalDemoAttendanceAccess(loadRoster) : supabaseAttendance),
     [],
@@ -77,18 +78,13 @@ export default function AttendancePage() {
     }
   }, []);
 
-  // Section + subject both come from the global top-bar selectors — no per-page
-  // pickers. Attendance is scoped to the one globally-selected subject.
   const sections: AttendanceSectionOption[] = selectedSection ? [selectedSection] : [];
   const scopedSubjects: AttendanceOption[] = useMemo(
     () => subjects.filter((s) => s.id === selectedSubjectId).map((s) => ({ id: s.id, name: s.name })),
     [subjects, selectedSubjectId],
   );
 
-  // --- Resolved time slots from confirmed timetable (Requirements 19.1–19.5) ---
   const [resolvedSlots, setResolvedSlots] = useState<string[]>(DEFAULT_TIME_SLOTS);
-  // Derive from today's date — the view defaults to today and the timetable
-  // resolution is per-day, so the period set corresponds to the initial date.
   const currentDate = useMemo(() => {
     const now = new Date();
     const offsetMs = now.getTimezoneOffset() * 60_000;
@@ -113,29 +109,84 @@ export default function AttendancePage() {
       .then((result: ConfirmedPeriodsResult) => {
         if (!active) return;
         if (result.kind === 'not-confirmed') {
-          // Timetable not yet confirmed — fall back to default slots.
           setResolvedSlots(DEFAULT_TIME_SLOTS);
         } else {
-          // kind === 'confirmed': use the resolved periods (may be empty).
           setResolvedSlots(result.periods.map(periodToSlotString));
         }
       })
       .catch(() => {
         if (!active) return;
-        // On error, fall back to defaults so the page remains usable.
         setResolvedSlots(DEFAULT_TIME_SLOTS);
       });
 
     return () => { active = false; };
   }, [teacherId, sectionId, subjectId, currentDate]);
 
+  const handleTabChange = (tab: ExtendedAttendanceTab) => {
+    setActiveTab(tab);
+    if (tab !== 'select-date' && tab !== 'mark-past-date') {
+      setSelectedPastDate(null);
+    }
+  };
+
+  const handleDateSelected = (date: string) => {
+    setSelectedPastDate(date);
+    setActiveTab('mark-past-date');
+  };
+
   return (
-    <AttendanceView
-      sections={sections}
-      subjects={scopedSubjects}
-      timeSlots={resolvedSlots}
-      loadRoster={loadRoster}
-      attendance={attendance}
-    />
+    <div className="flex flex-col h-full pb-12">
+      <div className="flex flex-col">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
+          <h1 className="text-3xl font-semibold text-text tracking-tight" style={{ fontFamily: 'Geist, sans-serif' }}>Attendance</h1>
+          <div id="attendance-header-actions" className="flex flex-wrap items-center gap-3" />
+        </div>
+        <p className="text-text-muted text-sm mb-6" style={{ fontFamily: 'Geist, sans-serif' }}>
+          {selectedSection?.name ?? 'No Section'} — {scopedSubjects[0]?.name ?? 'No Subject'} — {new Intl.DateTimeFormat('en-US', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(currentDate))}
+        </p>
+        
+        <AttendanceTabs 
+          activeTab={activeTab === 'mark-past-date' ? 'select-date' : activeTab} 
+          onTabChange={handleTabChange} 
+        />
+
+        <div className="mt-4">
+          {activeTab === 'today' && (
+             <AttendanceView
+               sections={sections}
+               subjects={scopedSubjects}
+               timeSlots={resolvedSlots}
+               loadRoster={loadRoster}
+               attendance={attendance}
+               initialDate={currentDate}
+             />
+          )}
+          {activeTab === 'select-date' && (
+             <SelectDateView onDateSelected={handleDateSelected} />
+          )}
+          {activeTab === 'mark-past-date' && selectedPastDate && (
+             <div className="space-y-4">
+               <button 
+                 onClick={() => setActiveTab('select-date')}
+                 className="flex items-center gap-2 text-sm font-medium text-text-muted hover:text-text transition-colors"
+               >
+                 &larr; Back to Select Date
+               </button>
+               <AttendanceView
+                 sections={sections}
+                 subjects={scopedSubjects}
+                 timeSlots={resolvedSlots}
+                 loadRoster={loadRoster}
+                 attendance={attendance}
+                 initialDate={selectedPastDate}
+               />
+             </div>
+          )}
+          {activeTab === 'report' && (
+             <ReportModeView />
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
