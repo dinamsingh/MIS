@@ -569,16 +569,16 @@ export default function QuizAttemptView({
 
   if (phase.kind === 'error') {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-10 pb-[env(safe-area-inset-bottom)]">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#faf9f5] dark:bg-[#181715] px-4 py-10 pb-[env(safe-area-inset-bottom)]">
         <div className="card w-full max-w-md text-center">
           <span
-            className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-status-red/10 text-3xl text-status-red"
+            className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#c64545]/10 text-3xl text-[#c64545]"
             aria-hidden="true"
           >
             ✕
           </span>
-          <h1 className="mt-4 text-xl font-semibold text-text">Submission failed</h1>
-          <p role="alert" className="mt-2 text-sm text-status-red">
+          <h1 className="mt-4 text-xl font-serif text-[#141413] dark:text-[#faf9f5] text-[#141413] dark:text-[#faf9f5]">Submission failed</h1>
+          <p role="alert" className="mt-2 text-sm text-[#c64545]">
             {phase.message}
           </p>
           {phase.retryable && (
@@ -665,10 +665,10 @@ export default function QuizAttemptView({
           role="alert"
           className={`sticky top-[7.5rem] z-30 mx-auto mt-3 max-w-sm rounded-card border-2 px-4 py-3 text-center text-sm font-semibold shadow-elevated motion-safe:animate-in motion-safe:slide-in-from-top-2 ${
             warning.level === 'danger'
-              ? 'border-status-red bg-status-red text-surface'
+              ? 'border-status-red bg-[#c64545] text-surface'
               : warning.level === 'warning'
                 ? 'border-amber-500 bg-amber-500 text-surface'
-                : 'border-accent bg-accent-tint text-accent'
+                : 'border-[#cc785c] bg-[#cc785c]-tint text-[#cc785c]'
           }`}
         >
           ⏰ {warning.message}
