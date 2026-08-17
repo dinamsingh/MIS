@@ -323,8 +323,8 @@ export default function DashboardView({
             <div>
               <h3 className="font-headline font-semibold text-lg text-accent flex items-center gap-2">
                 Class Attendance
-                <span className={`${attPct >= 75 ? 'bg-status-green/10 text-status-green' : 'bg-status-red/10 text-status-red'} text-xs px-2 py-0.5 rounded-full font-bold`}>
-                  {attPct >= 75 ? 'Excellent' : 'Needs Review'}
+                <span className={`${attPct >= 60 ? 'bg-status-green/10 text-status-green' : 'bg-status-red/10 text-status-red'} text-xs px-2 py-0.5 rounded-full font-bold`}>
+                  {attPct >= 60 ? 'Excellent' : 'Needs Review'}
                 </span>
               </h3>
               <p className="text-sm text-text-soft mt-1">Average for {selectedSectionFilter === 'All' ? 'All Sections' : selectedSectionFilter}</p>
@@ -333,12 +333,12 @@ export default function DashboardView({
           </div>
           <div className="mt-8 flex items-end justify-between relative z-10">
             <div>
-              <div className={`text-5xl font-black ${attPct >= 75 ? 'text-status-green' : 'text-status-red'} tracking-tight`}>
+              <div className={`text-5xl font-black ${attPct >= 60 ? 'text-status-green' : 'text-status-red'} tracking-tight`}>
                 {attPct.toFixed(1)}<span className="text-2xl">%</span>
               </div>
-              <p className={`text-sm ${attPct >= 75 ? 'text-status-green' : 'text-status-red'} flex items-center gap-1 mt-2 font-medium`}>
-                <span className="material-symbols-outlined text-[16px]">{attPct >= 75 ? 'check_circle' : 'warning'}</span>
-                {attPct >= 75 ? 'Above 75% threshold' : 'Below 75% threshold'}
+              <p className={`text-sm ${attPct >= 60 ? 'text-status-green' : 'text-status-red'} flex items-center gap-1 mt-2 font-medium`}>
+                <span className="material-symbols-outlined text-[16px]">{attPct >= 60 ? 'check_circle' : 'warning'}</span>
+                {attPct >= 60 ? 'Above 60% threshold' : 'Below 60% threshold'}
               </p>
             </div>
             

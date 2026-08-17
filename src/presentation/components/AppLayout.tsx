@@ -15,6 +15,7 @@ import {
 
 import { GlobalCommandCenter } from './GlobalCommandCenter';
 import { ToastProvider } from './ToastProvider';
+import { DropdownMenu } from '@presentation/components/ui';
 import { ThemeToggle } from '@presentation/components/ui/ThemeToggle';
 
 interface AppLayoutProps {
@@ -50,6 +51,8 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [sectionDropdownOpen, setSectionDropdownOpen] = useState(false);
+  const [subjectDropdownOpen, setSubjectDropdownOpen] = useState(false);
   const [motionDisabled, setMotionDisabled] = useState(() => readMotionDisabledPreference());
   // `AdminShell` deliberately renders this layout without a
   // `SelectedSectionProvider` (the Admin Console manages its own sections,
@@ -60,7 +63,7 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
   const selectedSectionCtx = useOptionalSelectedSection();
   const {
     sections,
-    selectedSectionId,
+    selectedSectionId: _selectedSectionId,
     selectedSection,
     setSelectedSectionId,
     isLoading,
@@ -213,7 +216,7 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
         >
           <header className="sticky top-0 z-30 border-b border-border/70 bg-surface/90 px-3 py-2 backdrop-blur-xl lg:px-5">
             <div className="flex flex-wrap min-w-0 items-center justify-between gap-x-2 gap-y-3">
-              <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
                 <button
                   type="button"
                   aria-label="Open navigation"
@@ -234,68 +237,66 @@ export default function AppLayout({ activePath, onNavigate, onLogout, children }
                 <p className="truncate text-sm font-semibold text-text">{activeTrail.item}</p>
               </div>
 
-              <div className="motion-border group flex min-w-0 shrink items-center gap-1.5 rounded-lg border border-border/70 bg-surface/95 px-2 py-1.5 shadow-soft ring-1 ring-border/45 transition-[transform,border-color,box-shadow,background-color] duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-surface hover:shadow-elevated focus-within:-translate-y-0.5 focus-within:border-accent/60 focus-within:shadow-elevated focus-within:ring-2 focus-within:ring-accent/15 motion-reduce:transform-none">
-                <span className="hidden text-[10px] font-bold uppercase text-muted 2xl:inline">Section</span>
-                <div className="relative flex min-w-0 items-center">
-                  <select
-                    value={selectedSectionId ?? ''}
-                    onChange={(e) => setSelectedSectionId(e.target.value)}
+              <DropdownMenu
+                open={sectionDropdownOpen}
+                onOpenChange={setSectionDropdownOpen}
+                align="left"
+                items={sections.map(section => ({
+                  id: section.id,
+                  label: sectionOptionLabel(section),
+                  onSelect: () => setSelectedSectionId(section.id)
+                }))}
+                trigger={
+                  <button
+                    type="button"
                     disabled={isLoading || sections.length === 0}
-                    aria-label="Select section"
-                    title={selectedSection ? formatSectionLabel(selectedSection) : undefined}
-                    className="w-24 cursor-pointer truncate appearance-none bg-transparent pr-5 text-xs font-bold text-text outline-none disabled:cursor-default disabled:text-muted sm:w-32 lg:w-36 xl:w-44"
+                    className="motion-border group flex min-w-0 shrink items-center gap-1.5 rounded-lg border border-border/70 bg-surface/95 px-2 py-1.5 shadow-soft ring-1 ring-border/45 transition-[transform,border-color,box-shadow,background-color] duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-surface hover:shadow-elevated focus-within:-translate-y-0.5 focus-within:border-accent/60 focus-within:shadow-elevated focus-within:ring-2 focus-within:ring-accent/15 motion-reduce:transform-none disabled:opacity-50 disabled:pointer-events-none"
                   >
-                    {sections.length === 0 ? (
-                      <option value="" className="bg-surface text-text">
-                        {isLoading ? 'Loading...' : 'No sections'}
-                      </option>
-                    ) : (
-                      sections.map((section) => (
-                        <option key={section.id} value={section.id} className="bg-surface text-text">
-                          {sectionOptionLabel(section)}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                  <span className="pointer-events-none absolute right-0 text-muted transition-colors group-focus-within:text-accent" aria-hidden="true">
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-                    </svg>
-                  </span>
-                </div>
-              </div>
+                    <span className="hidden text-[10px] font-bold uppercase text-muted 2xl:inline">Section</span>
+                    <div className="relative flex min-w-0 items-center text-left">
+                      <span className="w-24 truncate pr-5 text-xs font-bold text-text sm:w-32 lg:w-36 xl:w-44">
+                        {sections.length === 0 ? (isLoading ? 'Loading...' : 'No sections') : (selectedSection ? formatSectionLabel(selectedSection) : 'Select section')}
+                      </span>
+                      <span className="pointer-events-none absolute right-0 text-muted transition-colors group-focus-within:text-accent" aria-hidden="true">
+                        <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                        </svg>
+                      </span>
+                    </div>
+                  </button>
+                }
+              />
 
               {(subjects.length > 0 || isSubjectsLoading) && (
-                <div className="motion-border group flex min-w-0 shrink items-center gap-1.5 rounded-lg border border-border/70 bg-surface/95 px-2 py-1.5 shadow-soft ring-1 ring-border/45 transition-[transform,border-color,box-shadow,background-color] duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-surface hover:shadow-elevated focus-within:-translate-y-0.5 focus-within:border-accent/60 focus-within:shadow-elevated focus-within:ring-2 focus-within:ring-accent/15 motion-reduce:transform-none">
-                  <span className="hidden text-[10px] font-bold uppercase text-muted 2xl:inline">Subject</span>
-                  <div className="relative flex min-w-0 items-center">
-                    <select
-                      value={selectedSubjectId ?? ''}
-                      onChange={(e) => setSelectedSubjectId(e.target.value)}
+                <DropdownMenu
+                  open={subjectDropdownOpen}
+                  onOpenChange={setSubjectDropdownOpen}
+                  align="left"
+                  items={subjects.map(subject => ({
+                    id: subject.id,
+                    label: subject.name,
+                    onSelect: () => setSelectedSubjectId(subject.id)
+                  }))}
+                  trigger={
+                    <button
+                      type="button"
                       disabled={isSubjectsLoading || subjects.length === 0}
-                      aria-label="Select subject"
-                      title={subjects.find((s) => s.id === selectedSubjectId)?.name}
-                      className="w-24 cursor-pointer truncate appearance-none bg-transparent pr-5 text-xs font-bold text-text outline-none disabled:cursor-default disabled:text-muted sm:w-32 lg:w-36 xl:w-44"
+                      className="motion-border group flex min-w-0 shrink items-center gap-1.5 rounded-lg border border-border/70 bg-surface/95 px-2 py-1.5 shadow-soft ring-1 ring-border/45 transition-[transform,border-color,box-shadow,background-color] duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-surface hover:shadow-elevated focus-within:-translate-y-0.5 focus-within:border-accent/60 focus-within:shadow-elevated focus-within:ring-2 focus-within:ring-accent/15 motion-reduce:transform-none disabled:opacity-50 disabled:pointer-events-none"
                     >
-                      {subjects.length === 0 ? (
-                        <option value="" className="bg-surface text-text">
-                          {isSubjectsLoading ? 'Loading...' : 'No subjects'}
-                        </option>
-                      ) : (
-                        subjects.map((subject) => (
-                          <option key={subject.id} value={subject.id} className="bg-surface text-text">
-                            {subject.name}
-                          </option>
-                        ))
-                      )}
-                    </select>
-                    <span className="pointer-events-none absolute right-0 text-muted transition-colors group-focus-within:text-accent" aria-hidden="true">
-                      <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-                      </svg>
-                    </span>
-                  </div>
-                </div>
+                      <span className="hidden text-[10px] font-bold uppercase text-muted 2xl:inline">Subject</span>
+                      <div className="relative flex min-w-0 items-center text-left">
+                        <span className="w-24 truncate pr-5 text-xs font-bold text-text sm:w-32 lg:w-36 xl:w-44">
+                          {subjects.length === 0 ? (isSubjectsLoading ? 'Loading...' : 'No subjects') : (subjects.find(s => s.id === selectedSubjectId)?.name || 'Select subject')}
+                        </span>
+                        <span className="pointer-events-none absolute right-0 text-muted transition-colors group-focus-within:text-accent" aria-hidden="true">
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                          </svg>
+                        </span>
+                      </div>
+                    </button>
+                  }
+                />
               )}
             </div>
 

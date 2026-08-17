@@ -9,11 +9,14 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { createQuizAccess, type QuizResultSection } from '@data/access/quizAccess';
 import { supabase } from '@data/supabase';
 import { generateQuizQuestions } from '@data/access/aiQuizClient';
 import { useSelectedSection } from '@presentation/context/SelectedSectionContext';
-import { Button } from '@presentation/components/ui';
+import { Button, Dialog } from '@presentation/components/ui';
+import { LoaderCircle, CheckCircle2, Share2, Copy } from 'lucide-react';
+
 import { formatSectionLabel } from '@presentation/format/sectionLabel';
 import {
   loadUnitsForSubject,
@@ -25,7 +28,7 @@ import type { GeneratedQuestion, QuizDifficulty } from '@domain/services/quizGen
 const quizAccess = createQuizAccess(supabase);
 
 const inputClass =
-  'rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text ' +
+  'rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text ' +
   'focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30';
 
 /** Convert a datetime-local value to an ISO string, or null when empty. */
@@ -40,10 +43,11 @@ type Phase =
   | { kind: 'generating' }
   | { kind: 'preview'; questions: GeneratedQuestion[]; rejected: number }
   | { kind: 'saving'; questions: GeneratedQuestion[] }
-  | { kind: 'saved'; shareLink: string; count: number };
+  | { kind: 'saved'; shareLink: string; count: number; quizId: string; shareToken: string };
 
 export default function AiQuizGeneratorPage() {
-  const { selectedSectionId, selectedSubject, selectedSubjectId } = useSelectedSection();
+  const navigate = useNavigate();
+  const { selectedSection, selectedSectionId, selectedSubject, selectedSubjectId } = useSelectedSection();
 
   const [units, setUnits] = useState<UnitOption[]>([]);
   const [unitId, setUnitId] = useState('');
@@ -61,6 +65,7 @@ export default function AiQuizGeneratorPage() {
 
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Load the selected subject's master units.
   useEffect(() => {
@@ -140,11 +145,30 @@ export default function AiQuizGeneratorPage() {
         await quizAccess.setQuizTargetSections(quizId, Array.from(selectedSectionIds));
       }
       const shareLink = `${window.location.origin}/quiz/${shareToken}`;
-      setPhase({ kind: 'saved', shareLink, count: questions.length });
+      setPhase({ kind: 'saved', shareLink, count: questions.length, quizId, shareToken });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save the quiz.');
       setPhase({ kind: 'preview', questions, rejected: 0 });
     }
+  }
+
+  function buildShareText(): string {
+    if (phase.kind !== 'saved') return '';
+    const sectionsText = multiSectionEnabled && selectedSectionIds.size > 0 
+      ? teacherSections.filter(s => selectedSectionIds.has(s.id)).map(formatSectionLabel).join(', ')
+      : selectedSection ? formatSectionLabel(selectedSection) : 'Class';
+
+    const deadlineStr = activeUntil ? new Date(activeUntil).toLocaleString('en-IN', {
+      weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+    }) : 'No deadline';
+    
+    return `📝 ${sectionsText}
+Subject: ${selectedSubject?.name ?? 'Quiz'}
+Topic: ${title || `${selectedUnit?.name ?? 'Unit'} (AI)`}
+Questions: ${phase.count} Qs
+Active till: ${deadlineStr}
+
+Attempt: ${phase.shareLink}`;
   }
 
   if (!selectedSubject) {
@@ -158,9 +182,14 @@ export default function AiQuizGeneratorPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-xl font-bold text-text">AI Quiz Generator</h2>
-        <p className="mt-0.5 text-sm text-muted">{selectedSubject.name}</p>
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="sm" className="px-2 text-muted hidden sm:inline-flex" onClick={() => navigate(-1)}>
+          ← Back
+        </Button>
+        <div>
+          <h2 className="text-xl font-bold text-text">AI Quiz Generator</h2>
+          <p className="mt-0.5 text-sm text-muted">{selectedSubject.name}</p>
+        </div>
       </div>
 
       {error && (
@@ -170,8 +199,8 @@ export default function AiQuizGeneratorPage() {
       )}
 
       {/* ---- Setup form ---- */}
-      <section className="card grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
-        <label className="flex flex-col gap-1 text-sm font-medium text-text sm:col-span-2">
+      <section className="card grid grid-cols-2 md:grid-cols-4 gap-3 p-4">
+        <label className="flex flex-col gap-1 text-xs font-medium text-text col-span-2 md:col-span-2">
           Unit
           <select className={inputClass} value={unitId} onChange={(e) => setUnitId(e.target.value)}>
             {units.length === 0 ? (
@@ -184,7 +213,7 @@ export default function AiQuizGeneratorPage() {
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-sm font-medium text-text sm:col-span-2">
+        <label className="flex flex-col gap-1 text-xs font-medium text-text col-span-2 md:col-span-2">
           Quiz title (optional)
           <input
             className={inputClass}
@@ -194,7 +223,7 @@ export default function AiQuizGeneratorPage() {
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-sm font-medium text-text">
+        <label className="flex flex-col gap-1 text-xs font-medium text-text col-span-1">
           Number of questions
           <input
             type="number"
@@ -206,7 +235,7 @@ export default function AiQuizGeneratorPage() {
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-sm font-medium text-text">
+        <label className="flex flex-col gap-1 text-xs font-medium text-text col-span-1">
           Difficulty
           <select
             className={inputClass}
@@ -219,7 +248,7 @@ export default function AiQuizGeneratorPage() {
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-sm font-medium text-text">
+        <label className="flex flex-col gap-1 text-xs font-medium text-text col-span-1">
           Time limit (minutes)
           <input
             type="number"
@@ -230,10 +259,8 @@ export default function AiQuizGeneratorPage() {
           />
         </label>
 
-        <div className="hidden sm:block" />
-
-        <label className="flex flex-col gap-1 text-sm font-medium text-text">
-          Active from (optional)
+        <label className="flex flex-col gap-1 text-xs font-medium text-text col-span-1">
+          Active from
           <input
             type="datetime-local"
             className={inputClass}
@@ -242,8 +269,8 @@ export default function AiQuizGeneratorPage() {
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-sm font-medium text-text">
-          Active until (optional)
+        <label className="flex flex-col gap-1 text-xs font-medium text-text col-span-1">
+          Active until
           <input
             type="datetime-local"
             className={inputClass}
@@ -253,8 +280,8 @@ export default function AiQuizGeneratorPage() {
         </label>
 
         {/* Multi-section assignment */}
-        <div className="sm:col-span-2 flex flex-col gap-2">
-          <label className="flex items-center gap-2 text-sm font-medium text-text cursor-pointer">
+        <div className="col-span-2 md:col-span-3 flex flex-col gap-1">
+          <label className="flex items-center gap-2 text-xs font-medium text-text cursor-pointer h-[34px]">
             <input
               type="checkbox"
               checked={multiSectionEnabled}
@@ -282,16 +309,16 @@ export default function AiQuizGeneratorPage() {
             Assign to multiple sections
           </label>
           {multiSectionEnabled && (
-            <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface-muted/30 p-3">
+            <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface-muted/30 p-2 max-h-24 overflow-y-auto">
               {loadingTeacherSections ? (
                 <p className="text-xs text-muted">Loading your sections…</p>
               ) : teacherSections.length === 0 ? (
-                <p className="text-xs text-muted">
-                  No sections found for this subject — the quiz will fall back to the currently-selected section.
+                <p className="text-[10px] text-muted">
+                  No sections found. Quiz will use current section.
                 </p>
               ) : (
                 teacherSections.map((section) => (
-                  <label key={section.id} className="flex items-center gap-2 text-sm text-text cursor-pointer">
+                  <label key={section.id} className="flex items-center gap-2 text-xs text-text cursor-pointer">
                     <input
                       type="checkbox"
                       checked={selectedSectionIds.has(section.id)}
@@ -316,10 +343,10 @@ export default function AiQuizGeneratorPage() {
           )}
         </div>
 
-        <div className="sm:col-span-2">
+        <div className="col-span-2 md:col-span-4 mt-1">
           <Button
             variant="primary"
-            disabled={units.length === 0}
+            disabled={units.length === 0 || phase.kind === 'generating'}
             loading={phase.kind === 'generating'}
             onClick={handleGenerate}
           >
@@ -328,43 +355,103 @@ export default function AiQuizGeneratorPage() {
         </div>
       </section>
 
-      {/* ---- Preview ---- */}
-      {phase.kind === 'preview' && (
-        <PreviewSection
-          questions={phase.questions}
-          rejected={phase.rejected}
-          onSave={handleSave}
-          onRegenerate={handleGenerate}
-        />
-      )}
+      {/* ---- Generation / Save / Success / Preview Modal ---- */}
+      <Dialog
+        open={phase.kind === 'generating' || phase.kind === 'preview' || phase.kind === 'saving' || phase.kind === 'saved'}
+        onOpenChange={(open) => { if (!open) setPhase({ kind: 'idle' }); }}
+        title={phase.kind === 'saved' ? "Quiz Generated!" : phase.kind === 'preview' ? "Review Generated Quiz" : "Generating with AI..."}
+      >
+        <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
+          {phase.kind === 'generating' || phase.kind === 'saving' ? (
+            <div className="flex flex-col items-center gap-4">
+              <div className="relative">
+                <div className="absolute inset-0 rounded-full bg-accent/20 blur-xl animate-pulse" />
+                <LoaderCircle className="h-12 w-12 text-accent animate-spin relative z-10" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-text">
+                  {phase.kind === 'generating' ? 'Crafting your quiz...' : 'Finalizing details...'}
+                </h3>
+                <p className="text-sm text-muted mt-1 max-w-sm">
+                  Our AI is generating premium questions based on your syllabus. This might take a few seconds.
+                </p>
+              </div>
+            </div>
+          ) : phase.kind === 'preview' ? (
+            <div className="w-full text-left px-2 flex flex-col h-full max-h-[70vh]">
+              <PreviewSection
+                questions={phase.questions}
+                rejected={phase.rejected}
+                onSave={handleSave}
+                onRegenerate={handleGenerate}
+              />
+            </div>
+          ) : phase.kind === 'saved' ? (
+            <div className="flex flex-col items-center gap-5 w-full">
+              <div className="h-16 w-16 rounded-full bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center">
+                <CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              
+              <div>
+                <h3 className="text-xl font-bold text-text">Success!</h3>
+                <p className="text-sm text-muted mt-1">
+                  Successfully generated and saved {phase.count} questions.
+                </p>
+              </div>
 
-      {phase.kind === 'saving' && (
-        <p className="text-sm text-muted">Saving quiz…</p>
-      )}
+              <div className="w-full flex flex-col gap-3 mt-2">
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-surface-muted border border-border">
+                  <input 
+                    readOnly 
+                    className="flex-1 bg-transparent text-sm text-text outline-none px-2" 
+                    value={phase.shareLink} 
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(buildShareText());
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                    className={copied ? "shrink-0 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400" : "shrink-0"}
+                  >
+                    {copied ? (
+                      <>
+                        <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                        Copied ✓
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-1.5" />
+                        Copy
+                      </>
+                    )}
+                  </Button>
+                </div>
+                
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(buildShareText())}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-10 w-full items-center justify-center rounded-button px-4 text-sm font-medium bg-[#25D366] text-white hover:bg-[#128C7E] transition-colors shadow-sm"
+                >
+                  <Share2 className="h-4 w-4 mr-2" />
+                  Share on WhatsApp
+                </a>
+              </div>
 
-      {/* ---- Saved ---- */}
-      {phase.kind === 'saved' && (
-        <section className="card p-5">
-          <h3 className="text-base font-semibold text-text">Quiz created ✓</h3>
-          <p className="mt-1 text-sm text-soft">{phase.count} questions saved. Share this link with students:</p>
-          <div className="mt-3 flex items-center gap-2">
-            <input readOnly className={`${inputClass} flex-1`} value={phase.shareLink} />
-            <Button
-              variant="secondary"
-              onClick={() => void navigator.clipboard?.writeText(phase.shareLink)}
-            >
-              Copy
-            </Button>
-          </div>
-          <Button
-            variant="primary"
-            className="mt-4"
-            onClick={() => setPhase({ kind: 'idle' })}
-          >
-            Create another
-          </Button>
-        </section>
-      )}
+              <Button
+                variant="outline"
+                className="w-full mt-2"
+                onClick={() => navigate('/quizzes')}
+              >
+                Close
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </Dialog>
     </div>
   );
 }
@@ -382,13 +469,13 @@ function PreviewSection({
   onRegenerate: () => void;
 }) {
   return (
-    <section className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+    <section className="flex flex-col gap-4 h-full overflow-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 bg-surface pb-1">
         <h3 className="text-base font-semibold text-text">
           Preview — {questions.length} questions
           {rejected > 0 && <span className="ml-2 text-xs text-muted">({rejected} discarded)</span>}
         </h3>
-        <div className="flex gap-2">
+        <div className="flex gap-2 self-end sm:self-auto">
           <Button variant="secondary" onClick={onRegenerate}>
             Regenerate
           </Button>
@@ -398,7 +485,7 @@ function PreviewSection({
         </div>
       </div>
 
-      <ol className="flex flex-col gap-3">
+      <ol className="flex flex-col gap-3 overflow-y-auto pr-2 pb-2">
         {questions.map((q, i) => (
           <li key={i} className="card p-4">
             <p className="text-sm font-medium text-text">
@@ -426,3 +513,4 @@ function PreviewSection({
     </section>
   );
 }
+

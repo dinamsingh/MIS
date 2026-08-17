@@ -56,9 +56,8 @@ export default function StudentQuizAccessPage() {
         <QuizAttemptView
           quiz={quiz}
           attemptSession={attemptSession}
-          email={email}
-          submitAttempt={(quizId, answers, emailToSubmit) => quizAccess.submitAttempt(quizId, answers, emailToSubmit)}
-          getQuizReview={(quizId, emailToReview) => quizAccess.getQuizReview(quizId, emailToReview)}
+          submitAttempt={({ quizId, answers }) => quizAccess.submitAttempt(quizId, answers, email)}
+          getQuizReview={(quizId) => quizAccess.getQuizReview(quizId, email)}
         />
       )}
     />

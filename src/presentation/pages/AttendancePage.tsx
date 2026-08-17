@@ -3,6 +3,7 @@ import AttendanceView, { type AttendanceOption, type AttendanceSectionOption, ty
 import { AttendanceTabs, type AttendanceTab } from '@presentation/components/attendance/AttendanceTabs';
 import { SelectDateView } from '@presentation/components/attendance/SelectDateView';
 import { ReportModeView } from '@presentation/components/attendance/ReportModeView';
+import { Dialog } from '@presentation/components/ui';
 import { createAttendanceAccess, migrateLocalStatusStore } from '@data/access/attendanceAccess';
 import { createLocalDemoAttendanceAccess, isLocalDemoMode, listDemoRoster } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
@@ -122,6 +123,8 @@ export default function AttendancePage() {
     return () => { active = false; };
   }, [teacherId, sectionId, subjectId, currentDate]);
 
+  const [refreshVersion, setRefreshVersion] = useState(0);
+
   const handleTabChange = (tab: ExtendedAttendanceTab) => {
     setActiveTab(tab);
     if (tab !== 'select-date' && tab !== 'mark-past-date') {
@@ -131,19 +134,22 @@ export default function AttendancePage() {
 
   const handleDateSelected = (date: string) => {
     setSelectedPastDate(date);
-    setActiveTab('mark-past-date');
+  };
+
+  const closePastDateModal = () => {
+    setSelectedPastDate(null);
+    setRefreshVersion(v => v + 1);
   };
 
   return (
     <div className="flex flex-col h-full pb-12">
       <div className="flex flex-col">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
-          <h1 className="text-3xl font-semibold text-text tracking-tight" style={{ fontFamily: 'Geist, sans-serif' }}>Attendance</h1>
-          <div id="attendance-header-actions" className="flex flex-wrap items-center gap-3" />
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4 mb-2">
+          <h1 className="hidden sm:block text-2xl font-semibold text-text tracking-tight" style={{ fontFamily: 'Geist, sans-serif' }}>Attendance</h1>
+          <p className="text-text-muted text-xs sm:text-sm font-medium" style={{ fontFamily: 'Geist, sans-serif' }}>
+            {selectedSection?.name ?? 'No Section'} — {scopedSubjects[0]?.name ?? 'No Subject'} <span className="hidden sm:inline">—</span><br className="sm:hidden" /> {new Intl.DateTimeFormat('en-US', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(currentDate))}
+          </p>
         </div>
-        <p className="text-text-muted text-sm mb-6" style={{ fontFamily: 'Geist, sans-serif' }}>
-          {selectedSection?.name ?? 'No Section'} — {scopedSubjects[0]?.name ?? 'No Subject'} — {new Intl.DateTimeFormat('en-US', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(currentDate))}
-        </p>
         
         <AttendanceTabs 
           activeTab={activeTab === 'mark-past-date' ? 'select-date' : activeTab} 
@@ -162,25 +168,30 @@ export default function AttendancePage() {
              />
           )}
           {activeTab === 'select-date' && (
-             <SelectDateView onDateSelected={handleDateSelected} />
-          )}
-          {activeTab === 'mark-past-date' && selectedPastDate && (
-             <div className="space-y-4">
-               <button 
-                 onClick={() => setActiveTab('select-date')}
-                 className="flex items-center gap-2 text-sm font-medium text-text-muted hover:text-text transition-colors"
+             <>
+               <SelectDateView onDateSelected={handleDateSelected} refreshVersion={refreshVersion} />
+               <Dialog 
+                 open={!!selectedPastDate} 
+                 onOpenChange={(open) => !open && closePastDateModal()}
+                 maxWidth="5xl"
+                 title={`Attendance Record - ${selectedPastDate ? new Intl.DateTimeFormat('en-US', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(selectedPastDate)) : ''}`}
                >
-                 &larr; Back to Select Date
-               </button>
-               <AttendanceView
-                 sections={sections}
-                 subjects={scopedSubjects}
-                 timeSlots={resolvedSlots}
-                 loadRoster={loadRoster}
-                 attendance={attendance}
-                 initialDate={selectedPastDate}
-               />
-             </div>
+                 {selectedPastDate && (
+                   <div className="max-h-[80vh] overflow-y-auto px-1 pb-4">
+                     <AttendanceView
+                       sections={sections}
+                       subjects={scopedSubjects}
+                       timeSlots={resolvedSlots}
+                       loadRoster={loadRoster}
+                       attendance={attendance}
+                       initialDate={selectedPastDate}
+                       isPopup={true}
+                       onSaveSuccess={closePastDateModal}
+                     />
+                   </div>
+                 )}
+               </Dialog>
+             </>
           )}
           {activeTab === 'report' && (
              <ReportModeView />

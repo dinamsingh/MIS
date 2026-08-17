@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { isFeatureEnabled } from '@domain/featureFlags';
 import { useAuth } from '@presentation/auth';
 import { useUserRole } from '@presentation/auth/useUserRole';
+import { supabase } from '@data/supabase';
 import { fetchTeacherProfile } from '../../features/onboarding/api/onboarding';
 import { navGroups } from '@presentation/navigation';
 import { motionDurations, motionEase } from '@presentation/motion';
@@ -65,6 +66,29 @@ export default function Sidebar({
   const displayTeacherName = useMemo(() => compactTeacherName(teacherName), [teacherName]);
   const teacherInitial = displayTeacherName.charAt(0).toUpperCase() || 'T';
 
+  const [visitedFeatures, setVisitedFeatures] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let active = true;
+    
+    // First try localStorage for instant load
+    try {
+      const stored = window.localStorage.getItem('visited_features');
+      if (stored) {
+        setVisitedFeatures(JSON.parse(stored));
+      }
+    } catch {}
+
+    // Then sync with database (Supabase user_metadata)
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (active && user?.user_metadata?.visited_features) {
+        setVisitedFeatures(user.user_metadata.visited_features);
+      }
+    }).catch(() => {});
+
+    return () => { active = false; };
+  }, []);
+
   useEffect(() => {
     let active = true;
     setTeacherName(fallbackTeacherName);
@@ -92,10 +116,33 @@ export default function Sidebar({
   }, [actor.kind, fallbackTeacherName]);
 
   const handleSidebarNavigate = (path: string) => {
+    if (!visitedFeatures[path]) {
+      const next = { ...visitedFeatures, [path]: Date.now() };
+      setVisitedFeatures(next);
+      
+      // Save locally for instant UI updates next time
+      try {
+        window.localStorage.setItem('visited_features', JSON.stringify(next));
+      } catch {}
+      
+      // Save to database
+      supabase.auth.updateUser({
+        data: { visited_features: next }
+      }).catch(console.error);
+    }
+    
     if (mobile) {
       onClose?.();
     }
     onNavigate?.(path);
+  };
+
+  const getBadge = (item: any) => {
+    if (item.badge !== 'NEW') return item.badge;
+    const visitedTime = visitedFeatures[item.path];
+    if (!visitedTime) return 'NEW';
+    if (Date.now() - visitedTime < 48 * 60 * 60 * 1000) return 'NEW';
+    return undefined;
   };
 
   return (
@@ -108,10 +155,12 @@ export default function Sidebar({
     >
       <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-border to-transparent" aria-hidden="true" />
 
-      <div className="relative flex h-[4.25rem] shrink-0 items-center gap-3 border-b border-sidebar-border/70 bg-surface/70 px-4 backdrop-blur-xl">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-[linear-gradient(135deg,rgb(var(--color-accent))_0%,rgb(var(--color-text-soft))_100%)] text-sm font-black text-surface shadow-elevated ring-1 ring-border/60">
-          A
-        </span>
+      <div className={`relative flex h-[4.25rem] shrink-0 items-center border-b border-sidebar-border/70 bg-surface/70 px-4 backdrop-blur-xl ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
+        {!isCollapsed && (
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-[linear-gradient(135deg,rgb(var(--color-accent))_0%,rgb(var(--color-text-soft))_100%)] text-sm font-black text-surface shadow-elevated ring-1 ring-border/60">
+            A
+          </span>
+        )}
         <AnimatePresence initial={false}>
           {!isCollapsed && (
             <motion.div
@@ -234,14 +283,14 @@ export default function Sidebar({
                           >
                             {item.label}
                           </motion.span>
-                          {item.badge && (
+                          {getBadge(item) && (
                             <motion.span
                               key="badge"
                               className={[
                                 'rounded-sm border px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none',
-                                item.badge === 'AI'
+                                getBadge(item) === 'AI'
                                   ? 'border-accent/10 bg-accent-tint text-accent'
-                                  : item.badge === 'NEW'
+                                  : getBadge(item) === 'NEW'
                                     ? 'border-status-green/10 bg-status-green/10 text-status-green'
                                     : 'border-accent/10 bg-accent-tint text-accent',
                               ].join(' ')}
@@ -250,7 +299,7 @@ export default function Sidebar({
                               exit={{ opacity: 0, scale: 0.96 }}
                               transition={{ duration: motionDurations.fast, ease: motionEase }}
                             >
-                              {item.badge}
+                              {getBadge(item)}
                             </motion.span>
                           )}
                         </AnimatePresence>

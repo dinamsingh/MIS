@@ -25,91 +25,71 @@
  * _Requirements: 8.7, 8.9, 8.10_
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ThemeToggle } from '../components/ui/ThemeToggle';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  ClockAlert,
+  ChevronLeft,
+  ChevronRight,
+  Check,
+  X,
+  Bookmark
+} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { QuizAttemptSessionInfo, QuizPayloadNoAnswers } from '@domain/services/rosterService';
 import type { SubmitAttemptOutcome } from '@data/access/parsers';
 import type { QuizAttemptDetailQuestion } from '@data/access/quizAccess';
 import { messages } from '@domain/shared/messages';
-import { DENIED_COPY } from './StudentQuizAccessView';
-import { Button } from '@presentation/components/ui';
+import { Button, Card, Alert } from '@presentation/components/ui';
 import { useAuth } from '@presentation/auth/AuthContext';
 
-/** The function that submits an attempt to the server (RPC wrapper). */
-export type SubmitAttemptFn = (
-  quizId: string,
-  answers: Record<string, number>,
-  email: string,
-) => Promise<SubmitAttemptOutcome>;
+/** The function that submits the attempt to the server. */
+export interface SubmitAttemptFn {
+  (payload: { quizId: string; answers: Record<string, number> }): Promise<SubmitAttemptOutcome>;
+}
+
+/** The function that fetches the detailed answer review. */
+export interface GetQuizReviewFn {
+  (quizId: string): Promise<QuizAttemptDetailQuestion[] | null>;
+}
 
 export interface QuizAttemptViewProps {
-  quiz: QuizPayloadNoAnswers;
-  attemptSession: QuizAttemptSessionInfo;
-  submitAttempt: SubmitAttemptFn;
-  getQuizReview?: (quizId: string, email: string) => Promise<QuizAttemptDetailQuestion[] | null>;
-  email: string;
+  readonly quiz: QuizPayloadNoAnswers;
+  readonly attemptSession: QuizAttemptSessionInfo;
+  readonly submitAttempt: SubmitAttemptFn;
+  readonly getQuizReview: GetQuizReviewFn;
+  readonly onClose?: () => void;
 }
 
-type AttemptPhase =
-  | { kind: 'in-progress' }
-  | { kind: 'submitting'; auto?: boolean }
-  | { kind: 'scored'; score: number; totalMarks: number; auto?: boolean }
-  | { kind: 'already-attempted'; score: number; totalMarks: number }
-  | { kind: 'error'; message: string; retryable: boolean };
+type ViewPhase = 'in-progress' | 'submitting' | 'scored' | 'already-attempted' | 'answer-sheet' | 'error';
 
-type WarningLevel = 'info' | 'warning' | 'danger';
-interface Warning {
-  readonly message: string;
-  readonly level: WarningLevel;
-  readonly id: number;
-}
+const STORAGE_PREFIX = 'mis_quiz_draft_';
 
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
+function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T | ((val: T) => T)) => void] {
+  const [storedValue, setStoredValue] = useState<T>(() => {
+    if (typeof window === 'undefined') return initialValue;
+    try {
+      const item = window.localStorage.getItem(key);
+      return item ? JSON.parse(item) : initialValue;
+    } catch {
+      return initialValue;
+    }
+  });
 
-function remainingFromSession(session: QuizAttemptSessionInfo): number {
-  const startedAt = new Date(session.startedAt).getTime();
-  const serverNow = new Date(session.serverNow).getTime();
-  const limitSeconds = session.timeLimitMinutes * 60;
-  if (!Number.isFinite(startedAt) || !Number.isFinite(serverNow) || limitSeconds <= 0) {
-    return 0;
-  }
-  return Math.max(0, limitSeconds - Math.floor((serverNow - startedAt) / 1000));
-}
-
-function readDraftAnswers(key: string): Record<string, number> {
-  try {
-    const raw = window.localStorage.getItem(key);
-    const parsed = raw ? JSON.parse(raw) : null;
-    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, number>) : {};
-  } catch {
-    return {};
-  }
-}
-
-function readDraftMarks(key: string): string[] {
-  try {
-    const raw = window.localStorage.getItem(key);
-    const parsed = raw ? JSON.parse(raw) : null;
-    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
-function seededRandom(seedStr: string) {
-  let h = 0;
-  for (let i = 0; i < seedStr.length; i++) {
-    h = (Math.imul(31, h) + seedStr.charCodeAt(i)) | 0;
-  }
-  return function () {
-    h = Math.imul(h ^ (h >>> 15), 1 | h);
-    h ^= h + Math.imul(h ^ (h >>> 7), 61 | h);
-    return ((h ^ (h >>> 14)) >>> 0) / 4294967296;
+  const setValue = (value: T | ((val: T) => T)) => {
+    try {
+      const valueToStore = value instanceof Function ? value(storedValue) : value;
+      setStoredValue(valueToStore);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(key, JSON.stringify(valueToStore));
+      }
+    } catch {
+      // Ignore write errors
+    }
   };
+
+  return [storedValue, setValue];
 }
 
 export default function QuizAttemptView({
@@ -117,842 +97,696 @@ export default function QuizAttemptView({
   attemptSession,
   submitAttempt,
   getQuizReview,
-  email,
+  onClose,
 }: QuizAttemptViewProps) {
-  const { actor, signOut } = useAuth();
-  const draftKey = `quiz-draft:${quiz.id}:${attemptSession.startedAt}`;
-  const marksKey = `quiz-marks:${quiz.id}:${attemptSession.startedAt}`;
-
-  const [remainingSeconds, setRemainingSeconds] = useState(() => remainingFromSession(attemptSession));
-  const [answers, setAnswers] = useState<Record<string, number>>(() => readDraftAnswers(draftKey));
-  const [markedForReview, setMarkedForReview] = useState<Set<string>>(() => new Set(readDraftMarks(marksKey)));
-  const [phase, setPhase] = useState<AttemptPhase>({ kind: 'in-progress' });
-  const [reviewOpen, setReviewOpen] = useState(false);
-  const [warning, setWarning] = useState<Warning | null>(null);
-  const [postResultSecondsLeft, setPostResultSecondsLeft] = useState<number>(5 * 60);
-
-  const [reviewQuestions, setReviewQuestions] = useState<QuizAttemptDetailQuestion[] | null>(null);
-  const [showAnswerSheet, setShowAnswerSheet] = useState(false);
-  const [loadingReview, setLoadingReview] = useState(false);
-
-  // Deterministic per-student question order when shuffleQuestions is on.
-  const displayQuestions = useMemo(() => {
-    if (!quiz.shuffleQuestions) return quiz.questions;
-    const actorId =
-      actor.kind === 'student' ? actor.email : actor.kind === 'teacher' ? actor.userId : 'anon';
-    const seed = `${actorId}-${quiz.id}`;
-    const rng = seededRandom(seed);
-    const qs = [...quiz.questions];
-    for (let i = qs.length - 1; i > 0; i--) {
-      const j = Math.floor(rng() * (i + 1));
-      [qs[i], qs[j]] = [qs[j], qs[i]];
-    }
-    return qs;
-  }, [quiz.questions, quiz.shuffleQuestions, quiz.id, actor]);
-
-  const submittedRef = useRef(false);
-  const questionIds = useMemo(() => new Set(displayQuestions.map((q) => q.id)), [displayQuestions]);
-  const answeredCount = Object.keys(answers).filter((id) => questionIds.has(id)).length;
-  const unansweredCount = displayQuestions.length - answeredCount;
-  const markedCount = Array.from(markedForReview).filter((id) => questionIds.has(id)).length;
-  const progressPercent =
-    displayQuestions.length > 0 ? Math.round((answeredCount / displayQuestions.length) * 100) : 0;
-
-  // Fired warnings tracker so each threshold fires exactly once.
-  const firedWarningsRef = useRef<Set<number>>(new Set());
-
-  // --- Draft persistence -----------------------------------------------------
-  useEffect(() => {
-    if (phase.kind !== 'in-progress') return;
-    window.localStorage.setItem(draftKey, JSON.stringify(answers));
-  }, [answers, draftKey, phase.kind]);
-
-  useEffect(() => {
-    if (phase.kind !== 'in-progress') return;
-    window.localStorage.setItem(marksKey, JSON.stringify(Array.from(markedForReview)));
-  }, [markedForReview, marksKey, phase.kind]);
-
-  // --- Submission logic ------------------------------------------------------
-  const submitWithRetry = useCallback(
-    async (currentAnswers: Record<string, number>, auto: boolean, retryCount: number) => {
-      if (submittedRef.current) return;
-      submittedRef.current = true;
-      setPhase({ kind: 'submitting', auto });
-
-      try {
-        const outcome = await submitAttempt(quiz.id, currentAnswers, email);
-        switch (outcome.status) {
-          case 'recorded':
-            window.localStorage.removeItem(draftKey);
-            window.localStorage.removeItem(marksKey);
-            setPhase({
-              kind: 'scored',
-              score: outcome.result.score,
-              totalMarks: outcome.result.totalMarks,
-              auto,
-            });
-            break;
-          case 'already-attempted':
-            window.localStorage.removeItem(draftKey);
-            window.localStorage.removeItem(marksKey);
-            setPhase({
-              kind: 'already-attempted',
-              score: outcome.result.score,
-              totalMarks: outcome.result.totalMarks,
-            });
-            break;
-          case 'denied':
-            setPhase({ kind: 'error', message: DENIED_COPY[outcome.reason].body, retryable: false });
-            break;
-          default:
-            setPhase({ kind: 'error', message: messages.error.generic, retryable: true });
-            break;
-        }
-      } catch {
-        submittedRef.current = false;
-        if (auto && retryCount < 2) {
-          window.setTimeout(() => {
-            void submitWithRetry(currentAnswers, true, retryCount + 1);
-          }, 800 * (retryCount + 1));
-          return;
-        }
-        setPhase({ kind: 'error', message: messages.error.generic, retryable: true });
-      }
-    },
-    [draftKey, marksKey, quiz.id, submitAttempt, email],
+  const { signOut } = useAuth();
+  const [phase, setPhase] = useState<ViewPhase>('in-progress');
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [answers, setAnswers] = useLocalStorage<Record<string, string>>(
+    `${STORAGE_PREFIX}${quiz.id}`,
+    {}
   );
-
-  const doSubmit = useCallback(
-    async (currentAnswers: Record<string, number>) => submitWithRetry(currentAnswers, false, 0),
-    [submitWithRetry],
+  const [markedForReview, setMarkedForReview] = useLocalStorage<Set<string>>(
+    `${STORAGE_PREFIX}${quiz.id}_marked`,
+    new Set()
   );
+  const [timeLeft, setTimeLeft] = useState(attemptSession.timeLimitMinutes * 60);
+  const [warningsShown, setWarningsShown] = useState<Set<number>>(new Set());
+  const [reviewData, setReviewData] = useState<QuizAttemptDetailQuestion[] | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [postResultSeconds, setPostResultSeconds] = useState(300);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const warningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const postResultTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const answersRef = useRef(answers);
-  answersRef.current = answers;
-  const submitWithRetryRef = useRef(submitWithRetry);
-  submitWithRetryRef.current = submitWithRetry;
+  const questions = quiz.questions;
+  const currentQuestion = questions[currentIndex];
+  const answeredCount = useMemo(
+    () => Object.values(answers).filter((v) => v !== '').length,
+    [answers]
+  );
+  const markedCount = markedForReview.size;
+  const isLastQuestion = currentIndex === questions.length - 1;
+  const isFirstQuestion = currentIndex === 0;
 
-  // --- Countdown timer + warnings -------------------------------------------
+  // Timer
   useEffect(() => {
-    if (phase.kind !== 'in-progress') return;
-
-    const intervalId = window.setInterval(() => {
-      setRemainingSeconds((prev) => {
-        const next = prev - 1;
-
-        // Emit a warning exactly once at each threshold.
-        for (const [threshold, message, level] of [
-          [300, '5 minutes remaining', 'info'] as const,
-          [60, '1 minute remaining', 'warning'] as const,
-          [30, '30 seconds remaining', 'danger'] as const,
-        ]) {
-          if (next === threshold && !firedWarningsRef.current.has(threshold)) {
-            firedWarningsRef.current.add(threshold);
-            setWarning({ id: Date.now(), message, level });
-          }
-        }
-
-        if (next <= 0) {
-          window.clearInterval(intervalId);
-          void submitWithRetryRef.current(answersRef.current, true, 0);
-          return 0;
-        }
-        return next;
-      });
-    }, 1000);
-
-    return () => window.clearInterval(intervalId);
-  }, [phase.kind]);
-
-  // Auto-dismiss warning toast after 4s.
-  useEffect(() => {
-    if (!warning) return;
-    const t = window.setTimeout(() => setWarning(null), 4000);
-    return () => window.clearTimeout(t);
-  }, [warning]);
-
-  // --- Post-result session countdown ----------------------------------------
-  const isResultPhase = phase.kind === 'scored' || phase.kind === 'already-attempted';
-  useEffect(() => {
-    if (!isResultPhase) return;
-    setPostResultSecondsLeft(5 * 60);
-    const intervalId = window.setInterval(() => {
-      setPostResultSecondsLeft((prev) => {
+    if (phase !== 'in-progress') return;
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
         if (prev <= 1) {
-          window.clearInterval(intervalId);
-          void signOut();
+          if (timerRef.current) clearInterval(timerRef.current);
+          handleAutoSubmit();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-
-    const handleBeforeUnload = () => {
-      // Best-effort — the 5-min timer is the reliable fallback.
-      void signOut();
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isResultPhase, signOut]);
+  }, [phase]);
 
-  // --- Handlers --------------------------------------------------------------
-  function selectOption(questionId: string, optionIndex: number) {
-    if (phase.kind !== 'in-progress') return;
-    setAnswers((prev) => ({ ...prev, [questionId]: optionIndex }));
-  }
+  // Time warnings
+  useEffect(() => {
+    if (phase !== 'in-progress') return;
+    const thresholds = [300, 60, 30];
+    const nextWarning = thresholds.find((t) => timeLeft <= t && !warningsShown.has(t));
+    if (nextWarning !== undefined) {
+      setWarningsShown((prev) => new Set(prev).add(nextWarning));
+      warningTimeoutRef.current = setTimeout(() => {
+        // Toast would be shown here; for now we just track it
+      }, 2000);
+    }
+    return () => {
+      if (warningTimeoutRef.current) clearTimeout(warningTimeoutRef.current);
+    };
+  }, [timeLeft, warningsShown, phase]);
 
-  function clearAnswer(questionId: string) {
-    if (phase.kind !== 'in-progress') return;
+  // Post-result countdown
+  useEffect(() => {
+    if (phase !== 'scored' && phase !== 'answer-sheet') return;
+    postResultTimerRef.current = setInterval(() => {
+      setPostResultSeconds((prev) => {
+        if (prev <= 1) {
+          if (postResultTimerRef.current) clearInterval(postResultTimerRef.current);
+          signOut();
+          onClose?.();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => {
+      if (postResultTimerRef.current) clearInterval(postResultTimerRef.current);
+    };
+  }, [phase, signOut, onClose]);
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const handleAnswerChange = (questionId: string, optionKey: string) => {
+    setAnswers((prev) => ({ ...prev, [questionId]: optionKey }));
+  };
+
+  const handleClearAnswer = (questionId: string) => {
     setAnswers((prev) => {
-      const { [questionId]: _removed, ...rest } = prev;
-      return rest;
+      const next = { ...prev };
+      delete next[questionId];
+      return next;
     });
-  }
+  };
 
-  function toggleMarkForReview(questionId: string) {
-    if (phase.kind !== 'in-progress') return;
+  const handleToggleMark = (questionId: string) => {
     setMarkedForReview((prev) => {
       const next = new Set(prev);
       if (next.has(questionId)) next.delete(questionId);
       else next.add(questionId);
       return next;
     });
-  }
-
-  function scrollToQuestion(questionId: string) {
-    const el = document.getElementById(`question-${questionId}`);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  function handleOpenReview() {
-    if (phase.kind !== 'in-progress') return;
-    setReviewOpen(true);
-  }
-
-  const handleOpenAnswerSheet = async () => {
-    if (reviewQuestions) {
-      setShowAnswerSheet(true);
-      return;
-    }
-    setLoadingReview(true);
-    try {
-      if (getQuizReview) {
-        const rev = await getQuizReview(quiz.id, email);
-        if (rev && rev.length > 0) {
-          setReviewQuestions(rev);
-          setShowAnswerSheet(true);
-          setLoadingReview(false);
-          return;
-        }
-      }
-    } catch (e) {
-      console.error('[QuizAttemptView] Failed to fetch review:', e);
-    }
-    setLoadingReview(false);
-    setShowAnswerSheet(true);
   };
 
-  function handleConfirmSubmit() {
-    setReviewOpen(false);
-    void doSubmit(answers);
-  }
-
-  function retrySubmit() {
-    if (phase.kind !== 'error' || !phase.retryable) return;
-    submittedRef.current = false;
-    void doSubmit(answersRef.current);
-  }
-
-  // ============ RESULT PHASES ==============================================
-  if (phase.kind === 'scored' || phase.kind === 'already-attempted') {
-    const percent =
-      phase.totalMarks > 0 ? Math.round((phase.score / phase.totalMarks) * 100) : 0;
-    
-    // Stroke dash array for the SVG circle (2 * Math.PI * 45) ≈ 282.7
-    const strokeDashoffset = 282.7 - (282.7 * percent) / 100;
-
-    const displayReviewItems = reviewQuestions || displayQuestions.map((q) => {
-      const selected = answers[q.id] ?? null;
-      return {
-        questionId: q.id,
-        text: q.text,
-        options: [...q.options],
-        correctIndex: (q as any).correctIndex ?? -1,
-        marks: 1,
-        position: 0,
-        studentAnswerIndex: selected,
-      };
-    });
-
-    const correctCount = displayReviewItems.filter(
-      (q: any) => q.correctIndex !== -1 && q.studentAnswerIndex === q.correctIndex
-    ).length;
-    const incorrectCount = displayReviewItems.filter(
-      (q: any) => q.studentAnswerIndex !== null && q.correctIndex !== -1 && q.studentAnswerIndex !== q.correctIndex
-    ).length;
-    const unansCount = displayReviewItems.filter((q: any) => q.studentAnswerIndex === null).length;
-
-    if (showAnswerSheet) {
-      return (
-        <div className="bg-transparent min-h-screen font-['Inter'] text-[#0d1c2e] dark:text-[#ffffff] pb-[100px]">
-          <header className="sticky top-0 z-20 bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl border-b border-white/20 px-4 py-4 shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73] flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setShowAnswerSheet(false)}
-                className="w-9 h-9 rounded-full bg-[#dde1e7] shadow-[inset_2px_2px_5px_#BABECC,inset_-2px_-2px_5px_#ffffff73] dark:bg-[#0f172a] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] hover:bg-[#e6eeff] dark:bg-[#3730a3] text-[#15157d] dark:text-[#818cf8] flex items-center justify-center transition-colors"
-                title="Back to Summary"
-              >
-                <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-              </button>
-              <div>
-                <h1 className="font-bold text-[18px] text-[#0d1c2e] dark:text-[#ffffff] leading-tight">Answer Sheet & Review</h1>
-                <p className="text-[12px] text-[#464652] dark:text-[#cbd5e1]">Detailed breakdown of your answers</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <span className="font-bold text-[18px] text-[#15157d] dark:text-[#818cf8]">{phase.score}/{phase.totalMarks}</span>
-              <span className="text-[11px] text-[#464652] dark:text-[#cbd5e1] block font-semibold uppercase">Score</span>
-            </div>
-          </header>
-
-          <main className="max-w-2xl mx-auto px-4 py-6">
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              <div className="bg-[#e6f4ea] border border-[#ceead6] rounded-xl p-3 text-center">
-                <span className="material-symbols-outlined text-[#137333] text-[22px] block mb-1">check_circle</span>
-                <span className="font-bold text-[20px] text-[#137333] block leading-none">{correctCount}</span>
-                <span className="text-[12px] font-semibold text-[#137333]">Correct</span>
-              </div>
-              <div className="bg-[#fce8e6] border border-[#fad2cf] rounded-xl p-3 text-center">
-                <span className="material-symbols-outlined text-[#c5221f] text-[22px] block mb-1">cancel</span>
-                <span className="font-bold text-[20px] text-[#c5221f] block leading-none">{incorrectCount}</span>
-                <span className="text-[12px] font-semibold text-[#c5221f]">Incorrect</span>
-              </div>
-              <div className="bg-[#f1f3f4] border border-[#e3e5e8] rounded-xl p-3 text-center">
-                <span className="material-symbols-outlined text-[#5f6368] text-[22px] block mb-1">help</span>
-                <span className="font-bold text-[20px] text-[#5f6368] block leading-none">{unansCount}</span>
-                <span className="text-[12px] font-semibold text-[#5f6368]">Unanswered</span>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-4">
-              {displayReviewItems.map((q: any, idx: number) => {
-                const isCorrect = q.correctIndex !== -1 && q.studentAnswerIndex === q.correctIndex;
-                const isIncorrect = q.studentAnswerIndex !== null && q.correctIndex !== -1 && q.studentAnswerIndex !== q.correctIndex;
-                const isUnanswered = q.studentAnswerIndex === null;
-
-                return (
-                  <div key={q.questionId || idx} className="bg-white/40 dark:bg-[#1e293b]/40 backdrop-blur-xl rounded-2xl shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] border border-white/20 dark:border-white/10 p-5 shadow-[0px_2px_12px_rgba(46,49,146,0.04)] border border-white/20">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="font-bold text-[13px] text-[#15157d] dark:text-[#818cf8] uppercase tracking-wider">Question {idx + 1}</span>
-                      {isCorrect && <span className="inline-flex items-center gap-1 bg-[#e6f4ea] text-[#137333] font-semibold text-[12px] px-3 py-1 rounded-full border border-[#ceead6]"><span className="material-symbols-outlined text-[14px]">check</span> Correct</span>}
-                      {isIncorrect && <span className="inline-flex items-center gap-1 bg-[#fce8e6] text-[#c5221f] font-semibold text-[12px] px-3 py-1 rounded-full border border-[#fad2cf]"><span className="material-symbols-outlined text-[14px]">close</span> Incorrect</span>}
-                      {isUnanswered && <span className="inline-flex items-center gap-1 bg-[#f1f3f4] text-[#5f6368] font-semibold text-[12px] px-3 py-1 rounded-full border border-[#e3e5e8]"><span className="material-symbols-outlined text-[14px]">remove</span> Unanswered</span>}
-                    </div>
-                    <p className="font-semibold text-[15px] text-[#0d1c2e] dark:text-[#ffffff] mb-4 leading-relaxed">{q.text}</p>
-                    <div className="flex flex-col gap-2">
-                      {q.options.map((optText: string, optIdx: number) => {
-                        const isCorrectOption = q.correctIndex !== -1 && optIdx === q.correctIndex;
-                        const isStudentChoice = optIdx === q.studentAnswerIndex;
-                        let optionStyle = "border-white/20 bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl text-[#464652] dark:text-[#cbd5e1]";
-                        let badge = null;
-                        if (isCorrectOption) {
-                          optionStyle = "border-[#34a853] bg-[#f6fbf7] text-[#137333] font-semibold shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73]";
-                          badge = <span className="ml-auto inline-flex items-center gap-1 text-[12px] font-bold text-[#137333] bg-[#e6f4ea] px-2.5 py-0.5 rounded-full border border-[#ceead6]"><span className="material-symbols-outlined text-[14px]">check_circle</span> Correct Answer</span>;
-                        } else if (isStudentChoice) {
-                          optionStyle = "border-[#ea4335] bg-[#fef7f6] text-[#c5221f] font-semibold shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73]";
-                          badge = <span className="ml-auto inline-flex items-center gap-1 text-[12px] font-bold text-[#c5221f] bg-[#fce8e6] px-2.5 py-0.5 rounded-full border border-[#fad2cf]"><span className="material-symbols-outlined text-[14px]">cancel</span> Your Answer</span>;
-                        }
-                        return (
-                          <div key={optIdx} className={`flex items-center gap-3 p-3.5 rounded-xl border transition-all text-[14px] ${optionStyle}`}>
-                            <span className="w-6 h-6 rounded-full bg-white border border-current flex items-center justify-center shrink-0 font-bold text-[12px]">{String.fromCharCode(65 + optIdx)}</span>
-                            <span className="flex-grow">{optText}</span>
-                            {badge}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </main>
-          <div className="fixed bottom-0 left-0 right-0 bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl border-t border-white/20 p-4 shadow-[0px_-4px_20px_rgba(0,0,0,0.05)] flex items-center gap-3 z-30">
-            <button type="button" onClick={() => setShowAnswerSheet(false)} className="flex-1 bg-[#dde1e7] shadow-[inset_2px_2px_5px_#BABECC,inset_-2px_-2px_5px_#ffffff73] dark:bg-[#0f172a] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] hover:bg-[#e6eeff] dark:bg-[#3730a3] text-[#15157d] dark:text-[#818cf8] font-semibold py-3.5 px-4 rounded-xl text-[14px] transition-colors flex items-center justify-center gap-2"><span className="material-symbols-outlined text-[18px]">arrow_back</span>Back to Score</button>
-            <button type="button" onClick={() => void signOut()} className="flex-1 bg-[#15157d] dark:bg-[#818cf8] hover:bg-[#ba1a1a] dark:hover:bg-[#ff5449] text-white font-semibold py-3.5 px-4 rounded-xl text-[14px] transition-colors flex items-center justify-center gap-2 shadow-[4px_4px_8px_#BABECC,-4px_-4px_8px_#ffffff73] dark:shadow-[4px_4px_8px_#020617,-4px_-4px_8px_#1e293b73]"><span className="material-symbols-outlined text-[18px]">logout</span>Logout</button>
-          </div>
-        </div>
-      );
+  const handleSubmit = async () => {
+    setShowReviewModal(false);
+    setPhase('submitting');
+    setSubmitError(null);
+    try {
+      // Convert string answers to numbers for the RPC
+      const numericAnswers: Record<string, number> = {};
+      Object.entries(answers).forEach(([qid, opt]) => {
+        const num = Number(opt);
+        if (!Number.isNaN(num)) numericAnswers[qid] = num;
+      });
+      const result = await submitAttempt({
+        quizId: quiz.id,
+        answers: numericAnswers,
+      });
+      if (result.status === 'recorded') {
+        setPhase('scored');
+        const review = await getQuizReview(quiz.id);
+        setReviewData(review);
+        // Clear draft on successful submit
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem(`${STORAGE_PREFIX}${quiz.id}`);
+          window.localStorage.removeItem(`${STORAGE_PREFIX}${quiz.id}_marked`);
+        }
+      } else {
+        setPhase('in-progress');
+        setSubmitError(result.status === 'denied' ? result.reason : messages.error.generic);
+      }
+    } catch {
+      setPhase('in-progress');
+      setSubmitError(messages.error.generic);
     }
+  };
 
+  const handleAutoSubmit = async () => {
+    setPhase('submitting');
+    try {
+      // Convert string answers to numbers for the RPC
+      const numericAnswers: Record<string, number> = {};
+      Object.entries(answers).forEach(([qid, opt]) => {
+        const num = Number(opt);
+        if (!Number.isNaN(num)) numericAnswers[qid] = num;
+      });
+      const result = await submitAttempt({
+        quizId: quiz.id,
+        answers: numericAnswers,
+      });
+      if (result.status === 'recorded') {
+        setPhase('scored');
+        const review = await getQuizReview(quiz.id);
+        setReviewData(review);
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem(`${STORAGE_PREFIX}${quiz.id}`);
+          window.localStorage.removeItem(`${STORAGE_PREFIX}${quiz.id}_marked`);
+        }
+      } else {
+        setPhase('in-progress');
+        setSubmitError(result.status === 'denied' ? result.reason : messages.error.generic);
+      }
+    } catch {
+      setPhase('in-progress');
+      setSubmitError(messages.error.generic);
+    }
+  };
+
+  const handleClose = () => {
+    signOut();
+    if (onClose) onClose();
+  };
+
+  // const _unansweredQuestions = useMemo(
+  //   () =>
+  //     questions
+  //       .map((q, i) => ({ q, i }))
+  //       .filter(({ q }) => !answers[q.id]),
+  //   [questions, answers]
+  // );
+
+  // const _markedQuestions = useMemo(
+  //   () =>
+  //     questions
+  //       .map((q, i) => ({ q, i }))
+  //       .filter(({ q }) => markedForReview.has(q.id)),
+  //   [questions, markedForReview]
+  // );
+
+  const isUrgent = timeLeft <= 60;
+  // const _isWarning = timeLeft <= 300;
+
+  // Score circle
+  // const CIRCUMFERENCE = 2 * Math.PI * 48;
+  const correctCount = reviewData ? reviewData.filter((q) => q.studentAnswerIndex !== null && q.studentAnswerIndex === q.correctIndex).length : 0;
+  const scorePercent = reviewData ? (correctCount / reviewData.length) * 100 : 0;
+  // const _strokeDashOffset = CIRCUMFERENCE - (scorePercent / 100) * CIRCUMFERENCE;
+
+  if (phase === 'already-attempted') {
     return (
-      <div className="bg-transparent min-h-screen font-['Inter'] text-[#0d1c2e] dark:text-[#ffffff] relative overflow-hidden flex flex-col items-center justify-center pb-[env(safe-area-inset-bottom)]">
-        <main className="w-full h-full flex flex-col px-4 py-12 z-10 max-w-md mx-auto">
-          <header className="text-center mb-10">
-            <h1 className="font-semibold text-[32px] text-[#15157d] dark:text-[#818cf8] mb-2 tracking-tight">
-              {phase.kind === 'scored' ? (phase.auto ? 'Auto-submitted' : 'Quiz Completed!') : 'Already Attempted'}
-            </h1>
-            <p className="text-[18px] text-[#464652] dark:text-[#cbd5e1]">
-              {phase.kind === 'scored' 
-                ? "Your score has been successfully recorded." 
-                : messages.auth.alreadyAttempted}
-            </p>
-          </header>
-
-          <div className="flex justify-center items-center mb-10 relative">
-            <div className="relative w-64 h-64 flex items-center justify-center">
-              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" fill="none" r="45" stroke="#e6eeff" strokeWidth="8"></circle>
-                <circle 
-                  className="transition-all duration-1000 ease-out" 
-                  cx="50" cy="50" fill="none" r="45" 
-                  stroke="url(#gradient)" 
-                  strokeDasharray="282.7" 
-                  strokeDashoffset={strokeDashoffset} 
-                  strokeLinecap="round" strokeWidth="8"
-                ></circle>
-                <defs>
-                  <linearGradient id="gradient" x1="0%" x2="100%" y1="0%" y2="100%">
-                    <stop offset="0%" stopColor="#15157d"></stop>
-                    <stop offset="100%" stopColor="#d4af37"></stop>
-                  </linearGradient>
-                </defs>
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="font-bold text-[32px] text-[#15157d] dark:text-[#818cf8]">{percent}%</span>
-                <span className="font-semibold text-[13px] text-[#464652] dark:text-[#cbd5e1] uppercase tracking-wider mt-1">Score</span>
-              </div>
-            </div>
-            <div className="absolute inset-0 bg-gradient-to-tr from-[#15157d]/5 to-[#d4af37]/5 rounded-full pointer-events-none blur-xl"></div>
+      <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-background">
+        <Card className="w-full max-w-md" padded>
+          <div className="text-center">
+            <Alert tone="info" title="Already Attempted" className="mb-6">
+              <p className="text-body text-soft">
+                You have already attempted this quiz.
+              </p>
+            </Alert>
+            <Button variant="outline" size="lg" className="w-full" onClick={handleClose}>
+              Close
+            </Button>
           </div>
-
-          <div className="grid grid-cols-2 gap-4 mb-10">
-            <div className="bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl rounded-xl p-4 flex flex-col items-center justify-center  border border-white/20">
-              <span className="material-symbols-outlined text-[#15157d] dark:text-[#818cf8] mb-2 text-[28px]" style={{ fontVariationSettings: "'FILL' 1" }}>fact_check</span>
-              <span className="font-semibold text-[24px] text-[#0d1c2e] dark:text-[#ffffff]">{phase.score}/{phase.totalMarks}</span>
-              <span className="font-semibold text-[13px] text-[#464652] dark:text-[#cbd5e1] text-center mt-1">Total Marks</span>
-            </div>
-            <div className="bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl rounded-xl p-4 flex flex-col items-center justify-center  border border-white/20">
-              <span className="material-symbols-outlined text-[#d4af37] mb-2 text-[28px]" style={{ fontVariationSettings: "'FILL' 1" }}>timer</span>
-              <span className="font-semibold text-[24px] text-[#0d1c2e] dark:text-[#ffffff]">{formatTime(postResultSecondsLeft)}</span>
-              <span className="font-semibold text-[13px] text-[#464652] dark:text-[#cbd5e1] text-center mt-1">Auto-close in</span>
-            </div>
-          </div>
-
-          <div className="mt-auto pb-6 w-full flex flex-col gap-3">
-            <button 
-              onClick={handleOpenAnswerSheet}
-              disabled={loadingReview}
-              className="w-full bg-[#15157d] dark:bg-[#818cf8] text-white rounded-full py-4 font-semibold text-[14px] flex items-center justify-center gap-2  hover:bg-[#0c0092] dark:bg-[#6366f1] transition-colors focus:outline-none focus:ring-4 focus:ring-[#15157d]/20 active:scale-95 disabled:opacity-50"
-            >
-              {loadingReview ? (
-                <><span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span> Loading answer sheet...</>
-              ) : (
-                <><span className="material-symbols-outlined text-[18px]">assignment_turned_in</span> View Answer Sheet</>
-              )}
-            </button>
-            <button 
-              onClick={() => void signOut()}
-              className="w-full bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl text-[#ba1a1a] dark:text-[#ff5449] border border-white/20 rounded-full py-3.5 font-semibold text-[14px] flex items-center justify-center gap-2 shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73] hover:bg-[#fce8e6] dark:hover:bg-[#410002] transition-colors active:scale-95"
-            >
-              <span className="material-symbols-outlined text-[18px]">logout</span>
-              Logout
-            </button>
-          </div>
-        </main>
+        </Card>
       </div>
     );
   }
 
-  if (phase.kind === 'error') {
+  if (phase === 'error') {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#faf9f5] dark:bg-[#181715] px-4 py-10 pb-[env(safe-area-inset-bottom)]">
-        <div className="card w-full max-w-md text-center">
-          <span
-            className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#c64545]/10 text-3xl text-[#c64545]"
-            aria-hidden="true"
-          >
-            ✕
-          </span>
-          <h1 className="mt-4 text-xl font-serif text-[#141413] dark:text-[#faf9f5] text-[#141413] dark:text-[#faf9f5]">Submission failed</h1>
-          <p role="alert" className="mt-2 text-sm text-[#c64545]">
-            {phase.message}
-          </p>
-          {phase.retryable && (
-            <Button variant="primary" onClick={retrySubmit} className="mt-5 w-full">
-              Retry submit
+      <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-background">
+        <Card className="w-full max-w-md" padded>
+          <div className="text-center">
+            <Alert tone="danger" title="Error" className="mb-6">
+              <p className="text-body text-soft">{submitError || messages.error.generic}</p>
+            </Alert>
+            <Button variant="outline" size="lg" className="w-full" onClick={handleClose}>
+              Close
             </Button>
-          )}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // Helper: palette chip (hidden on mobile, shown on desktop or in review)
+  const PaletteChip = ({ index, questionId }: { index: number; questionId: string }) => {
+    const isCurrent = index === currentIndex;
+    const isAnswered = !!answers[questionId];
+    const isMarked = markedForReview.has(questionId);
+    let variant: 'default' | 'answered' | 'marked' | 'current' = 'default';
+    if (isCurrent) variant = 'current';
+    else if (isMarked) variant = 'marked';
+    else if (isAnswered) variant = 'answered';
+
+    const base = 'flex h-8 w-8 items-center justify-center rounded-xl text-xs font-semibold transition-all duration-200 shadow-sm';
+    const variants = {
+      default: 'bg-white dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 border border-neutral-200 dark:border-white/10 hover:bg-neutral-50 dark:hover:bg-neutral-700',
+      answered: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-100 dark:hover:bg-emerald-500/20',
+      marked: 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20 hover:bg-amber-100 dark:hover:bg-amber-500/20',
+      current: 'bg-neutral-900 dark:bg-neutral-200 text-neutral-50 dark:text-neutral-900 border border-neutral-900 dark:border-neutral-200 ring-2 ring-neutral-900/20 dark:ring-neutral-200/20',
+    };
+
+    return (
+      <button
+        type="button"
+        className={`${base} ${variants[variant]}`}
+        onClick={() => setCurrentIndex(index)}
+      >
+        {index + 1}
+      </button>
+    );
+  };
+
+  if (!questions || questions.length === 0 || !currentQuestion) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4 bg-neutral-50 dark:bg-neutral-950 font-sans">
+        <div className="text-center space-y-4 max-w-sm">
+          <AlertTriangle className="size-12 mx-auto text-amber-500" />
+          <h2 className="text-2xl font-bold text-neutral-900 dark:text-neutral-50">No Questions</h2>
+          <p className="text-neutral-500 dark:text-neutral-400 leading-relaxed">This quiz does not have any questions available yet.</p>
+          <Button onClick={() => window.location.reload()} variant="secondary" className="mt-4">
+            Go Back
+          </Button>
         </div>
       </div>
     );
   }
 
-  // ============ IN-PROGRESS / SUBMITTING ===================================
-  const isSubmitting = phase.kind === 'submitting';
+  const currentProgress = ((answeredCount) / questions.length) * 100;
 
   return (
-    <div className="min-h-screen bg-transparent text-[#0d1c2e] dark:text-[#ffffff] flex flex-col pb-[env(safe-area-inset-bottom)] font-['Inter'] transition-colors duration-500">
-      {/* --- Sticky top: title, progress, PROMINENT timer --------------- */}
-      <header className="sticky top-0 z-20 bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73] w-full mx-auto transition-colors duration-500">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 h-16 w-full relative gap-2">
-          <button type="button" onClick={handleOpenReview} className="flex items-center justify-center p-2 text-[#464652] dark:text-[#cbd5e1] hover:bg-[#dce9ff] rounded-full transition-colors active:scale-95 duration-200">
-            <span className="material-symbols-outlined">menu</span>
-          </button>
+    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-50 transition-colors duration-500 flex flex-col font-sans">
+      
+      {/* Desktop premium glow effect */}
+      <div className="hidden lg:block fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-neutral-900/5 dark:bg-white/5 blur-[120px] rounded-full pointer-events-none z-0"></div>
+
+      {/* Main Quiz View */}
+      {phase === 'in-progress' && !showReviewModal && (
+        <div className="flex-1 flex flex-col w-full max-w-[1400px] mx-auto p-0 lg:p-6 lg:gap-6 relative z-10 lg:flex-row">
           
-          <h1 className="font-semibold text-[24px] text-[#15157d] dark:text-[#818cf8] tracking-tight truncate px-4 flex-1">
-            {quiz.title ?? 'Quiz'}
-          </h1>
-          
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <div className={`flex items-center gap-2 font-bold px-3 py-1.5 rounded-full text-white shadow-[4px_4px_8px_#BABECC,-4px_-4px_8px_#ffffff73] dark:shadow-[4px_4px_8px_#020617,-4px_-4px_8px_#1e293b73] transition-colors duration-300 ${remainingSeconds !== null && remainingSeconds < 60 ? 'bg-[#ba1a1a] animate-pulse' : 'bg-[#15157d] dark:bg-[#818cf8]'}`}>
-              <span className="material-symbols-outlined text-[18px]">timer</span>
-              <span className="text-[14px] tracking-widest tabular-nums">{formatTime(remainingSeconds)}</span>
+          {/* Mobile Header (Hidden on Desktop) */}
+          <div className="lg:hidden flex justify-between items-center p-4 border-b border-neutral-200 dark:border-white/10 bg-white dark:bg-neutral-900 shadow-sm sticky top-0 z-20">
+             <div className="flex items-center gap-2">
+               <div className="size-8 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex justify-center items-center text-xs font-bold tracking-widest border border-neutral-200 dark:border-white/10">
+                 TAM
+               </div>
+               <div className="font-semibold text-neutral-500 dark:text-[#a1a1a1] text-[10px] tracking-widest">
+                 ACTIVE QUIZ
+               </div>
+             </div>
+             
+             {/* Urgent Timer Pill */}
+             <div className={`rounded-full text-xs font-semibold px-3 py-1.5 flex items-center gap-1.5 border shadow-sm transition-colors ${isUrgent ? 'bg-red-50 dark:bg-[#ff6467]/10 text-red-600 dark:text-[#ff6467] border-red-200 dark:border-[#ff6467]/20 animate-pulse' : 'bg-white dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border-neutral-200 dark:border-white/10'}`}>
+               {isUrgent ? <ClockAlert className="size-3.5" /> : <Clock className="size-3.5" />}
+               {formatTime(timeLeft)}
+             </div>
+          </div>
+
+          {/* Progress Bar (Mobile) */}
+          <div className="lg:hidden w-full h-1 bg-neutral-200 dark:bg-neutral-800">
+            <div className="h-full bg-neutral-900 dark:bg-neutral-200 transition-all duration-300 ease-out" style={{ width: `${currentProgress}%` }}></div>
+          </div>
+
+          {/* Center Content - Question Area */}
+          <div className="flex-1 w-full max-w-[402px] lg:max-w-none mx-auto flex flex-col p-4 lg:p-0 gap-4 lg:gap-6 pb-24 lg:pb-0">
+             
+             {/* Premium Context Badge */}
+             <div className="hidden lg:flex items-center gap-3 mb-2 px-1">
+               <div className="flex items-center gap-2 bg-white/60 dark:bg-neutral-900/60 backdrop-blur-md border border-neutral-200/80 dark:border-white/10 rounded-full px-4 py-1.5 shadow-sm">
+                 <div className="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse"></div>
+                 <span className="text-neutral-700 dark:text-neutral-300 text-xs font-bold tracking-wide">{quiz.title}</span>
+               </div>
+               <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700"></div>
+               <div className="text-neutral-500 dark:text-neutral-400 text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full bg-neutral-100 dark:bg-neutral-800/50 border border-neutral-200 dark:border-white/5">
+                 Multiple Choice
+               </div>
+             </div>
+
+             {/* Question Card */}
+             <div className="bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-white/10 p-5 lg:p-8 shadow-sm flex flex-col">
+               <div className="flex justify-between items-center mb-4">
+                 <div className="text-neutral-900 dark:text-neutral-50 font-semibold text-lg lg:text-xl tracking-tight">
+                   Question {currentIndex + 1}
+                 </div>
+                 <div className="flex gap-2">
+                   {answers[currentQuestion.id] && (
+                     <button onClick={() => handleClearAnswer(currentQuestion.id)} className="rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 text-[10px] lg:text-xs font-semibold px-3 py-1 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors border border-neutral-200 dark:border-white/10">
+                       Clear
+                     </button>
+                   )}
+                   <button onClick={() => handleToggleMark(currentQuestion.id)} className={`rounded-full text-[10px] lg:text-xs font-semibold px-3 py-1 flex items-center gap-1 transition-colors border shadow-sm ${markedForReview.has(currentQuestion.id) ? 'bg-amber-50 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-500/30' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border-neutral-200 dark:border-white/10'}`}>
+                     <Bookmark className="size-3" /> Mark
+                   </button>
+                 </div>
+               </div>
+
+               <p className="text-neutral-700 dark:text-neutral-200 text-[15px] lg:text-lg leading-relaxed font-medium mb-6 lg:mb-8">
+                 {currentQuestion.text}
+               </p>
+
+               {/* Options */}
+               <div className="flex flex-col gap-3 mt-auto">
+                 {currentQuestion.options.map((text, idx) => {
+                   const optionKey = String(idx);
+                   const isSelected = answers[currentQuestion.id] === optionKey;
+                   const cleanText = text.replace(/^[A-Z]\)\s*/i, '');
+                   
+                   return (
+                     <button
+                       key={optionKey}
+                       onClick={() => handleAnswerChange(currentQuestion.id, optionKey)}
+                       className={`text-left w-full p-4 rounded-2xl border transition-all duration-200 flex items-center gap-4 ${isSelected ? 'bg-neutral-900 dark:bg-neutral-200 border-neutral-900 dark:border-neutral-200 text-neutral-50 dark:text-neutral-900 shadow-md ring-2 ring-neutral-900/20 dark:ring-neutral-200/20 transform scale-[1.01]' : 'bg-neutral-50 dark:bg-neutral-800/40 border-neutral-200 dark:border-white/10 text-neutral-700 dark:text-neutral-300 hover:border-neutral-400 dark:hover:border-white/30'}`}
+                     >
+                       <div className={`shrink-0 size-8 rounded-full border-2 flex justify-center items-center ${isSelected ? 'border-neutral-50 dark:border-neutral-900' : 'border-neutral-300 dark:border-neutral-600'}`}>
+                         {isSelected && <div className="size-3 rounded-full bg-neutral-50 dark:bg-neutral-900"></div>}
+                       </div>
+                       <span className="font-medium text-sm lg:text-base leading-snug">{cleanText}</span>
+                     </button>
+                   );
+                 })}
+               </div>
+             </div>
+          </div>
+
+          {/* Right Sidebar - Desktop Only */}
+          <div className="hidden lg:flex w-[280px] shrink-0 flex-col">
+            <div className="bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-white/10 p-5 shadow-sm flex flex-col sticky top-6">
+              
+              {/* Timer Section - Compact */}
+              <div className="flex items-center justify-between mb-5 pb-5 border-b border-neutral-100 dark:border-white/5">
+                 <div className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400 text-xs font-semibold tracking-widest uppercase">
+                   <Clock className="size-4" /> Timer
+                 </div>
+                 <div className={`text-2xl font-mono font-bold tracking-tighter ${isUrgent ? 'text-red-600 dark:text-[#ff6467] animate-pulse' : 'text-neutral-900 dark:text-neutral-50'}`}>
+                   {formatTime(timeLeft)}
+                 </div>
+              </div>
+
+              {/* Navigator Header */}
+              <div className="flex justify-between items-center mb-4">
+                 <div className="text-neutral-500 dark:text-neutral-400 text-xs font-semibold tracking-widest uppercase">Progress</div>
+                 <div className="text-neutral-900 dark:text-neutral-50 text-xs font-bold bg-neutral-100 dark:bg-neutral-800 px-2.5 py-1 rounded-md border border-neutral-200 dark:border-white/10">{answeredCount} / {questions.length}</div>
+              </div>
+              
+              {/* Navigator Grid - Tighter */}
+              <div className="grid grid-cols-5 gap-1.5 mb-6 max-h-[40vh] overflow-y-auto pr-1">
+                {questions.map((q, i) => (
+                  <PaletteChip key={q.id} index={i} questionId={q.id} />
+                ))}
+              </div>
+
+              {/* Legend */}
+              <div className="mt-auto space-y-2 text-[11px] font-medium text-neutral-500 dark:text-neutral-400 mb-6 bg-neutral-50 dark:bg-neutral-800/50 p-3 rounded-2xl border border-neutral-100 dark:border-white/5">
+                 <div className="flex justify-between items-center"><div className="flex items-center gap-2"><div className="size-2.5 rounded-full bg-emerald-500"></div> Answered</div> <span className="text-neutral-900 dark:text-neutral-50">{answeredCount}</span></div>
+                 <div className="flex justify-between items-center"><div className="flex items-center gap-2"><div className="size-2.5 rounded-full bg-amber-500"></div> Marked</div> <span className="text-neutral-900 dark:text-neutral-50">{markedCount}</span></div>
+                 <div className="flex justify-between items-center"><div className="flex items-center gap-2"><div className="size-2.5 rounded-full bg-neutral-200 dark:bg-neutral-700"></div> Pending</div> <span className="text-neutral-900 dark:text-neutral-50">{questions.length - answeredCount}</span></div>
+              </div>
+
+              {/* Desktop Sidebar Navigation */}
+              <div className="flex gap-2">
+                <button 
+                  disabled={isFirstQuestion}
+                  onClick={() => setCurrentIndex((i) => i - 1)}
+                  className="flex-1 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-50 border border-neutral-200 dark:border-white/10 hover:bg-neutral-50 dark:hover:bg-neutral-800 font-semibold py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 text-sm shadow-sm disabled:opacity-50"
+                >
+                  <ChevronLeft className="size-4" /> Prev
+                </button>
+                
+                {isLastQuestion ? (
+                  <button 
+                    onClick={() => setShowReviewModal(true)}
+                    className="flex-[1.5] bg-neutral-900 dark:bg-neutral-200 text-neutral-50 dark:text-neutral-900 hover:bg-opacity-90 dark:hover:bg-opacity-90 font-semibold py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 text-sm shadow-sm"
+                  >
+                    Review <ChevronRight className="size-4" />
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => setCurrentIndex((i) => i + 1)}
+                    className="flex-[1.5] bg-neutral-900 dark:bg-neutral-200 text-neutral-50 dark:text-neutral-900 hover:bg-opacity-90 dark:hover:bg-opacity-90 font-semibold py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 text-sm shadow-sm"
+                  >
+                    Next <ChevronRight className="size-4" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-        
-        {/* Progress Bar */}
-        <div className="w-full max-w-4xl mx-auto h-1 bg-[#d5e3fc] dark:bg-[#1e1b4b]">
-          <div 
-            className="h-full bg-[#15157d] dark:bg-[#818cf8] transition-[width] duration-1000 ease-linear" 
-            style={{ width: `${progressPercent}%` }}
-          ></div>
-        </div>
 
-        {/* --- Question palette strip (horizontal, scrollable) --------- */}
-        <div className="mx-auto max-w-4xl px-4 py-2 bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl">
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide" role="tablist" aria-label="Questions">
-            {displayQuestions.map((q, i) => {
-              const isAnswered = answers[q.id] !== undefined;
-              const isMarked = markedForReview.has(q.id);
-              let cls =
-                'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition-colors ';
-              if (isAnswered && isMarked) {
-                cls += 'border-[#0c0092] bg-[#0c0092] dark:bg-[#6366f1] text-white ring-2 ring-yellow-400';
-              } else if (isAnswered) {
-                cls += 'border-[#15157d] dark:border-[#818cf8] bg-[#eff4ff] dark:bg-[#0f172a] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] text-[#15157d] dark:text-[#818cf8]';
-              } else if (isMarked) {
-                cls += 'border-yellow-500 bg-yellow-50 text-yellow-600';
-              } else {
-                cls += 'border-white/20 dark:border-[#334155] bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl text-[#464652] dark:text-[#cbd5e1] hover:bg-[#e6eeff] dark:bg-[#3730a3]';
-              }
-              return (
-                <button
-                  key={q.id}
-                  type="button"
-                  onClick={() => scrollToQuestion(q.id)}
-                  className={cls}
-                  aria-label={`Question ${i + 1}${isAnswered ? ', answered' : ', unanswered'}${
-                    isMarked ? ', marked for review' : ''
-                  }`}
-                >
-                  {i + 1}
-                </button>
-              );
-            })}
+          {/* Mobile Bottom Fixed Navigation */}
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-neutral-900 border-t border-neutral-200 dark:border-white/10 p-4 flex justify-between gap-3 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-20">
+            <button 
+              disabled={isFirstQuestion}
+              onClick={() => setCurrentIndex((i) => i - 1)}
+              className="flex-1 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-50 font-semibold disabled:opacity-50 flex justify-center items-center border border-neutral-200 dark:border-white/10"
+            >
+              <ChevronLeft className="size-5" />
+            </button>
+            <div className="flex flex-col justify-center items-center px-4 font-semibold text-neutral-900 dark:text-neutral-50">
+              <div className="text-xs">{currentIndex + 1} / {questions.length}</div>
+            </div>
+            {isLastQuestion ? (
+              <button 
+                onClick={() => setShowReviewModal(true)}
+                className="flex-[2] h-12 rounded-2xl bg-neutral-900 dark:bg-neutral-200 text-neutral-50 dark:text-neutral-900 font-semibold flex justify-center items-center shadow-sm gap-2"
+              >
+                Review <ChevronRight className="size-4" />
+              </button>
+            ) : (
+              <button 
+                onClick={() => setCurrentIndex((i) => i + 1)}
+                className="flex-1 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-50 font-semibold flex justify-center items-center border border-neutral-200 dark:border-white/10"
+              >
+                <ChevronRight className="size-5" />
+              </button>
+            )}
           </div>
-        </div>
-      </header>
-
-      {/* --- Warning toast --------------------------------------------- */}
-      {warning && (
-        <div
-          role="alert"
-          className={`sticky top-[7.5rem] z-30 mx-auto mt-3 max-w-sm rounded-card border-2 px-4 py-3 text-center text-sm font-semibold shadow-elevated motion-safe:animate-in motion-safe:slide-in-from-top-2 ${
-            warning.level === 'danger'
-              ? 'border-status-red bg-[#c64545] text-surface'
-              : warning.level === 'warning'
-                ? 'border-amber-500 bg-amber-500 text-surface'
-                : 'border-[#cc785c] bg-[#cc785c]-tint text-[#cc785c]'
-          }`}
-        >
-          ⏰ {warning.message}
+          
         </div>
       )}
 
-      {/* --- Questions body ------------------------------------------- */}
-      <main className="mx-auto max-w-4xl px-4 py-6 w-full flex-1">
-        <div className="flex flex-col gap-6">
-          {displayQuestions.map((question, qIndex) => {
-            const isAnswered = answers[question.id] !== undefined;
-            const isMarked = markedForReview.has(question.id);
-            return (
-              <article
-                key={question.id}
-                id={`question-${question.id}`}
-                className={`scroll-mt-[10rem] rounded-xl  bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl p-6 relative transition-[border-color,box-shadow] duration-200 ease-standard border ${
-                  isMarked ? 'border-yellow-400/80 ring-2 ring-yellow-400/20' : 'border-transparent'
-                }`}
-                aria-disabled={isSubmitting}
-              >
-                <button
-                  type="button"
-                  onClick={() => toggleMarkForReview(question.id)}
-                  className={`absolute top-6 right-6 transition-colors ${
-                    isMarked ? 'text-yellow-500 hover:text-yellow-600' : 'text-[#c7c5d4] hover:text-[#15157d] dark:hover:text-[#818cf8] dark:text-[#818cf8]'
-                  }`}
-                  aria-pressed={isMarked}
-                  aria-label={isMarked ? 'Unmark question' : 'Mark for review'}
-                  title={isMarked ? 'Unmark' : 'Mark for review'}
-                >
-                  <span className="material-symbols-outlined" style={{ fontVariationSettings: isMarked ? "'FILL' 1" : "'FILL' 0" }}>star</span>
-                </button>
-                
-                <div className="mb-4 flex items-center gap-2">
-                  <span className="px-2 py-1 bg-[#e6eeff] dark:bg-[#3730a3] text-[#464652] dark:text-[#cbd5e1] font-semibold text-[10px] rounded uppercase tracking-wide">
-                    Question {qIndex + 1}
-                  </span>
-                </div>
-                
-                <h2 className="text-[18px] leading-7 font-semibold text-[#0d1c2e] dark:text-[#ffffff] mb-6 pr-12 break-words">
-                  {question.text}
-                </h2>
-
-                <div className="space-y-4">
-                  {question.options.map((option, oIndex) => {
-                    const selected = answers[question.id] === oIndex;
-                    return (
-                      <label
-                        key={oIndex}
-                        className="block relative group cursor-pointer"
-                      >
-                        <input
-                          type="radio"
-                          name={`question-${question.id}`}
-                          value={oIndex}
-                          checked={selected}
-                          onChange={() => selectOption(question.id, oIndex)}
-                          disabled={isSubmitting}
-                          className="peer sr-only"
-                        />
-                        <div className={`flex items-center gap-4 p-4 rounded-xl  border transition-all min-h-[64px] ${
-                          selected 
-                            ? 'border-[#15157d] dark:border-[#818cf8] bg-[#e1e0ff] shadow-[0px_0px_0px_4px_rgba(99,102,241,0.2)]'
-                            : 'border-transparent bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl hover:border-[#15157d] dark:border-[#818cf8] hover:bg-[#e6eeff] dark:bg-[#3730a3]'
-                        }`}>
-                          <div className={`flex-shrink-0 w-8 h-8 rounded-full border flex items-center justify-center font-semibold text-[13px] transition-colors relative ${
-                            selected
-                              ? 'border-[#15157d] dark:border-[#818cf8] bg-[#15157d] dark:bg-[#818cf8] text-white'
-                              : 'border-white/20 dark:border-[#334155] text-[#464652] dark:text-[#cbd5e1]'
-                          }`}>
-                            {selected ? (
-                              <span className="material-symbols-outlined text-[16px] absolute" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
-                            ) : (
-                              String.fromCharCode(65 + oIndex)
-                            )}
-                          </div>
-                          <span className={`text-[16px] leading-6 flex-1 break-words ${
-                            selected ? 'text-[#04006d] font-semibold' : 'text-[#0d1c2e] dark:text-[#ffffff] group-hover:text-[#15157d] dark:hover:text-[#818cf8] dark:text-[#818cf8]'
-                          }`}>
-                            {option}
-                          </span>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-
-                {isAnswered && (
-                  <div className="mt-4 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => clearAnswer(question.id)}
-                      disabled={isSubmitting}
-                      className="text-sm font-medium text-[#777683] dark:text-[#94a3b8] hover:text-[#ba1a1a] transition-colors flex items-center gap-1"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">backspace</span>
-                      Clear selection
-                    </button>
-                  </div>
-                )}
-              </article>
-            );
-          })}
-        </div>
-
-        {/* --- Sticky Bottom Action Bar --------------------------------------- */}
-        <nav className="fixed bottom-0 left-0 w-full flex justify-center z-50">
-          <div className="w-full max-w-4xl flex justify-between items-center px-4 py-3 bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl shadow-[0_-4px_20px_rgba(46,49,146,0.05)] border-t border-[#dce9ff]">
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const currentIdx = displayQuestions.findIndex(q => !answers[q.id]);
-                  const targetIdx = currentIdx > 0 ? currentIdx - 1 : 0;
-                  if (displayQuestions[targetIdx]) scrollToQuestion(displayQuestions[targetIdx].id);
-                }}
-                className="flex flex-col items-center justify-center text-[#464652] dark:text-[#cbd5e1] px-4 py-2 hover:bg-[#e6eeff] dark:bg-[#3730a3] transition-colors rounded-lg active:scale-95"
-              >
-                <span className="material-symbols-outlined mb-1 text-[20px]">expand_circle_up</span>
-                <span className="font-semibold text-[11px] uppercase tracking-wide">Prev Unanswered</span>
-              </button>
-            </div>
+      {/* Review Modal / Full Page Overlay */}
+      {showReviewModal && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-neutral-50 lg:bg-neutral-900/40 lg:backdrop-blur-sm dark:bg-neutral-950 dark:lg:bg-black/60 p-0 lg:p-6">
+          <div className="flex flex-col w-full h-full lg:h-auto lg:max-h-[calc(100vh-3rem)] lg:max-w-4xl bg-neutral-50 dark:bg-neutral-950 lg:bg-white lg:dark:bg-neutral-900 lg:rounded-[2.5rem] lg:shadow-2xl lg:border border-neutral-200 dark:border-white/10 overflow-hidden relative">
             
-            <div className="flex items-center gap-4">
-              <div className="hidden sm:block text-sm text-[#464652] dark:text-[#cbd5e1]">
-                <span className="font-semibold text-[#0d1c2e] dark:text-[#ffffff]">{answeredCount}</span> answered
-                {unansweredCount > 0 && (
-                  <>
-                    {' · '}
-                    <span className="font-semibold text-[#ba1a1a]">{unansweredCount}</span> left
-                  </>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={handleOpenReview}
-                disabled={isSubmitting}
-                className="flex items-center justify-center bg-[#15157d] dark:bg-[#818cf8] text-white rounded-full px-6 py-3 font-semibold text-[13px] shadow-[4px_4px_8px_#BABECC,-4px_-4px_8px_#ffffff73] dark:shadow-[4px_4px_8px_#020617,-4px_-4px_8px_#1e293b73] hover:bg-[#0c0092] dark:bg-[#6366f1] hover:shadow-[inset_2px_2px_5px_#BABECC,inset_-2px_-2px_5px_#ffffff73] dark:hover:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed group"
-              >
-                <span className="mr-2">
-                  {isSubmitting && (phase as { auto?: boolean }).auto ? 'Auto-submitting…' : 'Review & Submit'}
-                </span>
-                {!isSubmitting && (
-                  <span className="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">chevron_right</span>
-                )}
-              </button>
-            </div>
-          </div>
-        </nav>
-      </main>
-
-      {/* --- Review-before-submit modal ------------------------------- */}
-      {reviewOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="review-title"
-          className="fixed inset-0 bg-black/40 z-50 flex items-end justify-center motion-safe:animate-in motion-safe:fade-in backdrop-blur-sm"
-        >
-          <div className="w-full max-w-lg bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl rounded-t-3xl shadow-[0px_-4px_20px_rgba(46,49,146,0.15)] flex flex-col max-h-[85vh] motion-safe:animate-in motion-safe:slide-in-from-bottom-full">
-            {/* Drag Handle / Header */}
-            <div className="flex flex-col items-center pt-4 pb-2 border-b border-[#dce9ff] bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl rounded-t-3xl shrink-0 px-6 relative">
-              <button 
-                type="button" 
-                onClick={() => setReviewOpen(false)}
-                className="absolute right-6 top-4 text-[#464652] dark:text-[#cbd5e1] hover:bg-[#e6eeff] dark:bg-[#3730a3] p-2 rounded-full transition-colors"
-              >
-                <span className="material-symbols-outlined text-[20px]">close</span>
-              </button>
-              <div className="w-12 h-1.5 bg-[#c7c5d4] rounded-full mb-4"></div>
-              <div className="flex justify-between items-center w-full">
-                <h2 id="review-title" className="text-[24px] leading-8 font-semibold text-[#0d1c2e] dark:text-[#ffffff] tracking-tight">Review Exam</h2>
-                <div className="flex items-center gap-2 bg-[#2e3192] text-white rounded-full px-4 py-1.5 shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73]">
-                  <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: "'FILL' 1" }}>timer</span>
-                  <span className="font-semibold text-[13px] tabular-nums tracking-wide">{formatTime(remainingSeconds)}</span>
-                </div>
-              </div>
+            <div className="p-4 lg:px-8 lg:py-6 flex justify-between items-center border-b border-neutral-200 dark:border-white/10 bg-white dark:bg-neutral-900 lg:bg-transparent shadow-sm lg:shadow-none shrink-0 z-10 relative">
+               <div>
+                 <h2 className="text-xl lg:text-3xl font-bold text-neutral-900 dark:text-neutral-50 tracking-tight">Review Submission</h2>
+                 <p className="text-neutral-500 dark:text-neutral-400 text-xs lg:text-sm mt-1">Ensure all questions are answered before submitting your exam.</p>
+               </div>
+               <button onClick={() => setShowReviewModal(false)} className="size-10 flex justify-center items-center rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors">
+                 <X className="size-5" />
+               </button>
             </div>
 
-            {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto px-6 py-6">
-              {/* Metrics Row */}
+            <div className="flex-1 overflow-y-auto p-4 lg:p-8 w-full bg-neutral-50 dark:bg-neutral-950 lg:bg-transparent min-h-0">
+              
+              <div className="flex flex-col lg:flex-row gap-6 lg:gap-10">
+                {/* Left Column: Stats & Warning */}
+                <div className="flex-1 flex flex-col justify-between">
+                  {/* Stats Cards */}
               <div className="grid grid-cols-3 gap-3 mb-6">
-                <div className="flex flex-col items-center gap-2 bg-[#eff4ff] dark:bg-[#0f172a] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] border border-white/20 dark:border-[#334155] rounded-xl p-3 shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73]">
-                  <div className="w-8 h-8 rounded-full bg-[#e6f4ea] text-[#137333] flex items-center justify-center">
-                    <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                  </div>
-                  <div className="text-center">
-                    <span className="block font-semibold text-[16px] text-[#0d1c2e] dark:text-[#ffffff]">{answeredCount}</span>
-                    <span className="block text-[10px] text-[#777683] dark:text-[#94a3b8] font-semibold uppercase tracking-wider">Answered</span>
-                  </div>
-                </div>
-                
-                <div className="flex flex-col items-center gap-2 bg-[#eff4ff] dark:bg-[#0f172a] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] border border-[#ffdad6] rounded-xl p-3 shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73]">
-                  <div className="w-8 h-8 rounded-full bg-[#ffdad6] text-[#ba1a1a] flex items-center justify-center">
-                    <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>error</span>
-                  </div>
-                  <div className="text-center">
-                    <span className="block font-semibold text-[16px] text-[#0d1c2e] dark:text-[#ffffff]">{unansweredCount}</span>
-                    <span className="block text-[10px] text-[#ba1a1a] font-semibold uppercase tracking-wider">Unanswered</span>
-                  </div>
-                </div>
-                
-                <div className="flex flex-col items-center gap-2 bg-[#eff4ff] dark:bg-[#0f172a] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] border border-[#fce8b2] rounded-xl p-3 shadow-[2px_2px_5px_#BABECC,-2px_-2px_5px_#ffffff73] dark:shadow-[2px_2px_5px_#020617,-2px_-2px_5px_#1e293b73]">
-                  <div className="w-8 h-8 rounded-full bg-[#fef7e0] text-[#b06000] flex items-center justify-center">
-                    <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>flag</span>
-                  </div>
-                  <div className="text-center">
-                    <span className="block font-semibold text-[16px] text-[#0d1c2e] dark:text-[#ffffff]">{markedCount}</span>
-                    <span className="block text-[10px] text-[#b06000] font-semibold uppercase tracking-wider">Marked</span>
-                  </div>
-                </div>
+                 <div className="bg-white lg:bg-emerald-50 dark:bg-neutral-900 lg:dark:bg-emerald-500/5 rounded-2xl lg:rounded-3xl border border-emerald-200 dark:border-emerald-500/20 p-4 lg:py-6 flex flex-col items-center justify-center text-center shadow-sm lg:shadow-none">
+                    <div className="text-emerald-600 dark:text-emerald-400 text-3xl font-bold tracking-tight">{answeredCount}</div>
+                    <div className="text-emerald-600 dark:text-emerald-400 text-[10px] font-bold uppercase mt-2 tracking-widest">Answered</div>
+                 </div>
+                 <div className="bg-white lg:bg-amber-50 dark:bg-neutral-900 lg:dark:bg-amber-500/5 rounded-2xl lg:rounded-3xl border border-amber-200 dark:border-amber-500/20 p-4 lg:py-6 flex flex-col items-center justify-center text-center shadow-sm lg:shadow-none">
+                    <div className="text-amber-600 dark:text-amber-400 text-3xl font-bold tracking-tight">{markedCount}</div>
+                    <div className="text-amber-600 dark:text-amber-400 text-[10px] font-bold uppercase mt-2 tracking-widest">Marked</div>
+                 </div>
+                 <div className="bg-white lg:bg-red-50 dark:bg-neutral-900 lg:dark:bg-[#ff6467]/5 rounded-2xl lg:rounded-3xl border border-red-200 dark:border-[#ff6467]/20 p-4 lg:py-6 flex flex-col items-center justify-center text-center shadow-sm lg:shadow-none">
+                    <div className="text-red-600 dark:text-[#ff6467] text-3xl font-bold tracking-tight">{questions.length - answeredCount}</div>
+                    <div className="text-red-600 dark:text-[#ff6467] text-[10px] font-bold uppercase mt-2 tracking-widest">Pending</div>
+                 </div>
               </div>
 
-              {/* Attention List Header */}
-              {(unansweredCount > 0 || markedCount > 0) ? (
-                <>
-                  <h3 className="text-[16px] leading-6 font-semibold text-[#464652] dark:text-[#cbd5e1] mb-3">Needs Attention</h3>
-                  <div className="space-y-3 pb-4">
-                    {displayQuestions.map((q, i) => {
-                      const isAnswered = answers[q.id] !== undefined;
-                      const isMarked = markedForReview.has(q.id);
-                      if (isAnswered && !isMarked) return null;
-                      return (
-                        <div key={q.id} className="flex items-center justify-between p-3 bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl border border-white/20 dark:border-[#334155] rounded-lg shadow-[0px_4px_20px_rgba(46,49,146,0.02)] transition-all">
-                          <div className="flex items-center gap-3">
-                            {!isAnswered ? (
-                              <span className="material-symbols-outlined text-[#ba1a1a]" style={{ fontVariationSettings: "'FILL' 1" }}>error</span>
-                            ) : (
-                              <span className="material-symbols-outlined text-[#b06000]" style={{ fontVariationSettings: "'FILL' 1" }}>flag</span>
-                            )}
-                            <div>
-                              <p className="font-semibold text-[13px] text-[#0d1c2e] dark:text-[#ffffff]">Question {i + 1}</p>
-                              <p className={`text-[12px] ${!isAnswered ? 'text-[#ba1a1a]' : 'text-[#b06000]'}`}>
-                                {!isAnswered ? 'Unanswered' : 'Marked for Review'}
-                              </p>
-                            </div>
-                          </div>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setReviewOpen(false);
-                              window.setTimeout(() => scrollToQuestion(q.id), 100);
-                            }}
-                            className="font-semibold text-[13px] text-[#15157d] dark:text-[#818cf8] bg-[#eff4ff] dark:bg-[#0f172a] dark:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] px-4 py-2 rounded-lg hover:bg-[#dce9ff] transition-colors"
-                          >
-                            Jump
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              ) : (
-                <div className="py-8 text-center text-sm text-[#464652] dark:text-[#cbd5e1]">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#e6f4ea] text-[#137333] flex items-center justify-center">
-                    <span className="material-symbols-outlined text-[32px]" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
-                  </div>
-                  <h3 className="text-lg font-semibold text-[#0d1c2e] dark:text-[#ffffff] mb-1">All questions answered!</h3>
-                  <p>You're ready to submit your exam.</p>
+              <div className="rounded-2xl lg:rounded-3xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 p-4 lg:p-6 text-sm text-amber-800 dark:text-amber-200 mb-8 lg:mb-0 flex gap-3 items-center mt-auto">
+                 <AlertTriangle className="size-5 shrink-0 text-amber-500" />
+                 <div className="font-medium leading-relaxed">You are about to submit your exam. Once submitted, you cannot change your answers.</div>
+              </div>
+
+              </div>
+
+              {/* Right Column: Question Grid */}
+              <div className="lg:w-[45%] shrink-0 flex flex-col">
+                <h3 className="text-neutral-900 dark:text-neutral-50 font-semibold mb-4 text-sm tracking-widest uppercase">Question Navigator</h3>
+                <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-6 gap-2 mb-8 lg:mb-0">
+                   {questions.map((q, i) => {
+                     const isAnswered = !!answers[q.id];
+                     const isMarked = markedForReview.has(q.id);
+                     return (
+                       <button
+                         key={q.id}
+                         onClick={() => { setCurrentIndex(i); setShowReviewModal(false); }}
+                         className={`h-12 rounded-xl flex items-center justify-center text-sm font-semibold border transition-transform hover:scale-105 ${isMarked ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-500/30' : isAnswered ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30' : 'bg-white lg:bg-red-50 dark:bg-neutral-900 lg:dark:bg-[#ff6467]/5 text-red-600 dark:text-[#ff6467] border-red-200 dark:border-[#ff6467]/20'}`}
+                       >
+                         {i + 1}
+                       </button>
+                     );
+                   })}
                 </div>
-              )}
+              </div>
+            </div>
             </div>
 
-            {/* Sticky Footer */}
-            <div className="border-t border-[#dce9ff] bg-white/40 dark:bg-[#0f172a]/60 backdrop-blur-xl px-6 py-4 shrink-0 shadow-[0px_-2px_10px_rgba(0,0,0,0.02)] pb-safe">
-              {unansweredCount > 0 && (
-                <p className="text-[#ba1a1a] text-center font-semibold text-[13px] mb-3">
-                  <span className="material-symbols-outlined text-[14px] align-middle mr-1">warning</span>
-                  {unansweredCount} question{unansweredCount > 1 ? 's' : ''} remaining unanswered
-                </p>
-              )}
-              <button 
-                type="button" 
-                onClick={handleConfirmSubmit}
-                className="w-full bg-gradient-to-r from-[#15157d] to-[#4f54b4] hover:from-[#0c0092] hover:to-[#3e4399] text-white font-semibold text-[14px] py-4 rounded-xl shadow-[4px_4px_8px_#BABECC,-4px_-4px_8px_#ffffff73] dark:shadow-[4px_4px_8px_#020617,-4px_-4px_8px_#1e293b73] hover:shadow-[inset_2px_2px_5px_#BABECC,inset_-2px_-2px_5px_#ffffff73] dark:hover:shadow-[inset_2px_2px_5px_#020617,inset_-2px_-2px_5px_#1e293b73] transition-all active:scale-95 flex items-center justify-center gap-2"
-              >
-                Submit
-              </button>
+            <div className="p-4 lg:py-5 lg:px-8 border-t border-neutral-200 dark:border-white/10 bg-white dark:bg-neutral-900 lg:bg-neutral-50 lg:dark:bg-neutral-900/50 shrink-0 flex flex-col sm:flex-row gap-3 w-full justify-end">
+               <button onClick={() => setShowReviewModal(false)} className="py-4 lg:py-3.5 px-8 rounded-2xl font-semibold bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-50 border border-neutral-200 dark:border-white/10 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors">
+                 Return to Exam
+               </button>
+               <button onClick={handleSubmit} disabled={phase === 'submitting'} className="py-4 lg:py-3.5 px-8 rounded-2xl font-semibold bg-neutral-900 dark:bg-neutral-200 text-neutral-50 dark:text-neutral-900 flex justify-center items-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-50">
+                 {phase === 'submitting' ? 'Submitting...' : 'Confirm Submission'} <CheckCircle2 className="size-5" />
+               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Submitting State */}
+      {phase === 'submitting' && (
+        <div className="flex-1 flex flex-col justify-center items-center p-4 gap-4">
+          <div className="size-16 rounded-full bg-neutral-100 dark:bg-neutral-800 flex justify-center items-center animate-pulse">
+            <Clock className="size-8 text-neutral-500 dark:text-neutral-400 animate-spin" />
+          </div>
+          <h2 className="text-xl font-bold text-neutral-900 dark:text-neutral-50 tracking-tight">Submitting your answers…</h2>
+          <p className="text-neutral-500 dark:text-neutral-400 text-sm">Please wait, do not close this page.</p>
+        </div>
+      )}
+
+      {/* Scored / Answer Sheet View */}
+      {(phase === 'scored' || phase === 'answer-sheet') && reviewData && (
+        <div className="flex-1 flex flex-col justify-center w-full max-w-lg mx-auto p-4 lg:p-5">
+
+           {phase === 'scored' ? (
+             <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-2xl p-4 shadow-sm flex flex-col gap-3">
+               {/* Score header row */}
+               <div className="flex items-center gap-4">
+                 <div className="size-16 shrink-0 rounded-full border border-neutral-200 dark:border-white/10 bg-neutral-50 dark:bg-neutral-800/50 flex items-center justify-center relative">
+                   <svg className="absolute inset-0 size-full -rotate-90" viewBox="0 0 120 120">
+                     <circle cx="60" cy="60" r="54" fill="none" stroke="currentColor" strokeWidth="8" className="text-neutral-100 dark:text-neutral-800" />
+                     <circle cx="60" cy="60" r="54" fill="none" stroke="currentColor" strokeWidth="8" className="text-emerald-500" strokeDasharray={2 * Math.PI * 54} strokeDashoffset={(2 * Math.PI * 54) * (1 - scorePercent/100)} strokeLinecap="round" />
+                   </svg>
+                   <div className="text-lg font-bold tracking-tighter text-neutral-900 dark:text-neutral-50">{Math.round(scorePercent)}%</div>
+                 </div>
+                 <div>
+                   <div className="font-semibold text-neutral-500 dark:text-neutral-400 text-[10px] tracking-widest uppercase">Quiz Completed</div>
+                   <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-50 tracking-tight">Your Score</h2>
+                 </div>
+               </div>
+
+               {/* Stats row */}
+               <div className="grid grid-cols-4 gap-1.5">
+                 <div className="bg-neutral-50 dark:bg-neutral-800/50 rounded-lg p-2.5 border border-neutral-100 dark:border-white/5 text-center">
+                   <div className="text-neutral-400 dark:text-neutral-500 text-[9px] font-semibold tracking-widest uppercase">Correct</div>
+                   <div className="text-base font-bold text-neutral-900 dark:text-neutral-50 mt-0.5">{correctCount}</div>
+                 </div>
+                 <div className="bg-neutral-50 dark:bg-neutral-800/50 rounded-lg p-2.5 border border-neutral-100 dark:border-white/5 text-center">
+                   <div className="text-neutral-400 dark:text-neutral-500 text-[9px] font-semibold tracking-widest uppercase">Total</div>
+                   <div className="text-base font-bold text-neutral-900 dark:text-neutral-50 mt-0.5">{reviewData.length}</div>
+                 </div>
+                 <div className="bg-neutral-50 dark:bg-neutral-800/50 rounded-lg p-2.5 border border-neutral-100 dark:border-white/5 text-center">
+                   <div className="text-neutral-400 dark:text-neutral-500 text-[9px] font-semibold tracking-widest uppercase">Time</div>
+                   <div className="text-sm font-bold text-neutral-900 dark:text-neutral-50 font-mono mt-0.5">{formatTime(attemptSession.timeLimitMinutes * 60 - timeLeft)}</div>
+                 </div>
+                 <div className="bg-neutral-50 dark:bg-neutral-800/50 rounded-lg p-2.5 border border-neutral-100 dark:border-white/5 text-center">
+                   <div className="text-neutral-400 dark:text-neutral-500 text-[9px] font-semibold tracking-widest uppercase">Closing</div>
+                   <div className="text-sm font-bold text-red-600 dark:text-[#ff6467] font-mono mt-0.5">{Math.floor(postResultSeconds / 60)}:{String(postResultSeconds % 60).padStart(2, '0')}</div>
+                 </div>
+               </div>
+
+               {/* Buttons */}
+               <div className="flex gap-1.5">
+                 <button onClick={() => setPhase('answer-sheet')} className="flex-1 bg-neutral-900 dark:bg-neutral-200 text-neutral-50 dark:text-neutral-900 font-semibold py-2.5 rounded-xl text-sm">
+                   View Answer Sheet
+                 </button>
+                 <button onClick={handleClose} className="flex-1 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-neutral-50 font-semibold py-2.5 rounded-xl border border-neutral-200 dark:border-white/10 text-sm">
+                   Close Session
+                 </button>
+               </div>
+             </div>
+           ) : (
+             <div className="space-y-4 pb-20">
+               <div className="flex justify-between items-center bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-2xl p-4 shadow-sm sticky top-4 z-20">
+                 <div className="font-semibold text-neutral-900 dark:text-neutral-50">Answer Sheet</div>
+                 <button onClick={() => setPhase('scored')} className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 px-3 py-1.5 rounded-full hover:text-neutral-900 dark:hover:text-neutral-50">Back to Score</button>
+               </div>
+
+               <div className="flex gap-4 justify-center text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-6">
+                 <div className="flex items-center gap-1.5"><div className="size-2 rounded-full bg-emerald-500"></div> Correct</div>
+                 <div className="flex items-center gap-1.5"><div className="size-2 rounded-full bg-red-500"></div> Incorrect</div>
+                 <div className="flex items-center gap-1.5"><div className="size-2 rounded-full bg-neutral-300 dark:bg-neutral-700"></div> Skipped</div>
+               </div>
+
+               {reviewData.map((q, i) => {
+                 const isCorrect = q.studentAnswerIndex !== null && q.studentAnswerIndex === q.correctIndex;
+                 const isAnswered = q.studentAnswerIndex !== null;
+                 
+                 return (
+                   <div key={q.questionId} className={`bg-white dark:bg-neutral-900 rounded-3xl border p-5 sm:p-6 shadow-sm ${isCorrect ? 'border-emerald-200 dark:border-emerald-500/20' : isAnswered ? 'border-red-200 dark:border-[#ff6467]/20' : 'border-neutral-200 dark:border-white/10'}`}>
+                      <div className="flex gap-2 items-start mb-4">
+                        <div className={`shrink-0 text-xs font-bold px-2 py-1 rounded-md ${isCorrect ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' : isAnswered ? 'bg-red-100 dark:bg-[#ff6467]/20 text-red-700 dark:text-[#ff6467]' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'}`}>
+                           Q{i+1}
+                        </div>
+                        <div className="font-medium text-sm sm:text-base text-neutral-900 dark:text-neutral-50">{q.text}</div>
+                      </div>
+
+                      <div className="space-y-2 mt-4">
+                        {q.options.map((text, idx) => {
+                          const isStudentAnswer = q.studentAnswerIndex === idx;
+                          const isCorrectAnswer = q.correctIndex === idx;
+                          let state: 'correct' | 'wrong' | 'neutral' = 'neutral';
+                          if (isCorrectAnswer) state = 'correct';
+                          else if (isStudentAnswer) state = 'wrong';
+
+                          return (
+                            <div key={idx} className={`flex items-start gap-3 p-3 rounded-xl border ${state === 'correct' ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20' : state === 'wrong' ? 'bg-red-50 dark:bg-[#ff6467]/10 border-red-200 dark:border-[#ff6467]/20' : 'bg-neutral-50 dark:bg-neutral-800/30 border-transparent'}`}>
+                               <div className={`shrink-0 size-6 rounded-full border-2 flex justify-center items-center mt-0.5 ${state === 'correct' ? 'border-emerald-500 bg-emerald-500' : state === 'wrong' ? 'border-red-500 bg-red-500' : 'border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800'}`}>
+                                  {state === 'correct' && <Check className="size-3.5 text-white" />}
+                                  {state === 'wrong' && <X className="size-3.5 text-white" />}
+                               </div>
+                               <div className={`flex-1 text-sm ${state === 'correct' ? 'text-emerald-900 dark:text-emerald-100 font-medium' : state === 'wrong' ? 'text-red-900 dark:text-red-100 font-medium' : 'text-neutral-600 dark:text-neutral-300'}`}>
+                                 {text}
+                               </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                   </div>
+                 );
+               })}
+             </div>
+           )}
+        </div>
+      )}
+
+      {/* Scored fallback when reviewData is still loading or null */}
+      {(phase === 'scored' || phase === 'answer-sheet') && !reviewData && (
+        <div className="flex-1 flex flex-col justify-center items-center p-4 gap-4">
+          <div className="size-24 rounded-full border border-neutral-200 dark:border-white/10 bg-white dark:bg-neutral-900 shadow-sm flex items-center justify-center">
+            <CheckCircle2 className="size-12 text-emerald-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-neutral-900 dark:text-neutral-50 tracking-tight">Quiz Submitted!</h2>
+          <p className="text-neutral-500 dark:text-neutral-400 text-sm">Your answers have been recorded successfully.</p>
+          <div className="flex gap-3 mt-4">
+            <button onClick={handleClose} className="px-6 py-3 rounded-2xl font-semibold bg-neutral-900 dark:bg-neutral-200 text-neutral-50 dark:text-neutral-900 hover:opacity-90 transition-opacity">
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Basic Error / Already Attempted States - Removed since they are handled earlier */}
     </div>
   );
 }

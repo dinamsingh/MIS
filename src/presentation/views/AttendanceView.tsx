@@ -20,6 +20,7 @@ import {
   Checkbox,
   Badge,
   SkeletonLoader,
+  Dialog,
   Popover,
 } from '@presentation/components/ui';
 
@@ -102,6 +103,8 @@ export interface AttendanceViewProps {
   readonly loadRoster: LoadRoster;
   readonly attendance: AttendancePersistence;
   readonly initialDate?: string;
+  readonly isPopup?: boolean;
+  readonly onSaveSuccess?: () => void;
 }
 
 interface StatusSummary {
@@ -479,7 +482,7 @@ const AttendanceTableRow = memo(function AttendanceTableRow({
 
 
 export default function AttendanceView(props: AttendanceViewProps) {
-  const { sections, subjects, timeSlots, loadRoster, attendance, initialDate } = props;
+  const { sections, subjects, timeSlots, loadRoster, attendance, initialDate, isPopup } = props;
   const maxAttendanceDate = useMemo(() => todayIso(), []);
   const initialAttendanceDate = initialDate && initialDate <= maxAttendanceDate ? initialDate : maxAttendanceDate;
 
@@ -1057,6 +1060,9 @@ export default function AttendanceView(props: AttendanceViewProps) {
       setStatusById(savedStatusMapFromMarks(nextMarks));
       setPendingSaveMarks(null);
       setSavedMessage(`Attendance saved for ${formatDate(periodKey.date)}`);
+      if (props.onSaveSuccess) {
+        props.onSaveSuccess();
+      }
     } catch {
       setLoadError(true);
     } finally {
@@ -1141,28 +1147,27 @@ export default function AttendanceView(props: AttendanceViewProps) {
     setDirty(true);
   }
 
-  const headerPortal = headerContainer ? createPortal(
-    <div className="flex flex-wrap items-center gap-2">
+  const stickyActionBar = (
+    <div className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-between gap-3 border-t border-border bg-surface/95 px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] backdrop-blur-xl shadow-[0_-4px_12px_rgba(0,0,0,0.05)] sm:bottom-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:rounded-full sm:border sm:px-6 sm:py-3 sm:pb-3 sm:shadow-2xl sm:w-auto sm:min-w-[400px]">
+      <span className="hidden sm:inline-block text-sm font-medium text-text-muted mr-auto">
+        {pendingSaveMarks ? `${countMarks(pendingSaveMarks)} changes` : 'No changes'}
+      </span>
       <Button 
         variant="secondary" 
         size="sm" 
         disabled={saveDisabled} 
         onClick={markAllPresent}
-        className="font-medium bg-surface hover:bg-surface-muted text-text-muted border-border"
+        className="font-medium bg-surface text-text-muted border-border flex-1 sm:flex-none sm:rounded-full"
       >
-        <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-        </svg>
         Mark All Present
       </Button>
-      {renderSaveButton('bg-[#2c2822] hover:bg-[#37322B] text-white')}
-    </div>,
-    headerContainer
-  ) : null;
+      {renderSaveButton('bg-[#2c2822] hover:bg-[#37322B] text-white flex-1 sm:flex-none sm:rounded-full px-6')}
+    </div>
+  );
 
   return (
-    <div className="flex flex-col gap-6 pb-24">
-      {headerPortal}
+    <div className="flex flex-col gap-6 pb-24 sm:pb-24">
+      {stickyActionBar}
       {loadError && (
         <Alert tone="danger" title="Unable to load attendance">
           {messages.error.generic}
@@ -1189,78 +1194,51 @@ export default function AttendanceView(props: AttendanceViewProps) {
       )}
 
       {/* Top Summary Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-surface-muted/50 p-4 sm:p-5 rounded-2xl border border-border mt-2">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-surface p-2 sm:p-2.5 rounded-xl border border-border shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 shadow-sm">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-1 sm:mt-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 bg-surface p-1.5 rounded-xl border border-border shadow-sm text-xs">
+          <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
             Present: <strong className="ml-0.5">{summary.present}</strong>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 text-rose-700 dark:text-rose-400 shadow-sm">
-            <span className="h-2 w-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]"></span>
+          <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 text-rose-700 dark:text-rose-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]"></span>
             Absent: <strong className="ml-0.5">{summary.absent}</strong>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 text-amber-700 dark:text-amber-400 shadow-sm">
-            <span className="h-2 w-2 rounded-full bg-amber-500"></span>
+          <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 text-amber-700 dark:text-amber-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
             Leave: <strong className="ml-0.5">{summary.leave}</strong>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-muted border border-border text-text-muted">
+          <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-muted border border-border text-text-muted">
             Total: <strong className="ml-0.5">{roster.length}</strong>
           </div>
-        </div>
-        
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {roster.length > 0 && (
-            <div className="inline-flex items-center rounded-full border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-700 dark:text-rose-400">
-              <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-rose-500" aria-hidden="true" />
-              Students below 75%: {roster.filter(s => overallPercentById[s.id] !== undefined && overallPercentById[s.id]! < 75).length}
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 text-rose-700 dark:text-rose-400">
+              Low Attd: <strong className="ml-0.5">{roster.filter(s => overallPercentById[s.id] !== undefined && overallPercentById[s.id]! < 75).length}</strong>
             </div>
           )}
+        </div>
+        
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" className="h-7 text-xs font-semibold text-text px-3" onClick={() => setQuickMarkOpen(true)}>
+            Quick Mark
+          </Button>
 
-          <Popover
+          <Dialog
             open={quickMarkOpen}
             onOpenChange={setQuickMarkOpen}
-            trigger={
-              <Button variant="outline" size="sm" className="font-semibold text-text">
-                Quick Mark
-              </Button>
-            }
-            widthClass="w-80 sm:w-96"
-          >
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-emerald-950 dark:text-emerald-400">Quick Mark</h3>
-                  <p className="text-[10px] font-medium text-emerald-800/75 dark:text-emerald-400/75">
-                    {quickListMode === 'present' ? 'Present roll entry' : 'Absent roll entry'}
-                  </p>
-                </div>
+            maxWidth="sm"
+            title={
+              <div className="flex items-center gap-3">
+                <span>Quick Mark</span>
                 <Badge tone={isQuickCorrectionMode ? 'info' : 'success'} size="sm">
                   {isQuickCorrectionMode ? 'Correction' : 'Fresh Save'}
                 </Badge>
               </div>
-              <div className="flex rounded-button border border-emerald-200 dark:border-emerald-500/20 bg-white dark:bg-[#1c1c1e] p-1 text-xs font-bold">
-                <button
-                  type="button"
-                  className={['flex-1 rounded-[6px] px-2 py-1 transition-colors', quickListMode === 'present' ? 'bg-emerald-700 text-white' : 'text-emerald-800 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10'].join(' ')}
-                  onClick={() => setQuickListMode('present')}
-                >
-                  Present
-                </button>
-                <button
-                  type="button"
-                  className={['flex-1 rounded-[6px] px-2 py-1 transition-colors', quickListMode === 'absent' ? 'bg-red-700 text-white' : 'text-emerald-800 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10'].join(' ')}
-                  onClick={() => setQuickListMode('absent')}
-                >
-                  Absent
-                </button>
-              </div>
-              <input
-                value={presentInput}
-                onChange={(event) => setPresentInput(event.target.value)}
-                placeholder="e.g. 001, 004, 067"
-                className="h-9 rounded-button border border-border bg-background px-3 text-sm font-medium text-text placeholder:text-muted focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              />
-              <div className="flex items-center gap-2">
+            }
+            description={quickListMode === 'present' ? 'Present roll entry' : 'Absent roll entry'}
+            footer={
+              <div className="flex w-full items-center justify-between gap-2">
+                <Button type="button" size="sm" variant="secondary" disabled={saving} onClick={clearQuick}>Clear</Button>
                 <Button
                   type="button"
                   size="sm"
@@ -1270,10 +1248,34 @@ export default function AttendanceView(props: AttendanceViewProps) {
                 >
                   Mark {quickListMode === 'present' ? 'Present' : 'Absent'}
                 </Button>
-                <Button type="button" size="sm" variant="secondary" disabled={saving} onClick={clearQuick}>Clear</Button>
               </div>
+            }
+          >
+            <div className="flex flex-col gap-4">
+              <div className="flex rounded-button border border-emerald-200 dark:border-emerald-500/20 bg-white dark:bg-[#1c1c1e] p-1 text-xs font-bold">
+                <button
+                  type="button"
+                  className={['flex-1 rounded-[6px] px-2 py-1.5 transition-colors', quickListMode === 'present' ? 'bg-emerald-700 text-white' : 'text-emerald-800 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10'].join(' ')}
+                  onClick={() => setQuickListMode('present')}
+                >
+                  Present
+                </button>
+                <button
+                  type="button"
+                  className={['flex-1 rounded-[6px] px-2 py-1.5 transition-colors', quickListMode === 'absent' ? 'bg-red-700 text-white' : 'text-emerald-800 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10'].join(' ')}
+                  onClick={() => setQuickListMode('absent')}
+                >
+                  Absent
+                </button>
+              </div>
+              <input
+                value={presentInput}
+                onChange={(event) => setPresentInput(event.target.value)}
+                placeholder="e.g. 001, 004, 067"
+                className="h-10 rounded-button border border-border bg-background px-3 text-sm font-medium text-text placeholder:text-muted focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
               {quickResult && (
-                <div className="rounded-control border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2 text-[10px]">
+                <div className="rounded-control border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2 text-xs">
                   <span className="font-semibold text-emerald-700 dark:text-emerald-400">
                     {quickResult.matchedCount} updated
                   </span>
@@ -1281,11 +1283,11 @@ export default function AttendanceView(props: AttendanceViewProps) {
                 </div>
               )}
             </div>
-          </Popover>
+          </Dialog>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 px-0 sm:px-1">
+      <div className="flex flex-col gap-6 px-0 sm:px-1">
         
         {/* Left Column: Table container */}
         <div className="flex flex-col min-w-0 border-y sm:border-y-0 sm:border-t border-border bg-[#ece7db] dark:bg-transparent shadow-sm sm:rounded-card -mx-4 sm:mx-0">
@@ -1341,134 +1343,7 @@ export default function AttendanceView(props: AttendanceViewProps) {
       </div>
       {/* End Left Column */}
 
-      {/* Right Column: Quick Stats & Focus */}
-      <div>
-        <div className="flex flex-col gap-6 sticky top-24">
-          {/* Quick Stats Widget */}
-          <Card className="flex flex-col p-4 shadow-sm" padded={false}>
-          <h3 className="text-sm font-bold text-text mb-4">Quick Stats (Last 7 Days)</h3>
-          {trendLoading ? (
-            <div className="flex justify-center py-6"><SkeletonLoader variant="block" className="h-16 w-full" /></div>
-          ) : trendData.length === 0 ? (
-            <div className="flex items-center justify-center py-8 text-xs text-muted font-medium bg-surface-muted rounded-lg border border-dashed border-border">
-              No trend data available.
-            </div>
-          ) : (
-            <div className="flex items-end justify-between h-24 gap-1.5 mt-2">
-              {trendData.map((day, idx) => {
-                const dateObj = new Date(day.date);
-                const isSelected = day.date === date;
-                const percent = day.percent;
-                // Height between 10% and 100%
-                const height = Math.max(10, percent);
-                return (
-                  <div key={day.date} className="flex flex-col items-center flex-1 gap-2 relative group">
-                    {/* Tooltip */}
-                    <div className="absolute -top-8 bg-surface-inverted text-surface rounded px-2 py-1 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
-                      {percent}%
-                    </div>
-                    {/* Bar */}
-                    <div className="w-full bg-surface-muted rounded-sm h-full flex flex-col justify-end overflow-hidden relative">
-                      <motion.div 
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: `${height}%`, opacity: 1 }}
-                        transition={{ type: 'spring', stiffness: 300, damping: 25, delay: idx * 0.05 }}
-                        className={`w-full rounded-sm transition-colors duration-500 ${isSelected ? 'bg-accent shadow-[0_0_10px_rgba(0,0,0,0.1)]' : percent < 75 ? 'bg-rose-400' : 'bg-emerald-400 group-hover:bg-emerald-500'}`}
-                      />
-                    </div>
-                    <span className={`text-[10px] font-bold ${isSelected ? 'text-accent' : 'text-muted'}`}>
-                      {['S','M','T','W','T','F','S'][dateObj.getDay()]}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <div className="mt-4 pt-4 border-t border-border grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-[10px] font-bold uppercase text-muted tracking-wider mb-1">Class Avg</p>
-              <p className="text-lg font-bold text-text">
-                {trendData.length > 0 
-                  ? Math.round(trendData.reduce((acc, d) => acc + d.percent, 0) / trendData.filter(d => d.percent > 0).length || 1) + '%' 
-                  : '--'}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase text-muted tracking-wider mb-1">Low Attd.</p>
-              <p className="text-lg font-bold text-rose-600">
-                {roster.filter(s => overallPercentById[s.id] !== undefined && overallPercentById[s.id]! < 75).length}
-              </p>
-            </div>
-          </div>
-        </Card>
 
-        {/* Student Focus Widget */}
-        <Card className="flex flex-col p-4 shadow-sm" padded={false}>
-          <h3 className="text-sm font-bold text-text mb-4 flex items-center justify-between">
-            Student Focus
-            {focusedStudentId && (
-               <button onClick={() => setFocusedStudentId(null)} className="text-[10px] font-bold text-muted hover:text-text">Clear</button>
-            )}
-          </h3>
-          {!focusedStudentId ? (
-            <div className="flex flex-col items-center justify-center py-10 px-4 text-center border-2 border-dashed border-border rounded-xl bg-surface-muted/50">
-              <svg width="24" height="24" viewBox="0 0 15 15" fill="none" className="text-muted/50 mb-2"><path d="M7.5 0.875C5.49797 0.875 3.875 2.49797 3.875 4.5C3.875 6.15288 4.98124 7.54738 6.49373 7.98351C5.2997 8.12901 4.27557 8.55134 3.50468 9.32223C2.52987 10.297 2.04233 11.7107 2.05103 13.5654C2.05141 13.6453 2.08339 13.7218 2.13992 13.7783C2.19645 13.8349 2.27299 13.8668 2.35294 13.8668C2.43288 13.8668 2.50943 13.8349 2.56596 13.7783C2.62248 13.7218 2.65446 13.6453 2.65485 13.5654C2.64627 11.7456 3.09033 10.4398 3.93126 9.5989C4.60677 8.92338 5.61864 8.53982 7.03906 8.53982C7.23439 8.53982 7.42971 8.53982 7.62503 8.53982C9.04546 8.53982 10.0573 8.92338 10.7328 9.5989C11.5738 10.4398 12.0178 11.7456 12.0092 13.5654C12.0096 13.6453 12.0416 13.7218 12.0981 13.7783C12.1547 13.8349 12.2312 13.8668 12.3111 13.8668C12.3911 13.8668 12.4676 13.8349 12.5242 13.7783C12.5807 13.7218 12.6127 13.6453 12.6131 13.5654C12.6218 11.7107 12.1342 10.297 11.1594 9.32223C10.3885 8.55134 9.3644 8.12901 8.17037 7.98351C9.68285 7.54738 10.7891 6.15288 10.7891 4.5C10.7891 2.49797 9.16613 0.875 7.1641 0.875H7.5ZM4.475 4.5C4.475 2.82939 5.82939 1.475 7.5 1.475C9.17061 1.475 10.525 2.82939 10.525 4.5C10.525 6.17061 9.17061 7.525 7.5 7.525C5.82939 7.525 4.475 6.17061 4.475 4.5Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path></svg>
-              <p className="text-xs text-muted font-medium">Select a student row to see details, past 30 days, and parent info.</p>
-            </div>
-          ) : (
-            (() => {
-              const student = roster.find(s => s.id === focusedStudentId);
-              if (!student) return null;
-              const percent = overallPercentById[student.id];
-              return (
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                  className="flex flex-col gap-4"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 rounded-full bg-gradient-to-br from-accent/20 to-accent/5 flex items-center justify-center font-bold text-accent text-lg shadow-sm border border-accent/10">
-                      {student.name.charAt(0)}
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-text text-base leading-tight mb-0.5">{student.name}</h4>
-                      <p className="text-xs font-semibold text-muted bg-surface-muted px-2 py-0.5 rounded-md inline-block">{student.enrollmentNumber || student.id.slice(0,6)}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-surface-muted rounded-lg p-3 border border-border">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-xs font-semibold text-muted">Overall Attendance</span>
-                      <span className={`text-sm font-bold ${typeof percent === "number" && percent < 75 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                        {typeof percent === "number" ? `${percent}%` : '--'}
-                      </span>
-                    </div>
-                    {typeof percent === "number" && (
-                      <div className="h-1.5 w-full bg-border rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full rounded-full ${percent < 75 ? 'bg-rose-500' : 'bg-emerald-500'}`} 
-                          style={{ width: `${percent}%` }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="flex flex-col gap-2">
-                    <Button variant="outline" size="sm" className="w-full text-xs font-semibold justify-center">
-                      View Full Report
-                    </Button>
-                    <Button variant="outline" size="sm" className="w-full text-xs font-semibold justify-center text-sky-700 border-sky-200 bg-sky-50 hover:bg-sky-100">
-                      Send Notice to Parents
-                    </Button>
-                  </div>
-                </motion.div>
-              );
-            })()
-          )}
-        </Card>
-        </div>
-      </div>
       </div>
 
       {pendingPeriodChange && (

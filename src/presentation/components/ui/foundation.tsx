@@ -114,7 +114,7 @@ export function Card({ as: Component = 'section', interactive = false, padded = 
   return (
     <Component
       className={cx(
-        'motion-border rounded-card border border-border bg-surface shadow-soft transition-[border-color,box-shadow,transform] duration-200 ease-standard',
+        'rounded-card border border-border bg-surface shadow-soft transition-[border-color,box-shadow,transform] duration-200 ease-standard',
         padded && 'p-5',
         interactive && 'motion-card hover:border-ring motion-reduce:hover:translate-y-0',
         className,

@@ -16,6 +16,7 @@
     "@reticlehq/react": "^2.2.0",
     "@supabase/supabase-js": "^2.108.2",
     "framer-motion": "^12.42.2",
+    "lucide-react": "^1.31.0",
     "pdfjs-dist": "^4.6.82",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

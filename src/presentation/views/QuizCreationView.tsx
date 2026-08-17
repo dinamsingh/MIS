@@ -28,7 +28,7 @@ import type {
 } from '@data/access/quizAccess';
 import { messages } from '@domain/shared/messages';
 import { formatSectionLabel } from '@presentation/format/sectionLabel';
-import { buildQuizWhatsAppLink } from '@presentation/format/whatsappShare';
+
 import {
   SectionHeader,
   Card,
@@ -36,8 +36,8 @@ import {
   Badge,
   Alert,
   SkeletonLoader,
-  Dialog,
 } from '@presentation/components/ui';
+import { Dialog } from '@presentation/components/ui/overlays';
 
 export const DEFAULT_TIME_LIMIT_MINUTES = 15;
 export const DEFAULT_QUESTION_MARKS = 1;
@@ -158,11 +158,11 @@ function formatWindow(from: string | null, until: string | null): string {
 
 function validateDraft(
   unitId: string,
-  timeLimitMinutes: number,
+  timeLimit: number,
   questions: QuestionDraft[],
 ): { ok: true; questions: QuestionInput[] } | { ok: false; error: string } {
   if (unitId === '') return { ok: false, error: 'Select the unit this quiz is linked to.' };
-  if (!Number.isFinite(timeLimitMinutes) || timeLimitMinutes <= 0) {
+  if (!Number.isFinite(timeLimit) || timeLimit <= 0) {
     return { ok: false, error: 'Enter a time limit greater than zero minutes.' };
   }
   if (questions.length === 0) return { ok: false, error: 'Add at least one question.' };
@@ -188,6 +188,15 @@ function validateDraft(
   }
   return { ok: true, questions: cleaned };
 }
+
+type ConfirmDialogState = {
+  open: boolean;
+  title: string;
+  description: string;
+  onConfirm: () => void;
+  confirmLabel?: string;
+  isDestructive?: boolean;
+};
 
 export default function QuizCreationView({
   quizAccess,
@@ -234,6 +243,10 @@ export default function QuizCreationView({
   const [resultsSortOrder, setResultsSortOrder] = useState<'score' | 'name'>('score');
   const [loadingResults, setLoadingResults] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [copiedQuizId, setCopiedQuizId] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({ 
+    open: false, title: '', description: '', onConfirm: () => {} 
+  });
 
   const unitIds = useMemo(() => new Set(units.map((u) => u.id)), [units]);
   const selectedUnit = units.find((unit) => unit.id === unitId) ?? null;
@@ -477,12 +490,15 @@ export default function QuizCreationView({
     }
   }
 
-  async function handleCopyLink(shareToken: string) {
+  async function handleCopyLink(quiz: SavedQuizSummary) {
     try {
-      await navigator.clipboard?.writeText(buildShareLink(shareToken));
-      setNotice('Share link copied ✓');
+      await navigator.clipboard?.writeText(buildShareLink(quiz.shareToken));
+      setCopiedQuizId(quiz.id);
+      setTimeout(() => {
+        setCopiedQuizId((prev) => (prev === quiz.id ? null : prev));
+      }, 2000);
     } catch {
-      setNotice(null);
+      // fallback or handle error silently
     }
   }
 
@@ -519,38 +535,48 @@ export default function QuizCreationView({
   }
 
   async function handleDeleteQuiz(quiz: SavedQuizSummary) {
-    const ok = window.confirm(
-      `Delete "${quiz.unitName}"?\n\nThe quiz, its questions, and all submissions will be deleted. This cannot be undone.`,
-    );
-    if (!ok) return;
-    setBusyKey(`del-${quiz.id}`);
-    try {
-      await quizAccess.deleteQuiz(quiz.id);
-      if (resultsQuiz?.id === quiz.id) setResultsQuiz(null);
-      await loadQuizzes();
-    } catch {
-      setQuizzesError(messages.error.generic);
-    } finally {
-      setBusyKey(null);
-    }
+    setConfirmDialog({
+      open: true,
+      title: `Delete "${quiz.unitName}"?`,
+      description: 'The quiz, its questions, and all submissions will be deleted. This cannot be undone.',
+      confirmLabel: 'Delete Quiz',
+      isDestructive: true,
+      onConfirm: async () => {
+        setBusyKey(`del-${quiz.id}`);
+        try {
+          await quizAccess.deleteQuiz(quiz.id);
+          if (resultsQuiz?.id === quiz.id) setResultsQuiz(null);
+          await loadQuizzes();
+        } catch {
+          setQuizzesError(messages.error.generic);
+        } finally {
+          setBusyKey(null);
+        }
+      }
+    });
   }
 
   async function handleRemoveAttempt(quizId: string, row: QuizResultRow) {
-    const ok = window.confirm(
-      `Remove ${row.studentName}'s attempt?\n\nOnly their attempt for this quiz will be removed, so they can retake it. Other subjects and quizzes remain unaffected.`,
-    );
-    if (!ok) return;
-    setBusyKey(`att-${quizId}-${row.studentId}`);
-    try {
-      await quizAccess.resetAttempt(quizId, row.studentId);
-      const rows = await quizAccess.listQuizResults(quizId);
-      setResultsByQuiz((prev) => ({ ...prev, [quizId]: rows }));
-      await loadQuizzes();
-    } catch {
-      setQuizzesError(messages.error.generic);
-    } finally {
-      setBusyKey(null);
-    }
+    setConfirmDialog({
+      open: true,
+      title: `Remove ${row.studentName}'s attempt?`,
+      description: 'Only their attempt for this quiz will be removed, so they can retake it. Other subjects and quizzes remain unaffected.',
+      confirmLabel: 'Remove Attempt',
+      isDestructive: true,
+      onConfirm: async () => {
+        setBusyKey(`att-${quizId}-${row.studentId}`);
+        try {
+          await quizAccess.resetAttempt(quizId, row.studentId);
+          const rows = await quizAccess.listQuizResults(quizId);
+          setResultsByQuiz((prev) => ({ ...prev, [quizId]: rows }));
+          await loadQuizzes();
+        } catch {
+          setQuizzesError(messages.error.generic);
+        } finally {
+          setBusyKey(null);
+        }
+      }
+    });
   }
 
   const hasSubject = (subjectId ?? '') !== '' && units.length > 0;
@@ -615,29 +641,34 @@ export default function QuizCreationView({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="block sm:table w-full sm:min-w-[720px] text-left text-sm">
+            <table className="block sm:table w-full text-left text-sm">
               <thead className="hidden sm:table-header-group">
                 <tr className="border-b border-border bg-surface-muted/40">
-                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Quiz</th>
-                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Section</th>
-                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Status</th>
-                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Questions</th>
-                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Responses</th>
-                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted">Avg</th>
-                  <th className="px-4 py-2.5 text-right text-[11px] font-bold uppercase text-muted">Actions</th>
+                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted whitespace-nowrap">Quiz</th>
+                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted whitespace-nowrap">Section</th>
+                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted whitespace-nowrap">Stats</th>
+                  <th className="px-4 py-2.5 text-right text-[11px] font-bold uppercase text-muted whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
-              <tbody className="block sm:table-row-group sm:divide-y divide-border p-3 sm:p-0">
+              <tbody className="block sm:table-row-group p-3 sm:p-0">
                 {savedQuizzes.map((quiz) => {
                   return (
-                    <tr key={quiz.id} className="relative block sm:table-row align-top border border-border sm:border-none rounded-xl sm:rounded-none mb-3 sm:mb-0 bg-white dark:bg-transparent hover:bg-surface-muted/30 transition-colors">
-                      <td className="block sm:table-cell px-4 py-3 border-b border-border/50 sm:border-none">
-                        <p className="font-semibold text-text pr-16 sm:pr-0 truncate">{quiz.unitName}</p>
+                    <tr key={quiz.id} className="relative block sm:table-row align-top border-b border-border last:border-0 rounded-xl sm:rounded-none mb-3 sm:mb-0 bg-white dark:bg-transparent hover:bg-surface-muted/30 transition-colors">
+                      <td className="block sm:table-cell px-4 py-3 sm:py-4 border-b border-border/50 sm:border-none relative">
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-text pr-16 sm:pr-0 whitespace-normal line-clamp-2 max-w-[200px] lg:max-w-xs">{quiz.unitName}</p>
+                          <Badge tone={STATUS_TONE[quiz.status]} size="sm" className="hidden sm:inline-flex shrink-0">
+                            {STATUS_LABEL[quiz.status]}
+                          </Badge>
+                        </div>
                         <p className="mt-0.5 text-xs text-muted">
                           {formatWindow(quiz.activeFrom, quiz.activeUntil)} · {quiz.timeLimitMinutes} min
                         </p>
+                        <Badge tone={STATUS_TONE[quiz.status]} size="sm" className="absolute top-3 right-3 sm:hidden shrink-0">
+                          {STATUS_LABEL[quiz.status]}
+                        </Badge>
                       </td>
-                      <td className="block sm:table-cell px-4 py-2 sm:py-3 text-xs text-muted">
+                      <td className="block sm:table-cell px-4 py-2 sm:py-4 text-xs text-muted">
                         <div className="flex justify-between sm:block items-center">
                           <span className="sm:hidden font-semibold text-text">Section</span>
                           {quiz.sections.length === 0 ? (
@@ -647,49 +678,30 @@ export default function QuizCreationView({
                           )}
                         </div>
                       </td>
-                      <td className="absolute top-3 right-3 sm:static sm:table-cell sm:px-4 sm:py-3">
-                        <Badge tone={STATUS_TONE[quiz.status]} size="sm">
-                          {STATUS_LABEL[quiz.status]}
-                        </Badge>
-                      </td>
-                      <td className="block sm:table-cell px-4 py-2 sm:py-3 text-text">
+                      <td className="block sm:table-cell px-4 py-2 sm:py-4 text-xs text-muted">
                         <div className="flex justify-between sm:block items-center">
-                          <span className="sm:hidden text-xs font-semibold text-muted">Questions</span>
-                          {quiz.questionCount}
+                          <span className="sm:hidden font-semibold text-text">Stats</span>
+                          <div className="flex flex-col sm:flex-row gap-1 sm:gap-4 text-left text-muted">
+                            <span className="whitespace-nowrap"><strong className="text-text font-semibold">{quiz.questionCount}</strong> Qs</span>
+                            <span className="whitespace-nowrap"><strong className="text-text font-semibold">{quiz.responseCount}</strong> Resp</span>
+                          </div>
                         </div>
                       </td>
-                      <td className="block sm:table-cell px-4 py-2 sm:py-3 text-text">
-                        <div className="flex justify-between sm:block items-center">
-                          <span className="sm:hidden text-xs font-semibold text-muted">Responses</span>
-                          {quiz.responseCount}
-                        </div>
-                      </td>
-                      <td className="block sm:table-cell px-4 py-2 sm:py-3 text-text">
-                        <div className="flex justify-between sm:block items-center">
-                          <span className="sm:hidden text-xs font-semibold text-muted">Average</span>
-                          {quiz.averageScore !== null
-                            ? `${quiz.averageScore.toFixed(1)} / ${quiz.totalMarks}`
-                            : '—'}
-                        </div>
-                      </td>
-                      <td className="block sm:table-cell px-4 py-3 border-t border-border/20 sm:border-none">
-                        <div className="flex items-center sm:justify-end flex-wrap gap-2">
+                      <td className="block sm:table-cell px-2 sm:px-3 py-3 sm:py-4 border-t border-border/20 sm:border-none sm:whitespace-nowrap">
+                        <div className="flex items-center sm:justify-end flex-nowrap gap-1.5">
                           {quiz.responseCount === 0 && (
                             <Button size="sm" variant="ghost" loading={busyKey === `edit-${quiz.id}`} onClick={() => void handleEditQuiz(quiz)}>
                               Edit
                             </Button>
                           )}
-                          <Button size="sm" variant="ghost" onClick={() => void handleCopyLink(quiz.shareToken)}>
-                            Copy link
-                          </Button>
-                          <a
-                            href={buildQuizWhatsAppLink(quiz, buildShareLink(quiz.shareToken))}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex h-8 items-center justify-center rounded-button px-3 text-xs font-medium bg-[#25D366] text-white hover:bg-[#128C7E] transition-colors"
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            onClick={() => void handleCopyLink(quiz)}
+                            className={copiedQuizId === quiz.id ? "text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400" : ""}
                           >
-                            Share on WhatsApp
-                          </a>
+                            {copiedQuizId === quiz.id ? 'Copied ✓' : 'Copy'}
+                          </Button>
                           <Button size="sm" variant="outline" onClick={() => void openResultsModal(quiz)}>
                             Results
                           </Button>
@@ -908,9 +920,22 @@ export default function QuizCreationView({
               <p role="alert" className="text-sm font-medium text-status-red">{formError}</p>
             )}
 
-            <Button type="submit" variant="primary" loading={isSaving} className="self-start">
-              {editingQuizId ? 'Save changes' : 'Publish quiz'}
-            </Button>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingQuizId(null);
+                  setNotice(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" loading={isSaving}>
+                {editingQuizId ? 'Save changes' : 'Publish quiz'}
+              </Button>
+            </div>
           </form>
         </Card>
       )}
@@ -1225,6 +1250,31 @@ export default function QuizCreationView({
             )}
           </div>
         )}
+      </Dialog>
+      {/* Confirmation Dialog */}
+      <Dialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+        title={confirmDialog.title}
+        maxWidth="sm"
+      >
+        <div className="py-4 px-1 text-sm text-muted">
+          {confirmDialog.description}
+        </div>
+        <div className="flex justify-end gap-3 mt-4">
+          <Button variant="ghost" onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}>
+            Cancel
+          </Button>
+          <Button 
+            variant={confirmDialog.isDestructive ? 'danger' : 'primary'} 
+            onClick={() => {
+              setConfirmDialog(prev => ({ ...prev, open: false }));
+              confirmDialog.onConfirm();
+            }}
+          >
+            {confirmDialog.confirmLabel || 'Confirm'}
+          </Button>
+        </div>
       </Dialog>
     </div>
   );
