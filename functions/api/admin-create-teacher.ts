@@ -32,32 +32,91 @@ interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
   SUPABASE_ANON_KEY: string;
+  /**
+   * Optional comma-separated extra origins allowed for CORS (e.g. a custom
+   * domain once the production domain is finalised). Set it in the
+   * Cloudflare Pages dashboard → Settings → Environment variables.
+   */
+  ALLOWED_ORIGINS?: string;
 }
 
-function json(body: unknown, status = 200): Response {
+/**
+ * Resolve the CORS allow-origin for a request. Security fix (audit finding:
+ * CORS wildcard): the previous `*` let ANY website call this endpoint with a
+ * victim's browser-attached credentials. Now only trusted origins are
+ * allowed; everything else gets no CORS header, so the browser blocks it.
+ *
+ * Trusted origins:
+ *  - local dev servers (localhost / 127.0.0.1)
+ *  - any https://*.pages.dev host — the production/custom domain is not
+ *    finalised yet, so all Cloudflare Pages deployments (incl. preview
+ *    subdomains) are allowed for now. NOTE: tighten this to the final
+ *    domain once decided (via the ALLOWED_ORIGINS env var below).
+ *  - anything listed in ALLOWED_ORIGINS (comma-separated) — add the final
+ *    custom domain there in the Cloudflare Pages dashboard, no code change.
+ * All endpoints remain auth-gated (Bearer token + is_admin RPC) regardless.
+ */
+function allowedOrigin(request: Request, env: Env): string | null {
+  const origin = request.headers.get('origin');
+  if (!origin) {
+    return null; // Non-browser / same-origin request — no CORS header needed.
+  }
+  if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+    return origin; // Local development.
+  }
+  const extras = (env.ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  if (extras.includes(origin)) {
+    return origin; // Final custom domain (once configured).
+  }
+  try {
+    const url = new URL(origin);
+    if (
+      url.protocol === 'https:' &&
+      (url.hostname === 'pages.dev' || url.hostname.endsWith('.pages.dev'))
+    ) {
+      return origin; // Any Cloudflare Pages deployment (TODO: tighten once domain finalised).
+    }
+  } catch {
+    // Malformed origin — fall through to deny.
+  }
+  return null;
+}
+
+function json(body: unknown, status = 200, origin: string | null = null): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       'content-type': 'application/json',
-      'access-control-allow-origin': '*',
+      ...(origin !== null ? { 'access-control-allow-origin': origin, vary: 'Origin' } : {}),
       'access-control-allow-methods': 'POST, OPTIONS',
       'access-control-allow-headers': 'content-type, authorization',
     },
   });
 }
 
-export const onRequestOptions = (): Response => json({}, 204);
+export const onRequestOptions = (context: { request: Request; env: Env }): Response => {
+  const origin = allowedOrigin(context.request, context.env);
+  if (origin === null) {
+    return json({}, 204); // No CORS headers → browser blocks the cross-origin call.
+  }
+  return json({}, 204, origin);
+};
 
 export const onRequestPost = async (context: {
   request: Request;
   env: Env;
 }): Promise<Response> => {
   const { request, env } = context;
+  const origin = allowedOrigin(request, env);
 
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY || !env.SUPABASE_ANON_KEY) {
     return json(
       { error: 'This server is not configured for admin account creation (missing Supabase env vars).' },
       503,
+      origin,
     );
   }
 
@@ -66,7 +125,7 @@ export const onRequestPost = async (context: {
   const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
   const accessToken = bearerMatch?.[1]?.trim();
   if (!accessToken) {
-    return json({ error: 'Not authorized.' }, 403);
+    return json({ error: 'Not authorized.' }, 403, origin);
   }
 
   const callerClient = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
@@ -83,7 +142,7 @@ export const onRequestPost = async (context: {
   }
 
   if (!isAdmin) {
-    return json({ error: 'Not authorized.' }, 403);
+    return json({ error: 'Not authorized.' }, 403, origin);
   }
 
   // --- Parse + validate the request body ---
@@ -91,12 +150,12 @@ export const onRequestPost = async (context: {
   try {
     body = (await request.json()) as { email?: unknown };
   } catch {
-    return json({ error: 'Invalid JSON body.' }, 400);
+    return json({ error: 'Invalid JSON body.' }, 400, origin);
   }
 
   const email = String(body.email ?? '').trim().toLowerCase();
   if (!isValidEmail(email)) {
-    return json({ error: 'Enter a valid email address.' }, 400);
+    return json({ error: 'Enter a valid email address.' }, 400, origin);
   }
 
   // --- Privileged operations: only via the service-role client, only now ---
@@ -115,9 +174,9 @@ export const onRequestPost = async (context: {
   if (createError || !createdUser?.user) {
     const message = createError?.message?.toLowerCase() ?? '';
     if (message.includes('already') || message.includes('exists') || message.includes('registered')) {
-      return json({ error: 'A user with this email already exists.' }, 409);
+      return json({ error: 'A user with this email already exists.' }, 409, origin);
     }
-    return json({ error: 'Could not create the teacher account. Please try again.' }, 502);
+    return json({ error: 'Could not create the teacher account. Please try again.' }, 502, origin);
   }
 
   const userId = createdUser.user.id;
@@ -147,5 +206,5 @@ export const onRequestPost = async (context: {
       : 'The Auth account was created, but pre-creating the teacher profile failed.';
   }
 
-  return json({ status: 'created', email, temporaryPassword, ...(warning ? { warning } : {}) });
+  return json({ status: 'created', email, temporaryPassword, ...(warning ? { warning } : {}) }, 200, origin);
 };

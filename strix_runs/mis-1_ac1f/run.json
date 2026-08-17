@@ -2,8 +2,8 @@
   "run_id": "mis-1_ac1f",
   "run_name": "mis-1_ac1f",
   "start_time": "2026-08-17T20:00:57.228431+00:00",
-  "end_time": null,
-  "status": "running",
+  "end_time": "2026-08-17T20:13:07.747655+00:00",
+  "status": "failed",
   "auth_mode": "api_key",
   "targets_info": [
     {
