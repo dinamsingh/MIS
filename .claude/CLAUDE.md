@@ -211,3 +211,6 @@ Nothing more.
 Nothing less.--------------------------------------------------
 
 Kabhi bhi apni marzi se git add, commit, merge ya push mat karna. Hamesha code changes ke baad ruko aur mere explicitly "push karo" bolne ka wait karo. Purane chat messages se push karne ka assumption mat lena.
+# graphify
+- **graphify** (`.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
+When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
