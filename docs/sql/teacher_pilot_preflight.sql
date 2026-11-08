@@ -11,6 +11,42 @@ from public.teacher_assignments ta join public.syllabus_subjects ss on ss.id=ta.
 where ta.batch_id='2025-29' group by 1,2,3,4,5 order by 3,4;
 select name,batch,semester,department,count(*) from public.sections
 group by 1,2,3,4 having count(*)>1;
+
+-- DEPLOYMENT GATE (2026-11-08): inspect existing-teacher access BEFORE 0059.
+-- On the live project this check found 4 teachers with a current assignment,
+-- of whom 1 had a verified auth account but was NOT on allowed_teacher_emails.
+-- 0059 only bootstraps approved, confirmed teachers. Resolve intentionally:
+-- approve that legitimate teacher via the existing owner-controlled workflow,
+-- or document why their access should remain disabled. Never auto-allowlist them.
+-- Do not apply 0059 until the owner has reviewed the nonzero rows below.
+with current_teachers as (
+  select distinct ta.teacher_id
+  from public.teacher_assignments ta
+  join public.batches b on b.id=ta.batch_id and b.status='classes'
+  join public.syllabus_subjects ss on ss.id=ta.subject_id and ss.sem=b.current_sem
+  join public.sections s on s.batch=ta.batch_id
+    and s.department='CSE'
+    and s.name='CSE-'||ss.sem::text||ta.section
+    and substring(s.semester from '^[0-9]+')::integer=ss.sem
+), access_review as (
+  select ct.teacher_id, t.name as teacher_name, u.email as login_email,
+    (u.id is not null) as auth_exists,
+    (u.email_confirmed_at is not null) as email_confirmed,
+    (lower(btrim(t.email))=lower(btrim(u.email))) as profile_email_matches,
+    exists(
+      select 1 from public.allowed_teacher_emails a
+      where lower(btrim(a.email))=lower(btrim(u.email))
+    ) as approved_email
+  from current_teachers ct
+  left join public.teachers t on t.id=ct.teacher_id
+  left join auth.users u on u.id=ct.teacher_id
+)
+select teacher_name,login_email,auth_exists,email_confirmed,profile_email_matches,approved_email
+from access_review
+where not (auth_exists and email_confirmed and coalesce(profile_email_matches,false) and approved_email)
+order by teacher_name;
+-- OWNER-ONLY RESULTS contain personal teacher contact info; do not commit/export them.
+
 -- Inventory what scope bootstrap would preserve; review before applying 0059.
 select ta.teacher_id,ta.batch_id,b.current_sem,array_agg(distinct ta.section) as current_sections
 from public.teacher_assignments ta join public.batches b on b.id=ta.batch_id
