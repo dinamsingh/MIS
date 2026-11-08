@@ -11,6 +11,7 @@ interface SubjectRowProps {
   readonly subject: SyllabusSubject;
   readonly selected: readonly Section[];
   readonly labSections: readonly Section[];
+  readonly allowedSections?: readonly Section[];
   readonly onChange: (next: Section[]) => void;
   readonly onChangeLab: (section: Section, includeLab: boolean) => void;
 }
@@ -24,7 +25,7 @@ const KIND_TAG: Record<SubjectKind, { className: string; label: string }> = {
   special: { className: 'bg-secondary text-soft', label: 'Special' },
 };
 
-export default function SubjectRow({ subject, selected, labSections, onChange, onChangeLab }: SubjectRowProps) {
+export default function SubjectRow({ subject, selected, labSections, allowedSections, onChange, onChangeLab }: SubjectRowProps) {
   const tag = KIND_TAG[subject.kind];
   const showLab = subject.kind === 'theory' && !!subject.labName && selected.length > 0;
 
@@ -69,7 +70,7 @@ export default function SubjectRow({ subject, selected, labSections, onChange, o
       </div>
 
       <div className="shrink-0">
-        <SectionChips selected={selected} onChange={onChange} idPrefix={`sec-${subject.id}`} />
+        <SectionChips selected={selected} onChange={onChange} idPrefix={`sec-${subject.id}`} allowedSections={allowedSections} />
       </div>
     </div>
   );

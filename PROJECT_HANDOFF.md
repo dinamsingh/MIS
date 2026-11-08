@@ -11,12 +11,26 @@
 
 ## 0. Quick Status (READ THIS FIRST)
 
-- **Last updated:** 2026-07-24
-- **Active branch:** `main` (pushed). Also `fix/batch-promotion-and-quiz-security` (merged into main).
-- **Latest commit (pushed):** `5eee9e9` — sem7 subject codes fix + syllabus seed.
-- **Build/tests (as of last full run):** ✅ green — `npx vite build` succeeds (6s), `npx vitest run` 306 tests pass (33 files). `npx tsc -b tsconfig.app.json --noEmit` has 2 pre-existing minor errors in unrelated test files (not blocking).
+- **Last updated:** 2026-11-08.
+- **Active review branch:** `fix/teacher-pilot-2025-29`, isolated checkout at `C:/MIS-teacher-pilot-2025-29`. Base verified from GitHub: `92266342d87404ea96db7b78fc58e35070f16097` (`origin/main`). Original uncommitted UI work in `C:/MIS 1` was preserved separately and is not part of this pilot branch.
+- **Pilot status:** implementation under review; NOT ready for real teaching. No live migration, student import, deployment or main-branch commit was performed.
+- **Current runbook:** [Teacher pilot 2025-29](docs/TEACHER_PILOT_2025_29.md), including owner preflight/setup/validation/rollback SQL and the real-account checklist.
+- **Live verified state:** 2025-29 is globally Semester 5, with existing empty Semester 3 CSE A/B/C UUIDs. Semester 3 has no teacher assignments yet. Intent of the prior promotion cannot be inferred safely, so no global demotion is proposed.
+- **Security drift:** live migration `20261108133654` hardens teacher identity and ten RPC grants; live also has promotion/history changes beyond Git. Migration 0058 reconciles the verified security changes without replacing promotion or history functions.
+- **New migrations (owner review/application required):** 0058 verified identity/grants; 0059 owner-approved academic scope plus atomic onboarding/additive roster RPCs and scoped writes; 0060 verified quiz membership/exact section targeting and creation authorization.
+- **Validation:** Production build passed; npm run lint passed (0 errors, 58 existing-code warnings); npm test passed (438 tests). Isolated PostgreSQL tests passed 74 checks on both the complete source migration chain and a schema-only copy of the live database, including owner setup/rollback and repeated migration application. Real accounts and original rosters remain untested.
 
-### 🔴 CURRENT RESUME POINT
+### Work log - 8 November 2026
+
+Implemented targeted teacher-pilot fixes using existing screens, parsers, services and Supabase data access. Roster imports no longer delete students; profile and assignment replacement use one transaction. Approved teacher scope permits the requested Semester 3 without changing the global batch clock, and normal stale-assignment protection remains. Quiz registration no longer invents membership from its target; it preserves student IDs, binding and server grading. Teacher-wide registration reset no longer deletes cross-teacher attempts. Existing admin, multi-batch, theory/lab, shared-class reads, history and timetable implementations remain.
+
+The project owner must review/run `docs/sql/teacher_pilot_preflight.sql`, apply only migrations 0058-0060, approve the actual verified teacher using `teacher_pilot_owner_setup.sql`, and release the matching app code through the normal process. The real teacher must then upload original A/B/C CSVs and complete the checklist. No seeded or historic students were used as pilot data. Scope approval needs owner SQL access, not a new or operated admin UI. See the runbook for first-claim registration and remaining lint/type debt limitations.
+
+### Historical July 2026 context (superseded)
+
+The entries below are retained as dated history. Their deploy, pending-migration and database-workaround instructions are not current operational guidance; use the runbook above and re-check live schema before any action.
+
+### July 2026 resume point
 **Sem 7 syllabus fully seeded + subject codes fixed.** Quiz access bug (wrong-section) identified and manually fixed for one student. Broader fix needed for all students with NULL section_id.
 
 **What was done this session (2026-07-24):**
@@ -26,24 +40,9 @@
 4. **Quiz wrong-section bug diagnosed** — root cause: `request_quiz_access` upserts students WITHOUT section_id. Students created via quiz enrollment path get NULL section_id → fail the section gate. Manual fix applied for one student (`0131CS241058` → CSE-7A).
 5. **onboarding_seed.sql updated** — sem 7 now has correct RGPV codes for fresh installs.
 
-### ⚠️ KNOWN BUG: Quiz wrong-section for new students
-**Root cause:** In `request_quiz_access` (migration 0040), the student upsert does NOT set `section_id`:
-```sql
-insert into public.students (name, email, enrollment_number)
-on conflict (enrollment_number) do update set email, name
--- section_id is NEVER set here!
-```
-If a student was seeded via admin roster import (which sets section_id), they're fine. But if a student only exists because they self-registered via quiz enrollment, their section_id stays NULL → every section-restricted quiz denies them.
+### Historical quiz registration issue
 
-**Proper fix needed:** The upsert in `request_quiz_access` should derive section_id from the student_roster/students row that matches the enrollment, or from the quiz's target section. This requires a new migration to update the `request_quiz_access` function.
-
-**Workaround (manual):** For any student getting "wrong section" error:
-```sql
--- Find their current state:
-select enrollment_number, section_id from students where email = 'their@email.com';
--- Fix by assigning correct section:
-update students set section_id = '<correct-section-uuid>' where enrollment_number = '<enrollment>';
-```
+The July wrong-section diagnosis was verified against the live function on 8 November. Migration 0060 now prepares a fix using authoritative roster membership or the existing verified student section. It never assigns membership from a quiz target. This source migration still requires owner review/application; do not use the former ad-hoc section-update workaround without a separate identity/history review.
 
 **What was built this session (2026-07-21):**
 - Phase 1: Admin Role Foundation (complete since prior session)

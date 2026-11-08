@@ -1,6 +1,6 @@
 import { isLocalDemoMode } from '@data/demo/localDemoMode';
 import { supabase } from '@data/supabase';
-import { DEMO_STORAGE_KEY, MOCK_BATCHES, MOCK_SUBJECTS } from '../../features/onboarding/api/onboarding';
+import { DEMO_STORAGE_KEY, MOCK_BATCHES, MOCK_SUBJECTS, fetchLiveBatches } from '../../features/onboarding/api/onboarding';
 import { readDemoValue } from '@data/demo/localDemoMode';
 import type { Section as AppSection } from '@data/access/rows';
 import type {
@@ -34,7 +34,7 @@ function semesterNumber(semester: string | null | undefined): number | null {
 }
 
 function sectionLetter(section: Pick<AppSection, 'id' | 'name'>): OnboardingSection | null {
-  const candidates = [section.id, section.name];
+  const candidates = [section.name];
   for (const candidate of candidates) {
     const match = candidate.match(/(?:^|-)([ABC])$/i) ?? candidate.match(/([ABC])$/i);
     const letter = match?.[1]?.toUpperCase();
@@ -51,7 +51,7 @@ function subjectLabel(subject: { readonly code?: string; readonly name: string }
 
 function selectedSubjectIdsForAssignments(
   assignments: readonly AssignmentInput[],
-  section: Pick<AppSection, 'id' | 'name' | 'batch'>,
+  section: Pick<AppSection, 'id' | 'name' | 'batch' | 'semester'>,
 ): string[] {
   const letter = sectionLetter(section);
   if (!section.batch || !letter) {
@@ -61,7 +61,8 @@ function selectedSubjectIdsForAssignments(
   return Array.from(
     new Set(
       assignments
-        .filter((assignment) => assignment.batchId === section.batch && assignment.section === letter)
+        .filter((assignment) => assignment.batchId === section.batch && assignment.section === letter
+          && (assignment.semester === undefined || assignment.semester === semesterNumber(section.semester)))
         .map((assignment) => assignment.subjectId),
     ),
   );
@@ -87,7 +88,7 @@ function mergeSubjects(
 }
 
 async function loadAssignedSyllabusSubjects(
-  section: Pick<AppSection, 'id' | 'name' | 'batch'>,
+  section: Pick<AppSection, 'id' | 'name' | 'batch' | 'semester'>,
 ): Promise<SubjectOption[]> {
   if (isLocalDemoMode()) {
     const record = readDemoValue<OnboardingRecord>(DEMO_STORAGE_KEY, {
@@ -129,17 +130,12 @@ async function loadAssignedSyllabusSubjects(
     return [];
   }
 
-  // Scope to the batch's CURRENT semester (bugfix: batch-promotion-selector-mixing).
-  // `teacher_assignments` can still hold a row from before the batch was
-  // promoted (see fetchCurrentSelection's staleness filter) — without this,
-  // a subject from the section's OLD semester would appear in the selector
-  // alongside the new semester's subject for the same batch+section.
-  const { data: batchRow } = await supabase
-    .from('batches')
-    .select('current_sem')
-    .eq('id', section.batch)
-    .single();
-  const currentSem = (batchRow as { current_sem: number } | null)?.current_sem ?? null;
+  // The effective semester is owner-approved for this teacher. Require the
+  // selected real section to match it, so similar A/B/C names never collide.
+  const batch = (await fetchLiveBatches()).find(b => b.id === section.batch);
+  const currentSem = batch?.currentSem;
+  if (!batch || semesterNumber(section.semester) !== currentSem
+    || (batch.allowedSections && !batch.allowedSections.includes(letter))) return [];
 
   const { data: subjectRows } = await supabase
     .from('syllabus_subjects')
@@ -160,11 +156,13 @@ async function loadAssignedSyllabusSubjects(
 }
 
 export async function loadSubjectOptionsForSection(
-  section: Pick<AppSection, 'id' | 'name' | 'batch' | 'semester'> | null | undefined,
+  section: (Pick<AppSection, 'id' | 'name' | 'batch' | 'semester'> & { department?: string | null }) | null | undefined,
 ): Promise<SubjectOption[]> {
   if (!section) {
     return [];
   }
+
+  if (section.department && section.department !== 'CSE') return [];
 
   const assigned = await loadAssignedSyllabusSubjects(section);
   if (assigned.length > 0) {
@@ -209,7 +207,7 @@ export async function loadSubjectOptionsForSemester(
 }
 
 export async function loadSubjectNameMapForSection(
-  section: Pick<AppSection, 'id' | 'name' | 'batch' | 'semester'> | null | undefined,
+  section: (Pick<AppSection, 'id' | 'name' | 'batch' | 'semester'> & { department?: string | null }) | null | undefined,
 ): Promise<Record<string, string>> {
   const subjects = await loadSubjectOptionsForSection(section);
   return Object.fromEntries(subjects.map((subject) => [subject.id, subject.name]));

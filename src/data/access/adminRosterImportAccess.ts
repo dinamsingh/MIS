@@ -16,10 +16,7 @@ import type { ParsedRosterRow, RosterImportResult } from '../../domain/services/
 import { parseRosterCsv } from '../../domain/services/rosterImportService';
 import { isValidEnrollmentNumber } from '../../domain/services/rosterService';
 import { messages } from '../../domain/shared/messages';
-import { expectOk } from './support';
-
-/** The unique key Supabase uses to upsert allowlist rows idempotently. */
-const ROSTER_CONFLICT_TARGET = 'enrollment_number';
+import { createRosterImportAccess } from './rosterImportAccess';
 
 /**
  * Admin bulk-import result: the existing RosterImportResult, plus rows that
@@ -65,19 +62,5 @@ export async function addSingleStudent(
     throw new Error(messages.rosterImport.invalidEnrollment);
   }
 
-  expectOk(
-    await client.from('students').insert({
-      section_id: sectionId,
-      enrollment_number: row.enrollmentNumber,
-      name: row.name,
-      email: row.email,
-    }),
-  );
-
-  expectOk(
-    await client.from('student_roster').upsert(
-      { enrollment_number: row.enrollmentNumber, name: row.name, email: row.email },
-      { onConflict: ROSTER_CONFLICT_TARGET },
-    ),
-  );
+  await createRosterImportAccess(client).replaceSection(sectionId, [row]);
 }

@@ -104,6 +104,7 @@ export default function SemAccordion({
                   <SubjectRow
                     key={subject.id}
                     subject={subject}
+                    allowedSections={batch.allowedSections}
                     selected={selection[subject.id]?.sections ?? []}
                     labSections={selection[subject.id]?.labSections ?? []}
                     onChange={(next) => onChangeSubject(subject.id, next)}
@@ -116,6 +117,7 @@ export default function SemAccordion({
                 <ElectiveGroupRow
                   key={groupName}
                   groupName={groupName}
+                  allowedSections={batch.allowedSections}
                   variants={variants}
                   selection={selection}
                   onChangeSubject={onChangeSubject}

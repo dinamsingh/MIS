@@ -27,8 +27,8 @@
  * **Validates: Requirements 1.1, 1.2, 1.3, 1.5, 2.5**
  */
 
-import { describe, it, vi, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
-import { render, screen, cleanup, act } from '@testing-library/react';
+import { describe, it, vi, expect, afterEach } from 'vitest';
+import { render, screen, cleanup, act, fireEvent, waitFor } from '@testing-library/react';
 import fc from 'fast-check';
 import type { Actor } from '@domain/shared/types';
 
@@ -38,6 +38,7 @@ import type { Actor } from '@domain/shared/types';
 vi.mock('@presentation/pages/DashboardPage', () => ({
   default: () => <div>DASHBOARD_PAGE_MARKER</div>,
 }));
+vi.mock('@presentation/pages/AdminDashboardPage', () => ({ default: () => <div>ADMIN_DASHBOARD_MARKER</div> }));
 vi.mock('../features/onboarding/OnboardingPage', () => ({
   default: () => <div>ONBOARDING_WIZARD_MARKER</div>,
 }));
@@ -46,6 +47,7 @@ vi.mock('../features/onboarding/OnboardingPage', () => ({
 // App.tsx's AuthProvider uses the module-level `authService` default (not
 // injectable via props), so the actor is controlled by mocking the module.
 let currentActor: Actor = { kind: 'anonymous' };
+let publishActor: ((actor: Actor) => void) | undefined;
 /**
  * Controls `signInTeacherPassword`'s outcome — defaults to rejecting (as
  * before, since most tests never submit the sign-in form); the
@@ -60,8 +62,12 @@ vi.mock('@data/access/authService', async (importOriginal) => {
     ...actual,
     authService: {
       getCurrentActor: () => Promise.resolve(currentActor),
-      subscribe: () => () => {},
-      signInTeacherPassword: () => passwordLoginResult(),
+      subscribe: (callback: (actor: Actor) => void) => { publishActor = callback; return () => { publishActor = undefined; }; },
+      signInTeacherPassword: async () => {
+        const result = await passwordLoginResult();
+        if (result.ok) { currentActor = result.value; publishActor?.(result.value); }
+        return result;
+      },
       sendEmailOtp: () => Promise.reject(new Error('not used in this test')),
       verifyEmailOtp: () => Promise.reject(new Error('not used in this test')),
       sendStudentEmailOtp: () => Promise.reject(new Error('not used in this test')),
@@ -104,6 +110,10 @@ let currentRpcOutcome: RpcOutcome = 'valid';
 
 vi.mock('@data/supabase', () => ({
   supabase: {
+    auth: {
+      getUser: () => Promise.resolve({ data: { user: null }, error: null }),
+      getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+    },
     rpc: (fn: string) => {
       if (fn !== 'get_my_role') return Promise.resolve({ data: null, error: null });
       switch (currentRpcOutcome) {
@@ -396,160 +406,23 @@ describe('RootRedirect — preservation (Property 2, fixed code)', () => {
   });
 });
 
-/**
- * Bugfix: admin-only-sign-in-redirect (ad-hoc, discovered verifying Phase 1
- * of admin-console-and-scheduling-upgrade). An admin-only identity (present
- * in `public.admins`, absent from `public.teachers` /
- * `public.allowed_teacher_emails`) could previously sign in successfully and
- * then be bounced straight back to `/sign-in` by `RequireTeacher`, because
- * `TeacherSignInView`'s `onSignedIn` callback (wired in `SignInRoute`)
- * unconditionally navigated to `/dashboard`.
- *
- * An earlier version of the fix made that callback call
- * `supabase.rpc('get_my_role')` directly and branch on the result — but that
- * is itself racy: immediately after `signInTeacherPassword` resolves, the
- * session's auth context has not necessarily fully propagated to the
- * Supabase client yet, so the RPC call can spuriously resolve with an error
- * or an empty role set, sending an admin-only identity to `/dashboard`
- * anyway. The corrected fix removes the inline RPC call entirely:
- * `onSignedIn` now simply does a full page reload to the root route via
- * `window.location.replace('/')`, letting `RootRedirect` (which already has
- * the same teacher/admin-aware branching) run on a genuinely fresh page
- * load where the session is fully established.
- *
- * These tests drive the real `SignInRoute` → `TeacherSignInView` component
- * tree (not just the route-level checks above), submitting the password
- * form and asserting `onSignedIn` triggers `window.location.replace('/')`
- * regardless of role — role-aware routing itself is `RootRedirect`'s job,
- * exercised separately by the `RootRedirect` preservation/admin tests above.
- */
-describe('SignInRoute — onSignedIn navigates to root for a fresh RootRedirect pass (admin-only-sign-in-redirect bugfix)', () => {
-  const locationReplaceSpy = vi.fn();
-  let originalLocation: Location;
-
-  beforeAll(() => {
-    // JSDOM's native `window.location.replace` triggers an actual navigation
-    // ("Not implemented: navigation") and its property descriptor on the
-    // real `Location` object is non-configurable, so it can't be
-    // `vi.spyOn`-ed, `Object.defineProperty`-ed directly, or wrapped in a
-    // `Proxy` over the real object (the proxy-invariant check on a
-    // non-configurable target property rejects a differing trap result).
-    // Instead, `window.location` itself (a configurable, writable property
-    // of `window`) is replaced with a plain stand-in object exposing a live
-    // `pathname` getter (delegating to the real, underlying location, so
-    // `window.history.pushState` calls elsewhere in this file still resolve
-    // correctly) and its own `replace`, the one method `onSignedIn` calls —
-    // restored in `afterAll`.
-    originalLocation = window.location;
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: {
-        get pathname() {
-          return originalLocation.pathname;
-        },
-        get href() {
-          return originalLocation.href;
-        },
-        get origin() {
-          return originalLocation.origin;
-        },
-        get search() {
-          return originalLocation.search;
-        },
-        get hash() {
-          return originalLocation.hash;
-        },
-        replace: locationReplaceSpy,
-      },
-    });
-  });
-
-  afterAll(() => {
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: originalLocation,
-    });
-  });
-
-  beforeEach(() => {
-    locationReplaceSpy.mockClear();
-  });
-
-  async function signInWithPassword() {
-    const emailInput = await screen.findByLabelText('College email');
-    await act(async () => {
-      emailInput.dispatchEvent(new Event('focus'));
-    });
-    // Switch to the password step — the OTP step's "Send login code" would
-    // otherwise be the default first step.
-    const passwordSwitch = screen.getByText('Use password instead');
-    await act(async () => {
-      passwordSwitch.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    const pwEmailInput = (await screen.findByLabelText('Email')) as HTMLInputElement;
-    const pwPasswordInput = screen.getByLabelText('Password') as HTMLInputElement;
-    await act(async () => {
-      pwEmailInput.value = 'admin@example.com';
-      pwEmailInput.dispatchEvent(new Event('input', { bubbles: true }));
-      pwPasswordInput.value = 'correct-password';
-      pwPasswordInput.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-
-    const form = pwPasswordInput.closest('form') as HTMLFormElement;
-    await act(async () => {
-      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-      // Let the async onSignedIn (and its own get_my_role RPC await) settle.
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+describe('SignInRoute authenticated redirects', () => {
+  for (const [role, expected] of [['admin', '/admin'], ['teacher', '/dashboard']]) {
+    it(`routes a successful ${role} sign-in to ${expected} after auth state propagates`, async () => {
+      currentActor = { kind: 'anonymous' };
+      currentRoles = [role];
+      onboardingStatus = { loading: false, onboarded: true };
+      passwordLoginResult = () => Promise.resolve({ ok: true, value: { kind: 'teacher', userId: 'teacher-1', email: 'teacher@example.com' } });
+      window.history.pushState(null, '', '/sign-in');
+      render(<App />);
+      const email = await screen.findByLabelText(/^Email/);
+      const password = screen.getByLabelText(/^Password/);
+      fireEvent.change(email, { target: { value: 'teacher@example.com' } });
+      fireEvent.change(password, { target: { value: 'correct-password' } });
+      fireEvent.submit(password.closest('form')!);
+      await waitFor(() => expect(window.location.pathname).toBe(expected));
     });
   }
-
-  it('navigates to / (not /admin or /dashboard) for an admin-only identity (roles = [admin], no teacher tag) after sign-in', async () => {
-    currentActor = { kind: 'anonymous' };
-    currentRoles = ['admin'];
-    onboardingStatus = { loading: false, onboarded: true };
-    passwordLoginResult = () =>
-      Promise.resolve({ ok: true, value: { kind: 'teacher', userId: 'admin-1', email: 'admin@example.com' } });
-
-    window.history.pushState(null, '', '/sign-in');
-    render(<App />);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    await signInWithPassword();
-
-    expect(locationReplaceSpy).toHaveBeenCalledWith('/');
-    expect(locationReplaceSpy).not.toHaveBeenCalledWith('/admin');
-    expect(locationReplaceSpy).not.toHaveBeenCalledWith('/dashboard');
-
-    cleanup();
-  });
-
-  it('navigates to / (not /dashboard directly) for a teacher identity after sign-in', async () => {
-    currentActor = { kind: 'anonymous' };
-    currentRoles = ['teacher'];
-    onboardingStatus = { loading: false, onboarded: true };
-    passwordLoginResult = () =>
-      Promise.resolve({ ok: true, value: { kind: 'teacher', userId: 'teacher-1', email: 'teacher@example.com' } });
-
-    window.history.pushState(null, '', '/sign-in');
-    render(<App />);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    await signInWithPassword();
-
-    expect(locationReplaceSpy).toHaveBeenCalledWith('/');
-    expect(locationReplaceSpy).not.toHaveBeenCalledWith('/dashboard');
-
-    cleanup();
-  });
 });
 
 describe('SignInRoute — preservation (Property 2, fixed code)', () => {
@@ -573,7 +446,7 @@ describe('SignInRoute — preservation (Property 2, fixed code)', () => {
         const passed =
           actorKind === 'teacher' || actorKind === 'pending-teacher'
             ? window.location.pathname === '/dashboard'
-            : screen.queryByText('Teacher sign in') !== null;
+            : screen.queryByRole('heading', { name: /teacher sign in/i }) !== null;
 
         cleanup();
 

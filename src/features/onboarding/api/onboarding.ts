@@ -155,6 +155,7 @@ interface BatchRow {
   start_year: number;
   current_sem: number;
   status: Batch['status'];
+  sections?: AssignmentInput['section'][];
 }
 
 interface SubjectRow {
@@ -178,6 +179,7 @@ const toBatch = (row: BatchRow): Batch => ({
   startYear: row.start_year,
   currentSem: row.current_sem,
   status: row.status,
+  ...(row.sections ? { allowedSections: row.sections } : {}),
 });
 
 const toSubject = (row: SubjectRow): SyllabusSubject => ({
@@ -312,16 +314,12 @@ export async function setTeacherPassword(newPassword: string): Promise<void> {
   }
 }
 
-/** Load the live batches (status !== 'graduated'). */
+/** Load this teacher's owner-approved live batches and effective teaching semesters. */
 export async function fetchLiveBatches(): Promise<Batch[]> {
   if (isLocalDemoMode()) {
     return MOCK_BATCHES.filter((b) => b.status !== 'graduated');
   }
-  const { data, error } = await supabase
-    .from('batches')
-    .select('id, start_year, current_sem, status')
-    .neq('status', 'graduated')
-    .order('start_year', { ascending: false });
+  const { data, error } = await supabase.rpc('get_my_academic_batches');
   if (error) {
     throw new Error(error.message);
   }
@@ -367,8 +365,8 @@ export async function fetchOnboardedStatus(): Promise<boolean> {
 }
 
 /**
- * Persist the onboarding result: writes all assignment rows and flips the
- * teacher's `onboarded` flag to true.
+ * Persist profile and approved current assignments in one server transaction;
+ * historical assignments remain intact.
  */
 export async function saveOnboarding(
   profile: OnboardingProfile,
@@ -380,51 +378,18 @@ export async function saveOnboarding(
     return;
   }
 
-  const teacherId = await requireTeacherId();
-
-  // Ensure the teacher profile row exists and is marked onboarded.
-  const { error: teacherError } = await supabase.from('teachers').upsert(
-    {
-      id: teacherId,
-      name: profile.name,
-      email: profile.email,
-      onboarded: true,
-    },
-    { onConflict: 'id' },
-  );
-  if (teacherError) {
-    throw new Error(teacherError.message);
-  }
-
-  const deleteRes = await supabase.from('teacher_assignments').delete().eq('teacher_id', teacherId);
-  if (deleteRes.error) {
-    throw new Error(deleteRes.error.message);
-  }
-
-  if (assignments.length > 0) {
-    const rows = assignments.map((a) => ({
-      teacher_id: teacherId,
-      subject_id: a.subjectId,
-      batch_id: a.batchId,
-      section: a.section,
-      is_lab: a.isLab,
-    }));
-    const { error: assignError } = await supabase.from('teacher_assignments').insert(rows);
-    if (assignError) {
-      // Duplicate subject-section-assignment safeguard (Requirement 9.1/9.3):
-      // the teacher_assignments_subject_section_batch_unique index (migration
-      // 0046) rejects a claim another teacher already holds for the same
-      // subject+section+batch. Surface a catalog message that identifies the
-      // conflict WITHOUT naming the other teacher, instead of the raw
-      // Postgres unique-violation text.
-      if (
-        assignError.code === '23505' &&
-        assignError.message.includes('teacher_assignments_subject_section_batch_unique')
-      ) {
-        throw new Error(messages.teacherAssignment.duplicateClaim);
-      }
-      throw new Error(assignError.message);
+  const { error } = await supabase.rpc('save_teacher_onboarding', {
+    p_name: profile.name,
+    p_email: profile.email,
+    p_assignments: assignments.map(a => ({
+      subject_id: a.subjectId, batch_id: a.batchId, section: a.section, is_lab: a.isLab,
+    })),
+  });
+  if (error) {
+    if (error.code === '23505' && error.message.includes('teacher_assignments_subject_section_batch_unique')) {
+      throw new Error(messages.teacherAssignment.duplicateClaim);
     }
+    throw new Error(error.message);
   }
 }
 
@@ -479,61 +444,7 @@ export async function fetchAllBatches(): Promise<Batch[]> {
   return (data as BatchRow[]).map(toBatch);
 }
 
-/**
- * Get-or-create a real `public.sections` row for a derived (batch, section)
- * combo, so the rest of the app — Roster CSV import, Attendance, Marks,
- * Heatmap — can attach real students to it via `students.section_id`
- * (a real uuid, not a synthetic onboarding id).
- *
- * Matched by the exact (name, batch, semester, department) tuple, which is
- * deterministic for a given batch+section+sem, so re-onboarding or reloading
- * never creates duplicate rows.
- */
-async function getOrCreateRealSection(derived: Section): Promise<Section> {
-  // Use limit(1) rather than maybeSingle(): historically the (name, batch)
-  // pair was not uniquely constrained, so duplicate rows could exist. A plain
-  // maybeSingle() throws when it sees more than one row, which would break the
-  // whole section list. Picking the first deterministically (ordered by id)
-  // keeps the selector working even if stray duplicates remain in the table.
-  const existing = await supabase
-    .from('sections')
-    .select('id, name, batch, semester, department')
-    .eq('name', derived.name)
-    .eq('batch', derived.batch)
-    .order('id', { ascending: true })
-    .limit(1);
-  if (existing.error) {
-    throw new Error(existing.error.message);
-  }
-  if (existing.data && existing.data.length > 0) {
-    return existing.data[0] as Section;
-  }
-
-  const inserted = await supabase
-    .from('sections')
-    .insert({
-      name: derived.name,
-      batch: derived.batch,
-      semester: derived.semester,
-      department: derived.department,
-    })
-    .select('id, name, batch, semester, department')
-    .single();
-  if (inserted.error) {
-    throw new Error(inserted.error.message);
-  }
-  return inserted.data as Section;
-}
-
-/**
- * The teacher's onboarded sections, derived from their assignments. Drives the
- * global section selector. Empty when the teacher has not onboarded yet.
- *
- * Live mode resolves each derived section to a REAL `sections` table row
- * (get-or-create), so its `id` is a real uuid that Roster import / Attendance
- * / Marks can attach students to via `students.section_id`. Demo mode has no
- * backing `sections` table to attach to, so it keeps the synthetic ids.
- */
+/** Current approved assignments resolved to existing real section UUIDs, read-only. */
 export async function fetchOnboardedSections(): Promise<Section[]> {
   if (isLocalDemoMode()) {
     const demoAssignments = readDemoRecord().assignments;
@@ -549,57 +460,9 @@ export async function fetchOnboardedSections(): Promise<Section[]> {
     );
     return deriveSections(activeDemoAssignments, MOCK_BATCHES);
   }
-  const teacherId = await requireTeacherId();
-  const [assignmentRes, batches] = await Promise.all([
-    supabase.from('teacher_assignments').select('id, batch_id, section, subject_id').eq('teacher_id', teacherId),
-    fetchAllBatches(),
-  ]);
-  if (assignmentRes.error) {
-    throw new Error(assignmentRes.error.message);
-  }
-  const assignmentRows = assignmentRes.data as Array<{
-    id: string;
-    batch_id: string;
-    section: AssignmentInput['section'];
-    subject_id: string;
-  }>;
-  const subjectIds = Array.from(new Set(assignmentRows.map((row) => row.subject_id)));
-  const subjectSemById = new Map<string, number>();
-  if (subjectIds.length > 0) {
-    const subjectRes = await supabase
-      .from('syllabus_subjects')
-      .select('id, sem')
-      .in('id', subjectIds);
-    if (subjectRes.error) {
-      throw new Error(subjectRes.error.message);
-    }
-    for (const row of subjectRes.data as Array<{ id: string; sem: number }>) {
-      subjectSemById.set(row.id, row.sem);
-    }
-  }
-
-  // Exclude stale assignments (Requirement 11.2): an assignment whose
-  // subject's sem is strictly behind its batch's CURRENT sem no longer
-  // produces a selectable section — see teacherAssignmentService.ts.
-  const assignmentsWithContext: Array<AssignmentWithContext & { row: (typeof assignmentRows)[number] }> =
-    assignmentRows.map((row) => ({
-      assignmentId: row.id,
-      batchId: row.batch_id,
-      subjectSem: subjectSemById.get(row.subject_id) ?? 0,
-      row,
-    }));
-  const batchStates: BatchState[] = batches.map((b) => ({ batchId: b.id, currentSem: b.currentSem }));
-  const activeRows = activeAssignments(assignmentsWithContext, batchStates).map((a) => a.row);
-
-  const assignments: AssignmentInput[] = activeRows.map((row) => ({
-    subjectId: row.subject_id,
-    batchId: row.batch_id,
-    section: row.section,
-    isLab: false,
-    semester: subjectSemById.get(row.subject_id),
-  }));
-  const derived = deriveSections(assignments, batches);
-  return Promise.all(derived.map(getOrCreateRealSection));
+  const { data, error } = await supabase.rpc('get_my_teaching_sections');
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Section[];
 }
 
 /**
@@ -748,7 +611,7 @@ export async function fetchCurrentSelection(): Promise<import('../types').Select
   const teacherId = await requireTeacherId();
   const [assignmentRes, batches] = await Promise.all([
     supabase.from('teacher_assignments').select('subject_id, batch_id, section, is_lab').eq('teacher_id', teacherId),
-    fetchAllBatches(),
+    fetchLiveBatches(),
   ]);
   if (assignmentRes.error) {
     throw new Error(assignmentRes.error.message);
@@ -770,14 +633,11 @@ export async function fetchCurrentSelection(): Promise<import('../types').Select
       subjectSemById.set(row.id, row.sem);
     }
   }
-  const batchStates: BatchState[] = batches.map((b) => ({ batchId: b.id, currentSem: b.currentSem }));
-  const activeRows = assignmentRows.filter(
-    (row) =>
-      !isStaleAssignment(
-        { assignmentId: '', batchId: row.batch_id, subjectSem: subjectSemById.get(row.subject_id) ?? 0 },
-        batchStates,
-      ),
-  );
+  const activeRows = assignmentRows.filter(row => {
+    const batch = batches.find(b => b.id === row.batch_id);
+    return batch !== undefined && batch.currentSem === subjectSemById.get(row.subject_id)
+      && (batch.allowedSections === undefined || batch.allowedSections.includes(row.section));
+  });
   const rows = activeRows.map((r) => ({
     subjectId: r.subject_id,
     batchId: r.batch_id,

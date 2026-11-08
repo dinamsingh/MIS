@@ -16,7 +16,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { fetchAllBatches, fetchTeacherAssignmentsWithContext } from '../api/onboarding';
+import { fetchAllBatches, fetchLiveBatches, fetchTeacherAssignmentsWithContext } from '../api/onboarding';
 import {
   isStaleAssignment,
   type AssignmentWithContext,
@@ -61,12 +61,13 @@ export function useStaleAssignmentNotice(): StaleAssignmentNotice {
     setError(null);
 
     (async () => {
-      const [assignments, batches] = await Promise.all([
+      const [assignments, batches, approved] = await Promise.all([
         fetchTeacherAssignmentsWithContext(),
         fetchAllBatches(),
+        fetchLiveBatches(),
       ]);
       if (!active) return;
-      setAffectedBatches(deriveAffectedBatches(assignments, batches));
+      setAffectedBatches(deriveAffectedBatches(assignments, batches.map(b => approved.find(a => a.id === b.id) ?? b)));
       setLoading(false);
     })().catch((err: unknown) => {
       if (active) {

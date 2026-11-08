@@ -34,50 +34,19 @@ interface RecordedRosterRow {
   email: string | null;
 }
 
-function createRecordingClient(existingEnrollments: readonly string[] = []) {
+function createRecordingClient() {
   const studentsInserted: RecordedStudentRow[] = [];
   const rosterUpserted: RecordedRosterRow[] = [];
-
-  const studentsTable = {
-    select: (_cols: string) => ({
-      eq: (_col: string, _val: string) =>
-        Promise.resolve({
-          data: existingEnrollments.map((enrollment_number) => ({ enrollment_number })),
-          error: null,
-        }),
-    }),
-    delete: () => ({
-      eq: (_col: string, _val: string) => Promise.resolve({ error: null }),
-    }),
-    insert: (rows: RecordedStudentRow | RecordedStudentRow[]) => {
-      const arr = Array.isArray(rows) ? rows : [rows];
-      studentsInserted.push(...arr);
-      return Promise.resolve({ error: null });
-    },
-  };
-
-  const rosterTable = {
-    delete: () => ({
-      in: (_col: string, _vals: readonly string[]) => Promise.resolve({ error: null }),
-    }),
-    upsert: (
-      rows: RecordedRosterRow | RecordedRosterRow[],
-      _opts: { onConflict: string },
-    ) => {
-      const arr = Array.isArray(rows) ? rows : [rows];
-      rosterUpserted.push(...arr);
-      return Promise.resolve({ error: null });
-    },
-  };
-
   const client = {
-    from: (table: string) => {
-      if (table === 'students') return studentsTable;
-      if (table === 'student_roster') return rosterTable;
-      throw new Error(`createRecordingClient: unexpected table "${table}"`);
+    rpc: (name: string, args: { p_section_id: string; p_rows: RecordedRosterRow[] }) => {
+      expect(name).toBe('import_section_roster');
+      for (const row of args.p_rows) {
+        studentsInserted.push({ ...row, section_id: args.p_section_id });
+        rosterUpserted.push(row);
+      }
+      return Promise.resolve({ data: { imported: args.p_rows.length, deleted: 0 }, error: null });
     },
   } as unknown as SupabaseClient;
-
   return { client, studentsInserted, rosterUpserted };
 }
 

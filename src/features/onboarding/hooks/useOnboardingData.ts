@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { isLocalDemoMode } from '@data/demo/localDemoMode';
 import { deriveBatchesForSession, fetchLiveBatches, fetchSubjectsForSems } from '../api/onboarding';
 import type { AcademicSession, Batch, BatchWithSubjects, SyllabusSubject } from '../types';
 
@@ -33,9 +34,14 @@ export function useOnboardingData(currentSession: AcademicSession | null): Onboa
 
     (async () => {
       const liveBatches = await fetchLiveBatches();
+      if (!isLocalDemoMode() && liveBatches.length === 0) {
+        throw new Error('No approved academic scope is configured. Ask the project owner to approve your batch, semester and sections.');
+      }
       const sessionBatches = currentSession === null
         ? liveBatches
-        : deriveBatchesForSession(liveBatches, currentSession);
+        : isLocalDemoMode()
+          ? deriveBatchesForSession(liveBatches, currentSession)
+          : liveBatches.filter(b => b.currentSem % 2 === (currentSession === 'odd' ? 1 : 0));
       const sems = currentSession === null ? [] : sessionBatches.map((b) => b.currentSem);
       const loadedSubjects = await fetchSubjectsForSems(sems);
       if (active) {
