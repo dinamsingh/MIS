@@ -1,7 +1,7 @@
 # Teacher pilot: CSE / 2025-29 / Semester 3
 
 Branch: `fix/teacher-pilot-2025-29`, based on verified `origin/main` commit `92266342d87404ea96db7b78fc58e35070f16097`.
-Inspection date: 8 November 2026. **Not pilot-ready yet:** owner migration review, real-account testing and the teacher's original CSV are still required. Nothing was deployed or migrated to production by this work.
+Initial inspection: 8 November 2026. Live rollout updated: **9 November 2026**. Reviewed migrations 0058-0060 and the verified pilot teacher's Semester 3 CSE A/B/C scope are now applied. The owner waived the backup and explicitly chose to keep the other unapproved teacher unapproved. No student roster was imported and no existing academic records were changed. **Not pilot-ready yet:** actual subject selection, real-account/original-CSV testing and frontend release approval remain pending. Main was not merged and no production frontend deployment was initiated.
 
 ## Verified findings and fixes
 
@@ -31,17 +31,43 @@ All three are CSE, batch `2025-29`, `3rd Semester`. No Semester 3 assignments ex
 
 Live migration history also includes promotion/`semester_at_time` changes beyond the July handoff and Git migrations. Those definitions were inspected and retained; these migrations do not replace `promote_batch`, history triggers or timetable functions.
 
-## Production deployment gate (updated 9 November 2026)
+## Live rollout status - 9 November 2026
 
-**Do not apply migrations 0058–0060 or use the live-connected Cloudflare preview for real student uploads until these gates are resolved.** The live Supabase organization is currently on the **Free** plan, which does not include scheduled daily backups. Existing data includes teacher, quiz and attendance records; a same-database table copy is NOT a recoverable off-site backup.
+The owner resolved the two rollout decisions: proceed without a backup, and keep the existing unapproved teacher unapproved. No account was guessed or automatically approved. The selected pilot teacher was confirmed in live Auth, allowlisted, non-admin and not a student before setup.
 
-1. **Backup waived by explicit owner instruction (9 November 2026).** Continue with the read-only preflight and reviewed pilot setup without requiring an external backup. Preserve the transaction/authorization checks and the safe operational rollback; do not describe a schema inspection or a same-database table copy as a recovery backup.
-2. **Review the existing teacher allowlist discrepancy.** Read-only live preflight found four teachers with current assignments, but one confirmed auth user with two current assignment rows was NOT allowlisted. The new scope bootstrap in migration 0059 excludes that teacher and could unexpectedly remove working access. Run the added `docs/sql/teacher_pilot_preflight.sql` deployment gate and resolve as owner without guessing or auto-approving any account. Re-run until all intended existing teachers have a deliberate approval/status decision.
-3. **Prevent preview-to-production confusion.** The Cloudflare Pages branch preview was automatically built and the repository's production Vite environment points at the live Supabase project. A preview build is not an isolated staging backend. Do NOT enter real teacher credentials or import original student CSVs into that preview until the matching DB migrations and release plan are reviewed. The owner's backup waiver remains in effect.
-4. **Verify release alignment and environment.** Review 0058–0060 against live migration history and the November 8 hardening; snapshot teacher/attendance/quiz counts. Release the compatible frontend and SQL changes in a controlled window. A failed separate Cloudflare Workers deployment was reported even though the Pages branch preview build succeeded—verify which platform/route actually serves this MIS.
-5. **Do not assume tests prove hosted integration.** Passing isolated DB checks do not test the real Auth email provider, teacher onboarding, browser, Cloudflare Functions, or original roster. Complete the real-account checklist after the deployment gates pass.
+Applied through the Supabase connector in order:
+
+| Source migration | Live version |
+| --- | --- |
+| 0058_reconcile_verified_identity_security | 20261109162726 |
+| 0059_teacher_scope_atomic_writes | 20261109162732 |
+| 0060_verified_quiz_section_access | 20261109162739 |
+
+The guarded owner setup configured only the selected pilot teacher for `2025-29`, Semester 3, CSE, A/B/C. Their existing Semester 5 theory/lab assignments remain unchanged. The unapproved teacher was not added to the allowlist and received no scope rows. Global `batches.current_sem` remains **5**. Seven Semester 3 catalog subjects exist; the actual teaching subjects were not guessed or assigned automatically.
+
+Before/after content fingerprints and row counts matched for all existing records in these tables. For `student_roster`, comparison used the existing columns, and separately confirmed that the new `section_id` column is null for all historic rows. These checks are verification metadata, **not a recoverable backup**.
+
+| Preserved records | Before | After |
+| --- | ---: | ---: |
+| students | 185 | 185 |
+| student_roster | 196 | 196 |
+| attendance | 1000 | 1000 |
+| quiz_attempts | 2 | 2 |
+| teacher_assignments | 34 | 34 |
+| teachers | 5 | 5 |
+| sections | 24 | 24 |
+
+All pilot sections remain empty. Zero historic roster rows were automatically assigned to sections. The scope table has RLS enabled, authenticated users cannot write it directly, raw teacher-assignment writes are revoked, and the 18 checked sensitive RPC signatures have zero anonymous EXECUTE grants. Required authenticated RPC grants are present. No fake Auth session or synthetic student was created in production to test this.
+
+A matching local pilot build is served on port **5175**, at `http://172.19.43.74:5175` while the current Wi-Fi address remains assigned. It is connected to the live Supabase project and must be used deliberately with the real pilot account. The original port 5173 UI workspace was preserved separately and does not contain this pilot client. The local build explicitly uses `VITE_DEMO_MODE=false` so localhost cannot silently enter demo mode. Vite preview serves the static app; Cloudflare Pages Functions and hosted Auth/email delivery still require their real-environment checks.
+
+Production frontend rollout remains a separate approval. The Pages branch preview can be automatically built by the repository's existing CI and also points at the live backend; it is not an isolated staging database. No main merge or manual production deploy was performed. Old clients do not have the new atomic write path, so use the compatible pilot build for onboarding/roster work until the reviewed release is complete.
+
+Post-change Supabase advisors report two existing RLS-with-no-policy informational entries (function-only/internal tables), 28 anonymous and 54 authenticated SECURITY DEFINER exposure warnings, and disabled leaked-password protection. The new scope table has an own-row SELECT policy and no client write grant. Do not blindly revoke all RPCs: review each function's actual caller checks and role grants using the [function-exposure advisory](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable). Account-level [leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) remains a separate owner setting. This rollout is not a declaration that the whole project is free of security debt.
 
 ## Owner review and setup (no operated admin console required)
+
+The steps below are the reproducible setup reference. This live rollout has already applied 0058-0060 and the selected teacher scope; do not replay the complete historical migration directory or rerun empty-section setup after original CSV data has been uploaded.
 
 1. The owner has waived the backup prerequisite for this rollout. Run `docs/sql/teacher_pilot_preflight.sql` in the Supabase SQL Editor as project owner. It is read-only. Save the outputs, especially current scopes/assignments and before-counts. Review any duplicate/mismatched academic records before proceeding.
 2. Review and manually apply these files **in order**, without replaying the historic migration/seed directory on the live database:
@@ -110,7 +136,7 @@ A lost network response can leave the import outcome unknown to the browser even
 
 For a pilot problem, run the reviewed `docs/sql/teacher_pilot_rollback.sql` with the actual teacher email to disable that pilot scope. This stops current pilot writes without touching students or history. Restore a prior approval only from the owner's saved preflight scope rows after review. Do not drop the scope table/mapping column, revoke student authentication, reset the database, or restore the unsafe delete-first client/broad teacher policies. A code rollback to the old client will fail closed on protected writes; use maintenance/read-only mode and fix forward rather than restoring destructive access.
 
-The pilot is **not ready for real teaching** until owner migrations/setup, the real teacher's subject selection, original A/B/C CSV uploads, physical browser/account checks, hosted student registration and actual attendance/quiz results have been verified. None of those production writes or imports were performed here. Existing lint warnings, the legacy attendance view's `@ts-nocheck`, and wider unrelated product/security areas remain technical debt, not a claim of a whole-repository security audit. No Google Forms, Excel importer, replacement onboarding, new timetable system or new MIS project was added.
+The database migrations and pilot scope are now configured. The pilot is **not ready for real teaching** until the actual teacher selects their subjects, uploads original A/B/C CSVs, and completes hosted login/registration, attendance, grading/results and physical-browser checks. No original roster or real teaching/student workflow was exercised by the agent. Production frontend merge/deployment still needs approval. Existing lint warnings, the legacy attendance view's `@ts-nocheck`, first-claim registration when CSV email is absent, and the advisor items above remain explicit limitations. No Google Forms, Excel importer, replacement onboarding, new timetable system or new MIS project was added.
 
 ## Exact change inventory
 

@@ -19,6 +19,10 @@ group by 1,2,3,4 having count(*)>1;
 -- approve that legitimate teacher via the existing owner-controlled workflow,
 -- or document why their access should remain disabled. Never auto-allowlist them.
 -- Do not apply 0059 until the owner has reviewed the nonzero rows below.
+-- 2026-11-09 owner decision: keep the reviewed exception unapproved.
+-- That account was not allowlisted or given a scope during this rollout.
+-- Review any NEW exceptions deliberately; a nonzero historical row is not
+-- permission to auto-approve someone or undo the recorded owner decision.
 with current_teachers as (
   select distinct ta.teacher_id
   from public.teacher_assignments ta

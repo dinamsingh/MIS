@@ -11,14 +11,22 @@
 
 ## 0. Quick Status (READ THIS FIRST)
 
-- **Last updated:** 2026-11-08.
+- **Last updated:** 2026-11-09.
 - **Active review branch:** `fix/teacher-pilot-2025-29`, isolated checkout at `C:/MIS-teacher-pilot-2025-29`. Base verified from GitHub: `92266342d87404ea96db7b78fc58e35070f16097` (`origin/main`). Original uncommitted UI work in `C:/MIS 1` was preserved separately and is not part of this pilot branch.
-- **Pilot status:** implementation under review; NOT ready for real teaching. No live migration, student import, deployment or main-branch commit was performed.
+- **Pilot status:** reviewed migrations 0058-0060 and the verified pilot teacher scope are applied live. NOT ready for real teaching: actual subjects, original CSVs and real-account workflows remain untested. No student import, main merge or manual production frontend deployment was performed.
 - **Current runbook:** [Teacher pilot 2025-29](docs/TEACHER_PILOT_2025_29.md), including owner preflight/setup/validation/rollback SQL and the real-account checklist.
 - **Live verified state:** 2025-29 is globally Semester 5, with existing empty Semester 3 CSE A/B/C UUIDs. Semester 3 has no teacher assignments yet. Intent of the prior promotion cannot be inferred safely, so no global demotion is proposed.
 - **Security drift:** live migration `20261108133654` hardens teacher identity and ten RPC grants; live also has promotion/history changes beyond Git. Migration 0058 reconciles the verified security changes without replacing promotion or history functions.
-- **New migrations (owner review/application required):** 0058 verified identity/grants; 0059 owner-approved academic scope plus atomic onboarding/additive roster RPCs and scoped writes; 0060 verified quiz membership/exact section targeting and creation authorization.
+- **Migrations applied live on 2026-11-09:** 0058 verified identity/grants; 0059 owner-approved academic scope plus atomic onboarding/additive roster RPCs and scoped writes; 0060 verified quiz membership/exact section targeting and creation authorization.
 - **Validation:** Production build passed; npm run lint passed (0 errors, 58 existing-code warnings); npm test passed (438 tests). Isolated PostgreSQL tests passed 74 checks on both the complete source migration chain and a schema-only copy of the live database, including owner setup/rollback and repeated migration application. Real accounts and original rosters remain untested.
+
+### Work log - 9 November 2026: live pilot database rollout
+
+The owner explicitly kept the existing unapproved teacher unapproved and waived backup. Applied reviewed migrations 0058, 0059 and 0060 through Supabase, recorded as versions `20261109162726`, `20261109162732` and `20261109162739`. Configured only the verified, allowlisted, non-admin pilot teacher for 2025-29 / Semester 3 / CSE / A-B-C. Their Semester 5 assignments remain intact; the unapproved teacher received no scope rows and was not allowlisted. No individual contact details are added to this public handoff.
+
+Verified unchanged content fingerprints/counts: students 185, student_roster 196, attendance 1000, quiz_attempts 2, teacher_assignments 34, teachers 5, sections 24. Historic roster section mapping remains null; the three pilot sections remain empty. Global batch semester remains 5. New scope RLS, required signed-in RPC grants, revoked direct assignment writes and zero anonymous grants on the 18 checked sensitive RPCs were verified. No production Auth session was fabricated to perform these checks.
+
+Matching local pilot build: port 5175 with VITE_DEMO_MODE=false, connected to live Supabase. Port 5173 remains the separate original UI workspace. Actual login, subject selection, original CSV import, attendance and quizzes still require the real teacher/student checklist. No main merge or manual production frontend deployment was performed. See the pilot guide for remaining advisor/first-claim registration limitations.
 
 ### Work log - 9 November 2026: backup waiver and renewed preflight
 
