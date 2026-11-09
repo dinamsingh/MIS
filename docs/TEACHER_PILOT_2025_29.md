@@ -1,7 +1,7 @@
 # Teacher pilot: CSE / 2025-29 / Semester 3
 
 Branch: `fix/teacher-pilot-2025-29`, based on verified `origin/main` commit `92266342d87404ea96db7b78fc58e35070f16097`.
-Initial inspection: 8 November 2026. Live rollout updated: **9 November 2026**. Reviewed migrations 0058-0060 and the verified pilot teacher's Semester 3 CSE A/B/C scope are now applied. The owner waived the backup and explicitly chose to keep the other unapproved teacher unapproved. No student roster was imported and no existing academic records were changed. **Not pilot-ready yet:** actual subject selection, real-account/original-CSV testing and frontend release approval remain pending. Main was not merged and no production frontend deployment was initiated.
+Initial inspection: 8 November 2026. Live rollout updated: **9 November 2026**. Reviewed migrations 0058-0060 and the verified pilot teacher's Semester 3 CSE A/B/C scope are now applied. The owner waived the backup and explicitly chose to keep the other unapproved teacher unapproved. No student roster was imported and no existing academic records were changed. **Not pilot-ready yet:** actual subject selection, real-account/original-CSV testing and frontend release approval remain pending. Main was not merged and no production frontend deployment was initiated. **Follow-up correction 0061 is prepared and tested, but NOT applied live:** normal teacher batch/section self-selection must be restored as described below.
 
 ## Verified findings and fixes
 
@@ -65,6 +65,24 @@ Production frontend rollout remains a separate approval. The Pages branch previe
 
 Post-change Supabase advisors report two existing RLS-with-no-policy informational entries (function-only/internal tables), 28 anonymous and 54 authenticated SECURITY DEFINER exposure warnings, and disabled leaked-password protection. The new scope table has an own-row SELECT policy and no client write grant. Do not blindly revoke all RPCs: review each function's actual caller checks and role grants using the [function-exposure advisory](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable). Account-level [leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) remains a separate owner setting. This rollout is not a declaration that the whole project is free of security debt.
 
+## Follow-up: restore the original teacher self-selection workflow (0061 pending)
+
+The owner clarified that approved teachers must be able to choose additional teaching batches/sections themselves. The 0059 per-batch approval prerequisite restricted that existing workflow too far. Migration `0061_restore_teacher_self_selection.sql` corrects this without returning to browser-side destructive writes. **Live still runs 0058-0060 until the owner applies this additional migration.**
+
+After 0061, a verified, allowlisted teacher uses the existing **Profile / My Teaching Subjects** editor to select any configured, non-graduated CSE batch's current-semester subjects and sections. No new admin screen, per-batch approval or new scope row is required for ordinary classes. The global selector lists their saved teaching assignments, not every available class. Merely viewing an available batch does not grant access to its students: roster, attendance and quizzes still require the teacher's own subject assignment for the exact real section. The existing cross-teacher unique index remains the final protection against concurrent occupied-subject claims; ordinary conflicts also return the occupying teacher's display name, subject code, batch and section. The UI preserves that server warning.
+
+Owner-approved `semester_override=true` exceptions still take precedence for their batch, including the pilot teacher's 2025-29 / Semester 3 / A-B-C scope. They do not hide other ordinary current-semester batches. Disabled scope rows continue to block that batch instead of falling back to normal access. Non-override bootstrap rows no longer freeze an old semester or section subset: ordinary classes follow the current batch and its actually configured sections. Unapproved accounts remain blocked. Historical assignments are preserved; promotion still blocks stale subjects. One teacher/batch still has one effective current semester; simultaneous different semesters of the same batch are outside this change.
+
+Owner rollout:
+
+1. Review `0061_restore_teacher_self_selection.sql` and rerun the read-only preflight. Confirm the existing `teacher_assignments_subject_section_batch_unique` index, actual current-semester CSE section rows, existing overrides/disabled scopes and the unapproved-account decision. Do not change a batch semester or import any students for this correction.
+2. Apply **only 0061**, once reviewed, through the project owner's SQL Editor/migration workflow. It replaces three functions and their explicit grants; it performs no academic-data writes, scope changes or account approvals. Keep the owner backup waiver already recorded for this rollout; do not mistake schema metadata for a backup.
+3. Validate using the real teacher's session: My Teaching Subjects lists the Semester 3 pilot plus other configured current classes; choose an available subject/section, save and switch using the global selector. A claim occupied by another teacher must warn and leave previous assignments intact. An unassigned section must remain unavailable for roster modification. Use the normal current semester of the other batch, not an arbitrary historical semester.
+4. Owner-level SQL validation: confirm the three function definitions match 0061 with `pg_get_functiondef`, check the two helper signatures and `save_teacher_onboarding(text,text,jsonb)` have authenticated EXECUTE but no anon EXECUTE, and rerun before/after counts/fingerprints for existing academic tables. No data should change merely by applying the migration. Actual teacher saves intentionally change that teacher's current assignments.
+5. If this correction must be rolled back, review/run `docs/sql/teacher_pilot_self_selection_rollback.sql`. It restores only the three 0059 functions and grants, not the unsafe old importer or raw assignment writes. This returns to per-batch approval-only selection and does not revert any teacher edits made after rollout. Reapply 0061 after resolving the issue.
+
+Executed follow-up checks: `npm run build` passed with demo mode disabled; `npm run lint` passed with 0 errors / 58 existing warnings; `npm test` passed 440 tests. Isolated full-migration-chain database checks passed **98 checks**, including targeted function rollback/reapplication, new-teacher self-selection without scope rows, adding another batch and section, named occupied-subject warnings, failed claims preserving profiles/assignments, a forced post-deletion insertion failure rolling back all onboarding writes, blocked unassigned imports, unapproved accounts and disabled exceptions. The schema-only live-snapshot run of 74 checks above predates 0061; it is not evidence of a live 0061 rollout. Real-account verification remains pending.
+
 ## Owner review and setup (no operated admin console required)
 
 The steps below are the reproducible setup reference. This live rollout has already applied 0058-0060 and the selected teacher scope; do not replay the complete historical migration directory or rerun empty-section setup after original CSV data has been uploaded.
@@ -74,6 +92,7 @@ The steps below are the reproducible setup reference. This live rollout has alre
    - `src/data/migrations/0058_reconcile_verified_identity_security.sql`
    - `src/data/migrations/0059_teacher_scope_atomic_writes.sql`
    - `src/data/migrations/0060_verified_quiz_section_access.sql`
+- `src/data/migrations/0061_restore_teacher_self_selection.sql`
 3. 0059 creates **one** owner-controlled scope table. It preserves existing verified teachers' already-configured current classes as ordinary approvals (`semester_override=false`). It does not approve old/future classes, new teachers, or the pilot automatically. Review this bootstrap inventory before applying it.
 4. Identify the actual teacher's confirmed `auth.users` identity. They can complete the existing email/OTP login once to establish it; an approval notice before owner setup is expected. Do not create a fake teacher, student, password or email binding. Use a teacher-only identity, not an admin account.
 5. Save any existing rows in `teacher_academic_scopes` for that teacher. Edit the **one email declaration** in `docs/sql/teacher_pilot_owner_setup.sql` and run it as owner. Guards require the reviewed global semester 5 state, the exact existing empty A/B/C UUIDs, a confirmed non-student/non-admin identity and a Semester 3 catalog. A guard failure requires owner review, not bypassing it.
@@ -146,6 +165,7 @@ The database migrations and pilot scope are now configured. The pilot is **not r
 - `docs/sql/teacher_pilot_owner_setup.sql`
 - `docs/sql/teacher_pilot_preflight.sql`
 - `docs/sql/teacher_pilot_rollback.sql`
+- `docs/sql/teacher_pilot_self_selection_rollback.sql`
 - `docs/sql/teacher_pilot_validate.sql`
 - `eslint.config.js`
 - `graphify-out/.graphify_labels.json.sig`
@@ -162,6 +182,7 @@ The database migrations and pilot scope are now configured. The pilot is **not r
 - `src/data/migrations/0058_reconcile_verified_identity_security.sql`
 - `src/data/migrations/0059_teacher_scope_atomic_writes.sql`
 - `src/data/migrations/0060_verified_quiz_section_access.sql`
+- `src/data/migrations/0061_restore_teacher_self_selection.sql`
 - `src/domain/shared/messages.ts`
 - `src/features/onboarding/api/onboarding.atomic.test.ts`
 - `src/features/onboarding/api/onboarding.ts`

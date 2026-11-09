@@ -35,7 +35,7 @@ export function useOnboardingData(currentSession: AcademicSession | null): Onboa
     (async () => {
       const liveBatches = await fetchLiveBatches();
       if (!isLocalDemoMode() && liveBatches.length === 0) {
-        throw new Error('No approved academic scope is configured. Ask the project owner to approve your batch, semester and sections.');
+        throw new Error('No available teaching classes were found. Check your teacher approval and the configured current-semester sections.');
       }
       const sessionBatches = currentSession === null
         ? liveBatches

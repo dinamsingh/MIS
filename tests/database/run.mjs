@@ -37,7 +37,11 @@ try {
   const ownerSetup = readFileSync(path.join(root, 'docs/sql/teacher_pilot_owner_setup.sql'), 'utf8');
   const ownerBlock = ownerSetup.slice(ownerSetup.indexOf('do $$'), ownerSetup.lastIndexOf('$$;') + 3)
     .replace("v_email text := 'REPLACE_WITH_VERIFIED_TEACHER_EMAIL';", "v_email text := 'teacher@pilot.test';");
+  const functionChanges = filename => readFileSync(path.join(root, filename), 'utf8')
+    .replace(/^begin;\r?$/m, '').replace(/^commit;\r?$/m, '');
   const testSql = readFileSync(path.join(root, 'tests/database/teacher-pilot.sql'), 'utf8')
+    .replace('-- SELF_SELECTION_ROLLBACK_TEST', () => functionChanges('docs/sql/teacher_pilot_self_selection_rollback.sql'))
+    .replace('-- SELF_SELECTION_REAPPLY_TEST', () => functionChanges('src/data/migrations/0061_restore_teacher_self_selection.sql'))
     .replace('-- OWNER_SETUP_TEST', () => ownerBlock)
     .replace('-- OWNER_ROLLBACK_TEST', () => {
       const rollback = readFileSync(path.join(root, 'docs/sql/teacher_pilot_rollback.sql'), 'utf8');

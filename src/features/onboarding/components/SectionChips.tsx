@@ -32,7 +32,7 @@ export default function SectionChips({ selected, onChange, idPrefix, allowedSect
             id={idPrefix ? `${idPrefix}-${section}` : undefined}
             aria-pressed={active}
             disabled={!allowedSections.includes(section)}
-            title={!allowedSections.includes(section) ? 'This section has not been approved by the project owner.' : undefined}
+            title={!allowedSections.includes(section) ? 'This section is not available for this batch and semester.' : undefined}
             onClick={() => toggle(section)}
             className={[
               'h-8 w-8 rounded-full text-sm font-semibold transition-[border-color,background-color,color,box-shadow] duration-fast disabled:opacity-40 disabled:cursor-not-allowed',

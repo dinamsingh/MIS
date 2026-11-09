@@ -1,16 +1,16 @@
-# Graph Report - MIS-teacher-pilot-2025-29  (2026-11-08)
+# Graph Report - MIS-teacher-pilot-2025-29  (2026-11-09)
 
 ## Corpus Check
-- 422 files · ~609,593 words
+- 424 files · ~613,737 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 4607 nodes · 8100 edges · 378 communities (237 shown, 95 thin omitted)
+- 4629 nodes · 8128 edges · 381 communities (241 shown, 93 thin omitted)
 - Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 460 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `92266342`
+- Built from commit: `ad7c7a84`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -32,35 +32,35 @@
 - timetableAccess.ts
 - teachingHistoryAccess.ts
 - handleOperation
-- @supabase/supabase-js
+- vitest
 - push
 - quizAccess.ts
 - handleOperation
-- decode
+- inputGuard.ts
 - decode
 - App.tsx
 - RequireTeacher.test.tsx
 - localDemoMode.ts
 - fileStorage.ts
-- OnboardingPage.tsx
+- react-router-dom
 - attendanceAccess.ts
 - rows.ts
 - onboarding.ts
 - attendanceService.ts
 - QuizCreationView.tsx
 - Result
-- result.ts
+- marksAccess.ts
 - AdminConsoleBoundaries.test.tsx
 - syllabusAccess.ts
 - onboarding/types.ts
 - FULL_SETUP.sql
-- inputGuard.ts
+- decode
 - DashboardWidgets.tsx
 - views/index.ts
 - compilerOptions
-- adminRosterImportAccess.test.ts
-- cx
 - rosterService.ts
+- cx
+- AttendanceAccess
 - data-display.tsx
 - SubmissionStatus
 - 0001_init_schema.sql
@@ -85,19 +85,19 @@
 - quickAttendance.ts
 - subjectOptions.ts
 - _debug
-- adminTeacherAccess.ts
+- AdminTeacherAccess
 - ProfilePage.tsx
 - Phase 4 — Timetable Overhaul (College-Accurate Scheduling)
 - navigation.tsx
 - tables.tsx
 - motion.ts
-- vitest
+- 0049_periods_catalog.test.ts
 - demoNumber
-- TeacherSignInView
-- AnalyticsView.tsx
-- 📋 PROJECT HANDOFF & CONTEXT — Teacher Academic MIS
+- TeacherSignInView.tsx
+- AnalyticsDataProvider
+- 0. Quick Status (READ THIS FIRST)
 - 0040_quiz_multi_section_assignment.sql
-- fetchLiveBatches
+- DashboardPage.tsx
 - MaterialView.tsx
 - 0043_admin_role.sql
 - ReportModeView.tsx
@@ -107,11 +107,11 @@
 - dependencies
 - 0027_teacher_student_separation.sql
 - AiQuizGeneratorPage.tsx
-- Stepper.tsx
+- OnboardingPage.tsx
 - readAssignmentStore
 - writeDemoValue
 - AdminRosterImportPage.tsx
-- AttendancePage.tsx
+- Teacher pilot: CSE / 2025-29 / Semester 3
 - __awaiter
 - then
 - readDemoValue
@@ -126,7 +126,7 @@
 - build_audit_pdf.py
 - 0044_teacher_extra_powers.sql
 - 0034_quiz_edit_and_unbind.sql
-- SelectedSectionContext.tsx
+- 📋 PROJECT HANDOFF & CONTEXT — Teacher Academic MIS
 - AdminSyllabusUploadPage.tsx
 - StudentQuizAccessView
 - TeachingHistoryView.tsx
@@ -249,7 +249,7 @@
 - 0060_verified_quiz_section_access.sql
 - Production Performance Optimization (Step 15) Report
 - Phase 4 — Timetable Overhaul
-- AttendanceAccess
+- AdminSessionCreationPage.tsx
 - Component Standards
 - Production Supabase Setup Checklist
 - DESIGN.md
@@ -281,7 +281,7 @@
 - graphify reference: extra exports and benchmark
 - Admin Console & Scheduling Upgrade — Design
 - Ponytail — Lazy Senior Developer Mode
-- toSavedQuiz
+- public.can_teach_scope
 - Premium Teacher Dashboard — Implementation Report (Step 11)
 - Premium Motion System (Step 14) Report
 - Student Module Redesign (Step 7) Report
@@ -295,8 +295,7 @@
 - Bug Analysis
 - Testing Strategy
 - Caveman — Ultra-Compressed Communication Mode
-- QuizAttemptView.tsx
-- teacher-pilot.sql
+- 11. Multi-Teacher Model & Syllabus Tracker (2026-07-05 session)
 - graphify reference: query, path, explain
 - public.enforce_teacher_eligibility
 - graphify reference: query, path, explain
@@ -327,7 +326,7 @@
 - graphify reference: add a URL and watch a folder
 - graphify reference: commit hook and native CLAUDE.md integration
 - graphify reference: incremental update and cluster-only
-- whatsappShare.ts
+- public.can_teach_scope
 - run.mjs
 - .agents/AGENTS.md
 - graphify reference: GitHub clone and cross-repo merge
@@ -346,7 +345,10 @@
 - .claude/skills/graphify/references/extraction-spec.md
 - .codex/skills/graphify/references/extraction-spec.md
 - .kiro/skills/graphify/references/extraction-spec.md
-- SubmitAttemptOutcome
+- SelectedSectionContext.tsx
+- sectionLabel.ts
+- 4. Environment & Deployment (CRITICAL — read before deploying)
+- 10. Update Protocol (keep this file alive)
 
 ## God Nodes (most connected - your core abstractions)
 1. `react` - 82 edges
@@ -375,7 +377,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (378 total, 95 thin omitted)
+## Communities (381 total, 93 thin omitted)
 
 ### Community 0 - "functionsWorker-0.4121441139779921.mjs"
 Cohesion: 0.02
@@ -406,8 +408,8 @@ Cohesion: 0.06
 Nodes (60): _cancelPendingDisconnect(), canPush(), catch(), clearHeartbeats(), connect(), connectionState(), disconnect(), filterBindings() (+52 more)
 
 ### Community 7 - "react"
-Cohesion: 0.05
-Nodes (23): react, react-router-dom, RequireAdminProps, BatchRow, PromoteResult, analyticsAccess, createLocalHeatmap(), HeatmapPage() (+15 more)
+Cohesion: 0.04
+Nodes (30): react, ANONYMOUS, stubAuthService, BatchRow, PromoteResult, analyticsAccess, AttendancePage(), dateToDayOfWeek() (+22 more)
 
 ### Community 8 - "push"
 Cohesion: 0.06
@@ -435,7 +437,7 @@ Nodes (35): catch(), createFetchApi(), createNamespace(), createNamespaceIfNotEx
 
 ### Community 14 - "timetableAccess.ts"
 Cohesion: 0.07
-Nodes (31): fetchMySchedule(), formatScheduleCellLabel(), MAX_SUBJECT_NAME_LENGTH, MyScheduleCell, requireTeacherId(), resolveSectionId(), SectionRow, SyllabusSubjectRow (+23 more)
+Nodes (30): fetchMySchedule(), formatScheduleCellLabel(), MAX_SUBJECT_NAME_LENGTH, MyScheduleCell, requireTeacherId(), resolveSectionId(), SectionRow, SyllabusSubjectRow (+22 more)
 
 ### Community 15 - "teachingHistoryAccess.ts"
 Cohesion: 0.12
@@ -445,25 +447,25 @@ Nodes (19): aggregateCounts(), BatchRow, createTeachingHistoryAccess(), loadHist
 Cohesion: 0.08
 Nodes (40): applyTransformOptsToQuery(), copy(), createBucket(), createIndex(), createSignedUploadUrl(), createSignedUrl(), createSignedUrls(), deleteBucket() (+32 more)
 
-### Community 17 - "@supabase/supabase-js"
-Cohesion: 0.08
-Nodes (23): @supabase/supabase-js, AdminSessionAccess, CreateSessionInput, CreateSessionResult, AssignmentInput, InsertedId, SlotRow, SlotSubmissionRow (+15 more)
+### Community 17 - "vitest"
+Cohesion: 0.07
+Nodes (26): @supabase/supabase-js, vitest, AdminSessionAccess, CreateSessionInput, CreateSessionResult, AdminTeacherRow, AllowedTeacherEmailDbRow, AllowedTeacherEmailRow (+18 more)
 
 ### Community 18 - "push"
 Cohesion: 0.11
 Nodes (31): asRecord(), asRecord2(), cancelRefEvent(), cancelTimeout(), cleanName(), connectWithFallback(), destroy(), getDefaultPropagationTargets() (+23 more)
 
 ### Community 19 - "quizAccess.ts"
-Cohesion: 0.09
-Nodes (24): asRecord(), AttemptSummary, InsertedId, QuestionInput, QuizAttemptCountRow, QuizAttemptDetail, QuizAttemptDetailQuestion, QuizAttemptRow (+16 more)
+Cohesion: 0.07
+Nodes (37): asRecord(), AttemptSummary, createQuizAccess(), deriveQuizStatus(), firstJoin(), InsertedId, numericValue(), QuestionInput (+29 more)
 
 ### Community 20 - "handleOperation"
 Cohesion: 0.07
 Nodes (44): applyTransformOptsToQuery(), copy(), createBucket(), createIndex(), createSignedUploadUrl(), createSignedUrl(), createSignedUrls(), deleteBucket() (+36 more)
 
-### Community 21 - "decode"
-Cohesion: 0.16
-Nodes (17): _binaryDecode(), binaryEncode(), _binaryEncodeUserBroadcastPush(), decode(), decodeBroadcast(), decodePush(), decodeReply(), _decodeUserBroadcast() (+9 more)
+### Community 21 - "inputGuard.ts"
+Cohesion: 0.14
+Nodes (16): boolean(), enumValue(), Infer, InferObject, number(), NumberSchemaOptions, object(), ObjectShape (+8 more)
 
 ### Community 22 - "decode"
 Cohesion: 0.07
@@ -474,36 +476,36 @@ Cohesion: 0.03
 Nodes (30): AdminBatchPromotionPage, AdminDashboardPage, AdminExtraPowersPage, AdminManageAdminsPage, AdminRosterImportPage, AdminSessionCreationPage, AdminSyllabusUploadPage, AdminTeacherApprovalPage (+22 more)
 
 ### Community 24 - "RequireTeacher.test.tsx"
-Cohesion: 0.09
-Nodes (19): ANONYMOUS, AuthContext, AuthContextValue, AuthProvider(), AuthProviderProps, useAuth(), RequireTeacher(), RequireTeacherProps (+11 more)
+Cohesion: 0.08
+Nodes (20): ANONYMOUS, AuthContext, AuthContextValue, AuthProvider(), AuthProviderProps, useAuth(), RequireAdminProps, RequireTeacher() (+12 more)
 
 ### Community 25 - "localDemoMode.ts"
 Cohesion: 0.06
 Nodes (26): aggregateDemoOverall(), DEMO_DAYS, DEMO_OFF, DEMO_ON, DEMO_SLOTS, DemoAssignmentItem, DemoAssignmentStore, DemoAttendanceStore (+18 more)
 
 ### Community 26 - "fileStorage.ts"
-Cohesion: 0.10
-Nodes (30): CLOUDINARY_CLOUD_NAME_ENV, CLOUDINARY_UPLOAD_PRESET_ENV, CloudinaryConfig, CloudinaryConfigError, DEFAULT_SIGNED_URL_TTL_SECONDS, readCloudinaryConfig(), readNonEmpty(), SUPABASE_PRIVATE_BUCKET (+22 more)
+Cohesion: 0.09
+Nodes (43): CLOUDINARY_CLOUD_NAME_ENV, CLOUDINARY_UPLOAD_PRESET_ENV, CloudinaryConfig, CloudinaryConfigError, DEFAULT_SIGNED_URL_TTL_SECONDS, readCloudinaryConfig(), readNonEmpty(), SUPABASE_PRIVATE_BUCKET (+35 more)
 
-### Community 27 - "OnboardingPage.tsx"
-Cohesion: 0.16
-Nodes (17): setTeacherPassword(), OnboardingData, useOnboardingData(), StaleAssignmentNotice, EMPTY_PROFILE, OnboardingPage(), currentProfile, saveOnboarding (+9 more)
+### Community 27 - "react-router-dom"
+Cohesion: 0.17
+Nodes (6): react-router-dom, currentProfile, saveOnboarding, setTeacherPassword, DemoStudentLite, supabaseQuizAccess
 
 ### Community 28 - "attendanceAccess.ts"
-Cohesion: 0.11
+Cohesion: 0.10
 Nodes (28): aggregateOverallRows(), aggregateStatusRangeRows(), AttendanceMarkedDatesScope, AttendanceMarkedSlotsScope, AttendanceOverallMark, AttendanceOverallScope, AttendancePeriodMeta, AttendanceRangeReport (+20 more)
 
 ### Community 29 - "rows.ts"
-Cohesion: 0.13
-Nodes (19): InsertedId, MarkComponentInput, SaveMarkValuesResult, fromRosterEntry(), MarkComponentRow, MarkValueRow, Section, SectionRow (+11 more)
+Cohesion: 0.17
+Nodes (17): fromAttendanceMark(), fromRosterEntry(), Section, SectionRow, toAttendanceMark(), toAttendanceStatusMark(), toLeaderboardWeights(), toMarkComponent() (+9 more)
 
 ### Community 30 - "onboarding.ts"
-Cohesion: 0.08
-Nodes (35): assignmentsToSelection(), profile, { rpc }, BatchRow, dedupeSubjects(), DEMO_STORAGE_KEY, demoSubjectId(), deriveBatchesForSession() (+27 more)
+Cohesion: 0.11
+Nodes (31): assignmentsToSelection(), profile, { rpc }, BatchRow, dedupeSubjects(), demoSubjectId(), deriveSections(), EMPTY_RECORD (+23 more)
 
 ### Community 31 - "attendanceService.ts"
-Cohesion: 0.09
-Nodes (17): AttendanceHeatRow, createHeatmapAccess(), loadRows(), HeatmapAccess, AttendanceRow, aggregateRangeTallies(), AttendanceCounts, AttendanceMark (+9 more)
+Cohesion: 0.10
+Nodes (16): AttendanceHeatRow, createHeatmapAccess(), loadRows(), HeatmapAccess, AttendanceRow, AttendanceCounts, AttendanceMark, AttendanceService (+8 more)
 
 ### Community 32 - "QuizCreationView.tsx"
 Cohesion: 0.09
@@ -513,9 +515,9 @@ Nodes (21): ConfirmDialogState, DEFAULT_QUESTION_MARKS, DEFAULT_TIME_LIMIT_MINUT
 Cohesion: 0.13
 Nodes (12): actorFromSession(), ActorResolutionConfig, authService, GoogleSignInOptions, isTeacherUser(), LoginIntent, studentName(), TEACHER_EMAIL_ENV (+4 more)
 
-### Community 34 - "result.ts"
-Cohesion: 0.14
-Nodes (18): MarksAccess, recordFile(), uploadToCloudinary(), FeatureFlag, featureFlags, isFeatureEnabled(), parseBooleanFlag(), computeInternalMarks() (+10 more)
+### Community 34 - "marksAccess.ts"
+Cohesion: 0.16
+Nodes (10): InsertedId, MarkComponentInput, MarksAccess, SaveMarkValuesResult, MarkComponentRow, MarkValueRow, computeInternalMarks(), MarkComponent (+2 more)
 
 ### Community 35 - "AdminConsoleBoundaries.test.tsx"
 Cohesion: 0.09
@@ -523,47 +525,47 @@ Nodes (19): ADMIN_ACTOR, TABLE_DATA, AdminExtraPowersPage(), ExtraPowerRow, Pend
 
 ### Community 36 - "syllabusAccess.ts"
 Cohesion: 0.11
-Nodes (14): UnitRow, InsertedId, SyllabusAccess, TopicInput, UnitInput, unitProgress(), SyllabusTrackerAccess, TopicRow (+6 more)
+Nodes (13): UnitRow, InsertedId, SyllabusAccess, TopicInput, UnitInput, unitProgress(), SyllabusTrackerAccess, TopicRow (+5 more)
 
 ### Community 37 - "onboarding/types.ts"
-Cohesion: 0.14
-Nodes (26): ElectiveGroupRow(), ElectiveGroupRowProps, SectionChips(), SectionChipsProps, groupElectives(), ROMAN, SemAccordion(), SemAccordionProps (+18 more)
+Cohesion: 0.16
+Nodes (21): DEMO_STORAGE_KEY, batches, subjects, ElectiveGroupRow(), ElectiveGroupRowProps, SectionChips(), SectionChipsProps, ROMAN (+13 more)
 
 ### Community 38 - "FULL_SETUP.sql"
 Cohesion: 0.15
 Nodes (21): public.assignment_submissions, public.assignments, public.attendance, public.audit_log, public.files, public.lab_manual_submissions, public.leaderboard_config, public.mark_components (+13 more)
 
-### Community 39 - "inputGuard.ts"
-Cohesion: 0.14
-Nodes (16): boolean(), enumValue(), Infer, InferObject, number(), NumberSchemaOptions, object(), ObjectShape (+8 more)
+### Community 39 - "decode"
+Cohesion: 0.16
+Nodes (17): _binaryDecode(), binaryEncode(), _binaryEncodeUserBroadcastPush(), decode(), decodeBroadcast(), decodePush(), decodeReply(), _decodeUserBroadcast() (+9 more)
 
 ### Community 40 - "DashboardWidgets.tsx"
 Cohesion: 0.09
 Nodes (21): AttendanceSVGChart, ChartType, ActivityItem, CalendarWidget, DashboardEmptyState, DashboardStatCard, DashboardStatCardProps, EmptyStateProps (+13 more)
 
 ### Community 41 - "views/index.ts"
-Cohesion: 0.11
-Nodes (15): LockedFeatureViewProps, DAY_INDEX_MAP, DAYS, MyScheduleViewProps, Teacher, TeacherManagementViewProps, DAY_INDEX_MAP, DAYS (+7 more)
+Cohesion: 0.09
+Nodes (18): AnalyticsStudent, AnalyticsViewProps, GradeDistributionChart(), LockedFeatureViewProps, DAY_INDEX_MAP, DAYS, MyScheduleViewProps, Teacher (+10 more)
 
 ### Community 42 - "compilerOptions"
 Cohesion: 0.08
 Nodes (24): compilerOptions, allowImportingTsExtensions, baseUrl, isolatedModules, jsx, lib, module, moduleDetection (+16 more)
 
-### Community 43 - "adminRosterImportAccess.test.ts"
-Cohesion: 0.10
-Nodes (22): addSingleStudent(), AdminRosterImportResult, parseAdminRosterCsv(), acceptedRowsArb, enrollmentFieldArb, identifierArb, invalidEnrollmentArb, optionalFieldArb (+14 more)
+### Community 43 - "rosterService.ts"
+Cohesion: 0.07
+Nodes (40): addSingleStudent(), AdminRosterImportResult, parseAdminRosterCsv(), acceptedRowsArb, enrollmentFieldArb, identifierArb, invalidEnrollmentArb, optionalFieldArb (+32 more)
 
 ### Community 44 - "cx"
 Cohesion: 0.13
 Nodes (23): Checkbox, ChoiceProps, DatePicker, FieldChrome(), FieldChromeProps, FileUpload(), FileUploadProps, Input (+15 more)
 
-### Community 45 - "rosterService.ts"
-Cohesion: 0.17
-Nodes (15): RosterAccess, AttemptResult, createRosterService(), ENROLLMENT_NUMBER_INVALID_CODE, findRosterEntry(), isValidEnrollmentNumber(), QuizAccess, QuizAccessContext (+7 more)
+### Community 45 - "AttendanceAccess"
+Cohesion: 0.18
+Nodes (5): AttendanceAccess, AttendanceOverallRow, LocalStatusStore, AttendanceStatusMark, PeriodKey
 
 ### Community 46 - "data-display.tsx"
-Cohesion: 0.10
-Nodes (23): Avatar(), AvatarProps, Badge(), BadgeProps, EmptyStateProps, errorStateCopy, ErrorStateKind, ErrorStateProps (+15 more)
+Cohesion: 0.11
+Nodes (22): Avatar(), AvatarProps, Badge(), BadgeProps, EmptyStateProps, errorStateCopy, ErrorStateKind, ErrorStateProps (+14 more)
 
 ### Community 47 - "SubmissionStatus"
 Cohesion: 0.14
@@ -577,9 +579,13 @@ Nodes (21): public.assignment_submissions, public.assignments, public.attendance
 Cohesion: 0.10
 Nodes (19): name, private, type, version, autoprefixer, eslint, @eslint/js, eslint-plugin-react-hooks (+11 more)
 
+### Community 50 - "QuizAccessRepository"
+Cohesion: 0.09
+Nodes (3): SubmitAttemptOutcome, QuizAccessRepository, QuizAttemptSessionInfo
+
 ### Community 51 - "leaderboardAccess.ts"
 Cohesion: 0.13
-Nodes (15): fast-check, ConfigIdRow, createLeaderboardAccess(), loadConfig(), readConfigRow(), DEFAULT_CONFIG, LeaderboardAccess, LeaderboardConfig (+7 more)
+Nodes (14): fast-check, ConfigIdRow, createLeaderboardAccess(), loadConfig(), readConfigRow(), DEFAULT_CONFIG, LeaderboardAccess, LeaderboardConfig (+6 more)
 
 ### Community 52 - "App.routing.test.tsx"
 Cohesion: 0.13
@@ -594,12 +600,12 @@ Cohesion: 0.18
 Nodes (5): CardGridSkeletonProps, FormSkeletonProps, SkeletonPulse(), SkeletonPulseProps, TableSkeletonProps
 
 ### Community 55 - "foundation.tsx"
-Cohesion: 0.12
-Nodes (18): Alert(), Toast(), Button, buttonSizeClass, ButtonVariant, buttonVariantClass, Card(), CardContent() (+10 more)
+Cohesion: 0.14
+Nodes (15): Alert(), Toast(), buttonSizeClass, ButtonVariant, buttonVariantClass, CardContent(), CardFooter(), CardProps (+7 more)
 
 ### Community 56 - "StudentQuizAccessView.tsx"
-Cohesion: 0.16
-Nodes (9): OtpInput(), OtpInputProps, ThemeToggle(), DENIED_COPY, LoadQuizRosterOptions, Phase, QuizMeta, ResolveQuizAccess (+1 more)
+Cohesion: 0.12
+Nodes (14): OtpInput(), OtpInputProps, GetQuizReviewFn, QuizAttemptView(), QuizAttemptViewProps, SubmitAttemptFn, useLocalStorage(), ViewPhase (+6 more)
 
 ### Community 57 - "overlays.tsx"
 Cohesion: 0.19
@@ -614,8 +620,8 @@ Cohesion: 0.16
 Nodes (11): AssignmentGridAccess, AssignmentGridView(), AssignmentGridViewProps, buildCsv(), downloadCsv(), getInitials(), GridSlot, GridStudent (+3 more)
 
 ### Community 60 - "parsers.ts"
-Cohesion: 0.22
-Nodes (15): asRecord(), parseAttemptResult(), parseAttemptSession(), parseQuizAccess(), parseQuizDeniedReason(), parseQuizPayload(), parseStartAttemptOutcome(), parseSubmitDeniedReason() (+7 more)
+Cohesion: 0.27
+Nodes (14): asRecord(), parseAttemptResult(), parseAttemptSession(), parseQuizAccess(), parseQuizDeniedReason(), parseQuizPayload(), parseStartAttemptOutcome(), parseSubmitDeniedReason() (+6 more)
 
 ### Community 61 - "devDependencies"
 Cohesion: 0.10
@@ -630,8 +636,8 @@ Cohesion: 0.12
 Nodes (16): compilerOptions, allowImportingTsExtensions, isolatedModules, lib, module, moduleDetection, moduleResolution, noEmit (+8 more)
 
 ### Community 64 - "supabase/index.ts"
-Cohesion: 0.32
-Nodes (10): createSupabaseClient(), createSupabaseClientFromEnv(), describeConfigError(), EnvRecord, readNonEmpty(), readSupabaseConfig(), SUPABASE_ANON_KEY_ENV, SUPABASE_URL_ENV (+2 more)
+Cohesion: 0.30
+Nodes (11): createSupabaseClient(), createSupabaseClientFromEnv(), describeConfigError(), supabase, EnvRecord, readNonEmpty(), readSupabaseConfig(), SUPABASE_ANON_KEY_ENV (+3 more)
 
 ### Community 65 - "quizService.ts"
 Cohesion: 0.21
@@ -653,21 +659,17 @@ Nodes (14): MOCK_BATCHES, loadAssignedSyllabusSubjects(), loadSubjectNameMapForS
 Cohesion: 0.14
 Nodes (27): _autoRefreshTokenTick(), _callRefreshToken(), _debug(), dispose(), _handleVisibilityChange(), initialize(), insecureUserWarningProxy(), isAuthImplicitGrantRedirectError() (+19 more)
 
-### Community 70 - "adminTeacherAccess.ts"
-Cohesion: 0.14
-Nodes (7): AdminTeacherAccess, AdminTeacherRow, AllowedTeacherEmailDbRow, AllowedTeacherEmailRow, AllowlistRpcResult, CreateTeacherAccountResult, TeacherDbRow
-
 ### Community 71 - "ProfilePage.tsx"
-Cohesion: 0.23
-Nodes (12): buildAssignments(), fetchTeacherProfile(), profileFromUserMetadata(), saveOnboarding(), useProfileData(), EMPTY_PROFILE, ProfilePage(), summarize() (+4 more)
+Cohesion: 0.24
+Nodes (11): buildAssignments(), fetchTeacherProfile(), profileFromUserMetadata(), saveOnboarding(), EMPTY_PROFILE, ProfilePage(), summarize(), compactTeacherName() (+3 more)
 
 ### Community 72 - "Phase 4 — Timetable Overhaul (College-Accurate Scheduling)"
 Cohesion: 0.04
 Nodes (46): Acceptance Criteria, Acceptance Criteria, Acceptance Criteria, Acceptance Criteria, Acceptance Criteria, Acceptance Criteria, Acceptance Criteria, Acceptance Criteria (+38 more)
 
 ### Community 73 - "navigation.tsx"
-Cohesion: 0.18
-Nodes (10): Breadcrumb(), BreadcrumbItem, BreadcrumbProps, CommandMenu(), CommandMenuItem, CommandMenuProps, TabItem, Tabs() (+2 more)
+Cohesion: 0.14
+Nodes (10): ProgressIndicator(), Breadcrumb(), BreadcrumbItem, BreadcrumbProps, CommandMenu(), CommandMenuItem, CommandMenuProps, TabItem (+2 more)
 
 ### Community 74 - "tables.tsx"
 Cohesion: 0.16
@@ -677,29 +679,29 @@ Nodes (13): ErrorState(), LoadingSpinner(), buildPageList(), DataTableColumn, Fi
 Cohesion: 0.14
 Nodes (9): dialogMotion, menuMotion, MOTION_DISABLED_STORAGE_KEY, MOTION_PREFERENCE_EVENT, motionDurations, motionEase, motionEaseOut, overlayBackdropMotion (+1 more)
 
-### Community 76 - "vitest"
-Cohesion: 0.19
-Nodes (9): vitest, expectedRows, here, migrationSql, seedBlock, formatSectionLabel(), SectionLike, sectionShortLabel() (+1 more)
+### Community 76 - "0049_periods_catalog.test.ts"
+Cohesion: 0.33
+Nodes (4): expectedRows, here, migrationSql, seedBlock
 
 ### Community 77 - "demoNumber"
 Cohesion: 0.24
 Nodes (13): buildDemoAttendanceTrend(), buildDemoStudentMetrics(), clamp(), defaultMarksStore(), demoAttemptsForQuiz(), demoAttemptSubmittedAt(), demoInt(), demoInternalMarksForStudent() (+5 more)
 
-### Community 79 - "AnalyticsView.tsx"
-Cohesion: 0.22
-Nodes (5): AnalyticsDataProvider, AnalyticsStudent, AnalyticsView(), AnalyticsViewProps, GradeDistributionChart()
+### Community 78 - "TeacherSignInView.tsx"
+Cohesion: 0.17
+Nodes (6): Button, Card(), ThemeToggle(), Step, TeacherSignInView(), TeacherSignInViewProps
 
-### Community 80 - "📋 PROJECT HANDOFF & CONTEXT — Teacher Academic MIS"
-Cohesion: 0.04
-Nodes (44): Exact change inventory, Live evidence and boundaries, Owner review and setup (no operated admin console required), Rollback and remaining blockers, Teacher pilot: CSE / 2025-29 / Semester 3, Teacher workflow and acceptance checklist, Validation evidence, Verified findings and fixes (+36 more)
+### Community 80 - "0. Quick Status (READ THIS FIRST)"
+Cohesion: 0.15
+Nodes (13): 0. Quick Status (READ THIS FIRST), ⚠️ Action items the human still needs to do (run in Supabase SQL editor, in order), AI Quiz Generator setup (Gemini) — human action, Historical July 2026 context (superseded), Historical quiz registration issue, July 2026 resume point, Key files added/modified this session, ⚠️ Remaining manual steps (for the human) (+5 more)
 
 ### Community 81 - "0040_quiz_multi_section_assignment.sql"
 Cohesion: 0.29
 Nodes (11): public.list_teacher_sections_for_subject(), public.quiz_target_sections, public.request_quiz_access(), public.set_quiz_target_sections(), public.start_quiz_attempt(), public.questions, public.quizzes, public.sections (+3 more)
 
-### Community 82 - "fetchLiveBatches"
-Cohesion: 0.20
-Nodes (15): fetchAllBatches(), fetchLiveBatches(), toBatch(), formatBatchLabel(), StaleAssignmentBanner(), deriveAffectedBatches(), useStaleAssignmentNotice(), average() (+7 more)
+### Community 82 - "DashboardPage.tsx"
+Cohesion: 0.27
+Nodes (10): formatBatchLabel(), StaleAssignmentBanner(), average(), DashboardData, DashboardPage(), daysAgoIso(), EMPTY_DATA, fetchDashboardData() (+2 more)
 
 ### Community 83 - "MaterialView.tsx"
 Cohesion: 0.24
@@ -737,9 +739,9 @@ Nodes (8): public.enforce_teacher_eligibility, public.allowed_teacher_emails, pu
 Cohesion: 0.22
 Nodes (6): lucide-react, AiQuizGeneratorPage(), handleSave(), Phase, quizAccess, toIso()
 
-### Community 92 - "Stepper.tsx"
-Cohesion: 0.15
-Nodes (10): @testing-library/react, BASE_STEPS, PASSWORD_STEP, Stepper(), StepperProps, WizardStep, PasswordStep(), PasswordStepProps (+2 more)
+### Community 92 - "OnboardingPage.tsx"
+Cohesion: 0.10
+Nodes (31): @testing-library/react, deriveBatchesForSession(), setTeacherPassword(), groupElectives(), SemAccordion(), toRoman(), BASE_STEPS, PASSWORD_STEP (+23 more)
 
 ### Community 93 - "readAssignmentStore"
 Cohesion: 0.29
@@ -753,9 +755,9 @@ Nodes (10): createDemoId(), createDemoMaterial(), recordDemoRosterImport(), repl
 Cohesion: 0.20
 Nodes (7): AdminDashboardPage(), DashboardStats, fetchAdminStats(), rosterImportAccess, SectionOption, sectionsAccess, StudentRow
 
-### Community 96 - "AttendancePage.tsx"
-Cohesion: 0.27
-Nodes (9): AttendancePage(), dateToDayOfWeek(), DAY_INDEX_MAP, DEFAULT_TIME_SLOTS, ExtendedAttendanceTab, loadRoster(), periodToSlotString(), supabaseAttendance (+1 more)
+### Community 96 - "Teacher pilot: CSE / 2025-29 / Semester 3"
+Cohesion: 0.17
+Nodes (10): Exact change inventory, Follow-up: restore the original teacher self-selection workflow (0061 pending), Live evidence and boundaries, Live rollout status - 9 November 2026, Owner review and setup (no operated admin console required), Rollback and remaining blockers, Teacher pilot: CSE / 2025-29 / Semester 3, Teacher workflow and acceptance checklist (+2 more)
 
 ### Community 97 - "__awaiter"
 Cohesion: 0.44
@@ -813,9 +815,9 @@ Nodes (6): public.admins, public.grant_teacher_extra_power(), public.has_extra_p
 Cohesion: 0.29
 Nodes (7): public.unbind_student_enrollment(), public.update_quiz_question_texts(), public.update_quiz_with_questions(), public.quiz_attempts, public.quizzes, public.students, text
 
-### Community 111 - "SelectedSectionContext.tsx"
-Cohesion: 0.36
-Nodes (5): readSubjectMap(), SelectedSectionContext, SelectedSectionProvider(), SelectedSectionValue, writeSubjectChoice()
+### Community 111 - "📋 PROJECT HANDOFF & CONTEXT — Teacher Academic MIS"
+Cohesion: 0.20
+Nodes (10): 1. Project Overview, 2. Repository & Branch State, 3. Database Migrations & Seeds, 5. Features Built Beyond the Original Spec (this engagement), 6. Resume Here ▶️ (where work stopped), 7. Pending / TODO (besides the redesign), 8. Known Issues & Gotchas, 9. Common Commands (+2 more)
 
 ### Community 112 - "AdminSyllabusUploadPage.tsx"
 Cohesion: 0.29
@@ -1013,9 +1015,9 @@ Nodes (14): Animations, Bundle Improvements, Charts, Constraints Respected, Imag
 Cohesion: 0.13
 Nodes (15): Acceptance Criteria, Acceptance Criteria, Acceptance Criteria, Acceptance Criteria, Acceptance Criteria, Acceptance Criteria, Acceptance Criteria, Phase 4 — Timetable Overhaul (+7 more)
 
-### Community 273 - "AttendanceAccess"
-Cohesion: 0.18
-Nodes (5): AttendanceAccess, AttendanceOverallRow, LocalStatusStore, AttendanceStatusMark, PeriodKey
+### Community 273 - "AdminSessionCreationPage.tsx"
+Cohesion: 0.38
+Nodes (6): access, AdminSessionCreationPage(), deriveStartYear(), SEM_NUMBERS_BY_SESSION, SESSION_OPTIONS, subjectKindLabel()
 
 ### Community 274 - "Component Standards"
 Cohesion: 0.14
@@ -1141,9 +1143,9 @@ Nodes (8): Admin Console navigation, Admin Console & Scheduling Upgrade — Desi
 Cohesion: 0.22
 Nodes (8): Boundaries, Intensity, Output, Persistence, Ponytail — Lazy Senior Developer Mode, Rules, The ladder, When NOT to be lazy
 
-### Community 306 - "toSavedQuiz"
-Cohesion: 0.28
-Nodes (9): deriveQuizStatus(), firstJoin(), numericValue(), quizTotalMarks(), timestampOrNull(), toQuizSections(), toSavedQuiz(), toSectionResult() (+1 more)
+### Community 306 - "public.can_teach_scope"
+Cohesion: 0.31
+Nodes (8): public.can_teach_scope(), public.get_my_academic_batches(), public.save_teacher_onboarding(), public.allowed_teacher_emails, public.batches, public.sections, public.syllabus_subjects, public.teacher_academic_scopes
 
 ### Community 307 - "Premium Teacher Dashboard — Implementation Report (Step 11)"
 Cohesion: 0.25
@@ -1197,9 +1199,9 @@ Nodes (7): Example / Unit Tests, Integration Tests (external services — not PB
 Cohesion: 0.29
 Nodes (6): Auto-Clarity — drop caveman when:, Boundaries, Caveman — Ultra-Compressed Communication Mode, Intensity, Persistence, Rules
 
-### Community 320 - "QuizAttemptView.tsx"
-Cohesion: 0.33
-Nodes (6): GetQuizReviewFn, QuizAttemptView(), QuizAttemptViewProps, SubmitAttemptFn, useLocalStorage(), ViewPhase
+### Community 320 - "11. Multi-Teacher Model & Syllabus Tracker (2026-07-05 session)"
+Cohesion: 0.25
+Nodes (8): 11. Multi-Teacher Model & Syllabus Tracker (2026-07-05 session), Data sharing model (confirmed with product owner), Electives in onboarding (2026-07-06, migration 0021), Identity (who is a "teacher"), Known follow-ups, Syllabus Tracker (how it works), Two subject systems (IMPORTANT gotcha), Unification (2026-07-05, migration 0019)
 
 ### Community 322 - "graphify reference: query, path, explain"
 Cohesion: 0.33
@@ -1317,33 +1319,49 @@ Nodes (3): For git commit hook, For native CLAUDE.md integration, graphify refer
 Cohesion: 0.50
 Nodes (3): For --cluster-only, For --update (incremental re-extraction), graphify reference: incremental update and cluster-only
 
-### Community 352 - "whatsappShare.ts"
-Cohesion: 0.67
-Nodes (3): SavedQuizSummary, buildQuizWhatsAppLink(), formatDeadline()
+### Community 352 - "public.can_teach_scope"
+Cohesion: 0.36
+Nodes (8): public.can_teach_scope(), public.get_my_academic_batches(), public.save_teacher_onboarding(), public.allowed_teacher_emails, public.batches, public.sections, public.syllabus_subjects, public.teacher_academic_scopes
 
 ### Community 353 - "run.mjs"
 Cohesion: 0.67
 Nodes (3): docker(), root, sqlFile()
 
+### Community 371 - "SelectedSectionContext.tsx"
+Cohesion: 0.36
+Nodes (5): readSubjectMap(), SelectedSectionContext, SelectedSectionProvider(), SelectedSectionValue, writeSubjectChoice()
+
+### Community 378 - "sectionLabel.ts"
+Cohesion: 0.53
+Nodes (4): formatSectionLabel(), SectionLike, sectionShortLabel(), semesterShortLabel()
+
+### Community 379 - "4. Environment & Deployment (CRITICAL — read before deploying)"
+Cohesion: 0.40
+Nodes (5): 4. Environment & Deployment (CRITICAL — read before deploying), 🟢 Cloudflare git-build env — RESOLVED (2026-06-30), Deploy methods (both work now), How to VERIFY a deploy has correct env (not placeholder), Required env vars (Vite inlines `VITE_*` at BUILD time)
+
+### Community 380 - "10. Update Protocol (keep this file alive)"
+Cohesion: 0.67
+Nodes (3): 10. Update Protocol (keep this file alive), Convention: specific error messages, not generic ones (added 2026-07-06), Work Log (newest first)
+
 ## Knowledge Gaps
-- **1397 isolated node(s):** `__INTERNAL_WRANGLER_MIDDLEWARE__`, `__INTERNAL_WRANGLER_MIDDLEWARE__`, `RFC-6749`, `routes`, `RFC-6749` (+1392 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2122 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **95 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **1400 isolated node(s):** `__INTERNAL_WRANGLER_MIDDLEWARE__`, `__INTERNAL_WRANGLER_MIDDLEWARE__`, `RFC-6749`, `routes`, `RFC-6749` (+1395 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2129 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **93 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `vitest` connect `vitest` to `quizGenerationService.ts`, `timetableAccess.ts`, `teachingHistoryAccess.ts`, `@supabase/supabase-js`, `admin-create-teacher.ts`, `RequireTeacher.test.tsx`, `fileStorage.ts`, `OnboardingPage.tsx`, `rows.ts`, `onboarding.ts`, `attendanceService.ts`, `result.ts`, `AdminConsoleBoundaries.test.tsx`, `syllabusAccess.ts`, `inputGuard.ts`, `adminRosterImportAccess.test.ts`, `rosterService.ts`, `SubmissionStatus`, `package.json`, `leaderboardAccess.ts`, `App.routing.test.tsx`, `analyticsAccess.ts`, `parsers.ts`, `supabase/index.ts`, `quizService.ts`, `quickAttendance.ts`, `subjectOptions.ts`, `Stepper.tsx`?**
-  _High betweenness centrality (0.183) - this node is a cross-community bridge._
-- **Why does `topic()` connect `constructor` to `constructor`, `syllabusAccess.ts`, `decode`, `decode`?**
-  _High betweenness centrality (0.146) - this node is a cross-community bridge._
-- **Why does `react` connect `react` to `AttendanceView.tsx`, `GlobalCommandCenter.tsx`, `App.tsx`, `RequireTeacher.test.tsx`, `OnboardingPage.tsx`, `onboarding.ts`, `QuizCreationView.tsx`, `AdminConsoleBoundaries.test.tsx`, `onboarding/types.ts`, `DashboardWidgets.tsx`, `views/index.ts`, `cx`, `data-display.tsx`, `package.json`, `foundation.tsx`, `StudentQuizAccessView.tsx`, `overlays.tsx`, `AssignmentSharePage.tsx`, `AssignmentView.tsx`, `QuizAttemptView.tsx`, `DashboardView.tsx`, `ProfilePage.tsx`, `navigation.tsx`, `tables.tsx`, `AnalyticsView.tsx`, `fetchLiveBatches`, `main.tsx`, `MaterialView.tsx`, `ReportModeView.tsx`, `AssignmentPage.tsx`, `HeatmapView.tsx`, `MarksCalculatorView.tsx`, `AiQuizGeneratorPage.tsx`, `Stepper.tsx`, `AdminRosterImportPage.tsx`, `AttendancePage.tsx`, `charts.tsx`, `useDataCache.ts`, `LeaderboardView.tsx`, `SyllabusTrackerView.tsx`, `SelectedSectionContext.tsx`, `AdminSyllabusUploadPage.tsx`, `TeachingHistoryView.tsx`, `SelectDateView.tsx`?**
-  _High betweenness centrality (0.135) - this node is a cross-community bridge._
+- **Why does `vitest` connect `vitest` to `react`, `quizGenerationService.ts`, `timetableAccess.ts`, `teachingHistoryAccess.ts`, `inputGuard.ts`, `admin-create-teacher.ts`, `RequireTeacher.test.tsx`, `fileStorage.ts`, `react-router-dom`, `attendanceAccess.ts`, `rows.ts`, `onboarding.ts`, `attendanceService.ts`, `marksAccess.ts`, `AdminConsoleBoundaries.test.tsx`, `syllabusAccess.ts`, `onboarding/types.ts`, `rosterService.ts`, `SubmissionStatus`, `package.json`, `leaderboardAccess.ts`, `App.routing.test.tsx`, `analyticsAccess.ts`, `parsers.ts`, `supabase/index.ts`, `quizService.ts`, `quickAttendance.ts`, `subjectOptions.ts`, `0049_periods_catalog.test.ts`, `OnboardingPage.tsx`, `sectionLabel.ts`?**
+  _High betweenness centrality (0.181) - this node is a cross-community bridge._
+- **Why does `topic()` connect `constructor` to `syllabusAccess.ts`, `constructor`, `decode`, `decode`?**
+  _High betweenness centrality (0.141) - this node is a cross-community bridge._
+- **Why does `react` connect `react` to `AttendanceView.tsx`, `GlobalCommandCenter.tsx`, `AdminSessionCreationPage.tsx`, `App.tsx`, `RequireTeacher.test.tsx`, `react-router-dom`, `onboarding.ts`, `QuizCreationView.tsx`, `AdminConsoleBoundaries.test.tsx`, `onboarding/types.ts`, `DashboardWidgets.tsx`, `views/index.ts`, `cx`, `data-display.tsx`, `package.json`, `foundation.tsx`, `StudentQuizAccessView.tsx`, `overlays.tsx`, `AssignmentSharePage.tsx`, `AssignmentView.tsx`, `DashboardView.tsx`, `ProfilePage.tsx`, `navigation.tsx`, `tables.tsx`, `TeacherSignInView.tsx`, `main.tsx`, `DashboardPage.tsx`, `MaterialView.tsx`, `ReportModeView.tsx`, `AssignmentPage.tsx`, `HeatmapView.tsx`, `MarksCalculatorView.tsx`, `AiQuizGeneratorPage.tsx`, `OnboardingPage.tsx`, `AdminRosterImportPage.tsx`, `charts.tsx`, `useDataCache.ts`, `LeaderboardView.tsx`, `SyllabusTrackerView.tsx`, `AdminSyllabusUploadPage.tsx`, `TeachingHistoryView.tsx`, `SelectedSectionContext.tsx`, `SelectDateView.tsx`?**
+  _High betweenness centrality (0.132) - this node is a cross-community bridge._
 - **Are the 3 inferred relationships involving `constructor()` (e.g. with `topic()` and `endPoint()`) actually correct?**
   _`constructor()` has 3 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 3 inferred relationships involving `constructor()` (e.g. with `topic()` and `endPoint()`) actually correct?**
   _`constructor()` has 3 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `__INTERNAL_WRANGLER_MIDDLEWARE__`, `__INTERNAL_WRANGLER_MIDDLEWARE__`, `RFC-6749` to the rest of the system?**
-  _1397 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _1400 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `functionsWorker-0.4121441139779921.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.018036216723180145 - nodes in this community are weakly interconnected._

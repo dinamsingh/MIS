@@ -314,7 +314,7 @@ export async function setTeacherPassword(newPassword: string): Promise<void> {
   }
 }
 
-/** Load this teacher's owner-approved live batches and effective teaching semesters. */
+/** Load available current classes, honoring owner-approved semester exceptions. */
 export async function fetchLiveBatches(): Promise<Batch[]> {
   if (isLocalDemoMode()) {
     return MOCK_BATCHES.filter((b) => b.status !== 'graduated');

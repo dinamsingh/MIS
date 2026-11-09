@@ -71,4 +71,19 @@ where n.nspname='public' and p.proname in ('enforce_teacher_eligibility','normal
  'add_admin','remove_admin','add_allowed_teacher','remove_allowed_teacher',
  'grant_teacher_extra_power','revoke_teacher_extra_power','permanently_delete_student',
  'reset_student_binding','create_quiz_with_questions','save_syllabus_structure');
+-- 0061 follow-up: keep the existing occupied-class unique index and inspect
+-- current class configuration before restoring teacher self-selection.
+select indexname,indexdef from pg_indexes where schemaname='public'
+ and indexname='teacher_assignments_subject_section_batch_unique';
+select b.id,b.current_sem,b.status,s.id as section_id,s.name,s.semester,s.department
+from public.batches b left join public.sections s on s.batch=b.id
+ and s.department='CSE' and substring(s.semester from '^[0-9]+')::integer=b.current_sem
+where b.status<>'graduated' order by b.id,s.name;
+select p.oid::regprocedure as signature,
+ has_function_privilege('anon',p.oid,'execute') as anon_execute,
+ has_function_privilege('authenticated',p.oid,'execute') as authenticated_execute,
+ pg_get_functiondef(p.oid) as current_definition
+from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public' and p.proname in
+ ('can_teach_scope','get_my_academic_batches','save_teacher_onboarding');
 commit;

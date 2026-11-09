@@ -130,7 +130,7 @@ async function loadAssignedSyllabusSubjects(
     return [];
   }
 
-  // The effective semester is owner-approved for this teacher. Require the
+  // The effective semester follows the current batch or an approved exception. Require the
   // selected real section to match it, so similar A/B/C names never collide.
   const batch = (await fetchLiveBatches()).find(b => b.id === section.batch);
   const currentSem = batch?.currentSem;

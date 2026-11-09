@@ -27,6 +27,21 @@ describe('live atomic onboarding', () => {
     expect(await fetchLiveBatches()).toEqual([{ id: '2025-29', startYear: 2025, currentSem: 3, status: 'classes', allowedSections: ['A','B','C'] }]);
     expect(rpc).toHaveBeenCalledWith('get_my_academic_batches');
   });
+  it('offers another configured batch alongside the pilot without another approval flow', async () => {
+    rpc.mockResolvedValue({ data: [
+      { id: '2025-29', start_year: 2025, current_sem: 3, status: 'classes', sections: ['A','B','C'] },
+      { id: '2024-28', start_year: 2024, current_sem: 5, status: 'classes', sections: ['A','B'] },
+    ], error: null });
+    expect((await fetchLiveBatches()).map(b => [b.id, b.currentSem, b.allowedSections])).toEqual([
+      ['2025-29', 3, ['A','B','C']], ['2024-28', 5, ['A','B']],
+    ]);
+  });
+  it('preserves the server warning naming the teacher who already occupies a class', async () => {
+    const message = 'Existing Teacher already teaches CS-501 in batch 2024-28, Section A. Choose another available subject or section.';
+    rpc.mockResolvedValue({ data: null, error: { code: '23505', message } });
+    await expect(saveOnboarding(profile, [])).rejects.toThrow(message);
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
   it('resolves actual section UUIDs read-only rather than creating guessed sections', async () => {
     const sections = ['A','B','C'].map(letter => ({ id: `actual-${letter}`, name: `CSE-3${letter}`, batch: '2025-29', semester: '3rd Semester', department: 'CSE' }));
     rpc.mockResolvedValue({ data: sections, error: null });

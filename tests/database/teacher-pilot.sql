@@ -90,6 +90,24 @@ select pilot_test.check((select count(*)=1 from public.teacher_assignments where
 select pilot_test.denied($q$select public.save_teacher_onboarding('Corrupted','teacher@pilot.test',jsonb_build_array(jsonb_build_object('subject_id',pilot_test.id('alternate3'),'batch_id','2025-29','section','A','is_lab',false)))$q$,'23505','duplicate subject claim aborts the save');
 select pilot_test.check((select count(*)=4 from public.teacher_assignments where teacher_id=pilot_test.id('teacher') and subject_id=pilot_test.id('subject3')),'failed onboarding preserves previous assignments');
 select pilot_test.check((select name='Original teacher' and onboarded from public.teachers where id=pilot_test.id('teacher')),'failed onboarding preserves profile/status');
+-- Force a failure after profile update and assignment deletion, not only preflight.
+reset session authorization;
+create function pilot_test.fail_onboarding_insert() returns trigger language plpgsql as $$
+begin
+ if new.teacher_id=pilot_test.id('teacher') and new.subject_id=pilot_test.id('alternate3') and new.section='B' then
+  raise exception 'Simulated assignment insert failure';
+ end if;
+ return new;
+end $$;
+create trigger pilot_fail_assignment before insert on public.teacher_assignments
+for each row execute function pilot_test.fail_onboarding_insert();
+set session authorization authenticated;
+select pilot_test.denied($q$select public.save_teacher_onboarding('Must not persist','teacher@pilot.test',jsonb_build_array(jsonb_build_object('subject_id',pilot_test.id('alternate3'),'batch_id','2025-29','section','B','is_lab',false)))$q$,'P0001','assignment insertion failure aborts atomic save');
+select pilot_test.check((select count(*)=4 from public.teacher_assignments where teacher_id=pilot_test.id('teacher') and subject_id=pilot_test.id('subject3')),'insertion failure rolls back assignment deletions');
+select pilot_test.check((select name='Original teacher' and onboarded from public.teachers where id=pilot_test.id('teacher')),'insertion failure rolls back profile update');
+reset session authorization;
+drop trigger pilot_fail_assignment on public.teacher_assignments;
+set session authorization authenticated;
 select pilot_test.denied($q$select public.save_teacher_onboarding('Spoof','other@pilot.test','[]')$q$,'42501','onboarding cannot impersonate another email');
 select pilot_test.denied($q$insert into public.teachers(id,email,name) values(pilot_test.id('stranger'),'other@pilot.test','Spoof')$q$,'P0001','cannot create another teachers profile');
 select pilot_test.denied($q$update public.teacher_academic_scopes set semester=5 where teacher_id=auth.uid()$q$,'42501','teacher cannot grant own scope');
@@ -191,5 +209,74 @@ select pilot_test.check((select count(*)=0 from public.get_my_teaching_sections(
 select pilot_test.denied($q$select public.import_section_roster('7f3a9cea-bdf2-4300-8645-9237f1b4e342','[{"enrollment_number":"0131CS251020","name":"Must not save"}]')$q$,'42501','owner rollback blocks pilot writes');
 reset session authorization;
 select pilot_test.check((select count(*)=1 from public.quiz_attempts),'rollback preserves existing quiz history');
+
+-- Restore normal self-service without creating per-batch owner approvals.
+insert into auth.users(id,email,email_confirmed_at)
+values(pilot_test.id('self-service'),'self-service@pilot.test',now());
+insert into public.allowed_teacher_emails(email) values('self-service@pilot.test');
+update public.batches set current_sem=5 where id='2024-28';
+insert into public.sections(id,name,batch,semester,department) values
+(pilot_test.id('self-a'),'CSE-5A','2024-28','5th Semester','CSE'),
+(pilot_test.id('self-b'),'CSE-5B','2024-28','5th Semester','CSE'),
+(pilot_test.id('self-c'),'CSE-5C','2024-28','5th Semester','CSE'),
+(pilot_test.id('new-sem4'),'CSE-4B','2090-94','4th Semester','CSE');
+set session authorization authenticated;
+select pilot_test.login('self-service');
+select pilot_test.check((select sections=array['A','B','C']::text[] and current_sem=5
+ from public.get_my_academic_batches() where id='2024-28'),'new teacher sees all configured current sections without scope rows');
+select pilot_test.check((select count(*)=0 from public.teacher_academic_scopes),'no owner per-batch approval is required');
+select pilot_test.check(not public.can_manage_section(pilot_test.id('self-a')),'available selection does not grant roster access before claiming');
+select pilot_test.denied($q$select public.import_section_roster(pilot_test.id('self-a'),'[{"enrollment_number":"0131CS241001","name":"Not authorized"}]')$q$,'42501','cannot import into an unclaimed available section');
+select public.save_teacher_onboarding('Self Service','self-service@pilot.test',jsonb_build_array(
+ jsonb_build_object('subject_id',pilot_test.id('subject5'),'batch_id','2024-28','section','A','is_lab',false)));
+select pilot_test.check(public.can_manage_section(pilot_test.id('self-a')),'self-selected assignment enables its exact current class');
+select pilot_test.check(not public.can_manage_section(pilot_test.id('other-section')),'same letter in an old semester remains unauthorized');
+select pilot_test.check(not public.can_manage_section(pilot_test.id('self-b')),'unassigned section remains unauthorized');
+select public.save_teacher_onboarding('Self Service','self-service@pilot.test',jsonb_build_array(
+ jsonb_build_object('subject_id',pilot_test.id('subject5'),'batch_id','2024-28','section','A','is_lab',false),
+ jsonb_build_object('subject_id',pilot_test.id('subject5'),'batch_id','2024-28','section','B','is_lab',false),
+ jsonb_build_object('subject_id',pilot_test.id('subject4'),'batch_id','2090-94','section','B','is_lab',false)));
+select pilot_test.check((select count(*)=3 from public.get_my_teaching_sections()),'teacher can add another batch and section while keeping old selections');
+select pilot_test.check(not public.can_teach_scope('2090-94',3,'A'),'promotion still blocks previous-semester claims');
+select pilot_test.login('other');
+do $$ begin
+ begin
+  perform public.save_teacher_onboarding('Must roll back','other@pilot.test',jsonb_build_array(
+   jsonb_build_object('subject_id',pilot_test.id('subject5'),'batch_id','2024-28','section','A','is_lab',false)));
+ exception when unique_violation then
+  perform pilot_test.check(sqlerrm like 'Self Service already teaches TEST-501%','occupied warning identifies the existing teacher');
+  return;
+ end;
+ raise exception 'Expected occupied class rejection';
+end $$;
+select pilot_test.check((select name='Original other' from public.teachers where id=auth.uid()),'occupied claim preserves previous teacher profile');
+select pilot_test.login('self-service');
+select pilot_test.check((select count(*)=3 from public.teacher_assignments where teacher_id=auth.uid()),'another teacher cannot overwrite existing claims');
+select pilot_test.login('stranger');
+select pilot_test.check((select count(*)=0 from public.get_my_academic_batches()),'confirmed but unapproved account cannot self-select');
+select pilot_test.denied($q$select public.save_teacher_onboarding('Unapproved','stranger@pilot.test','[]')$q$,'42501','unapproved account stays blocked');
+select pilot_test.login('teacher');
+select pilot_test.check(not public.can_teach_scope('2025-29',5,'A'),'disabled pilot exception cannot fall back to global semester');
+reset session authorization;
+update public.batches set status='graduated' where id='2024-28';
+set session authorization authenticated;
+select pilot_test.login('self-service');
+select pilot_test.check(not public.can_manage_section(pilot_test.id('self-a')),'graduated batch remains inactive');
+select pilot_test.check((select count(*)=3 from public.teacher_assignments where teacher_id=auth.uid()),'graduation and selection changes preserve assignment history');
+reset session authorization;
+
+-- SELF_SELECTION_ROLLBACK_TEST
+set session authorization authenticated;
+select pilot_test.login('self-service');
+select pilot_test.check((select count(*)=0 from public.get_my_academic_batches()),'targeted rollback restores the previous approval-only selection');
+select pilot_test.check((select count(*)=3 from public.teacher_assignments where teacher_id=auth.uid()),'targeted function rollback preserves teacher assignments');
+reset session authorization;
+-- SELF_SELECTION_REAPPLY_TEST
+set session authorization authenticated;
+select pilot_test.check(public.can_manage_section(pilot_test.id('new-sem4')),'reapplying correction restores selected current class access');
+select pilot_test.login('teacher');
+select pilot_test.check(not public.can_teach_scope('2025-29',3,'A'),'correction reapplication preserves disabled owner scope');
+reset session authorization;
+
 select format('%s database checks passed',count(*)) from pilot_test.checks;
 rollback;
