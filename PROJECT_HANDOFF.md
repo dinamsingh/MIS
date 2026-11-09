@@ -20,6 +20,12 @@
 - **New migrations (owner review/application required):** 0058 verified identity/grants; 0059 owner-approved academic scope plus atomic onboarding/additive roster RPCs and scoped writes; 0060 verified quiz membership/exact section targeting and creation authorization.
 - **Validation:** Production build passed; npm run lint passed (0 errors, 58 existing-code warnings); npm test passed (438 tests). Isolated PostgreSQL tests passed 74 checks on both the complete source migration chain and a schema-only copy of the live database, including owner setup/rollback and repeated migration application. Real accounts and original rosters remain untested.
 
+### Work log - 9 November 2026: backup waiver and renewed preflight
+
+The owner explicitly instructed us to proceed without a backup. The external-backup prerequisite in the pilot runbook is waived for this rollout; no backup/export is being created. Existing-teacher approval decisions, controlled migration application, verified pilot scope, and real-account/original-roster validation still apply. Main merge/deployment are not authorized by this waiver.
+
+Live read-only preflight confirms the pilot account is a confirmed, allowlisted, non-admin teacher. Its current Semester 5 theory/lab assignments must be preserved as history when Semester 3 scope is configured. One other currently assigned teacher is not allowlisted and requires an explicit owner approval/status decision before 0059. Personal teacher identifiers and the supplied pilot email are not recorded in this public handoff. No live migration has been applied at this checkpoint.
+
 ### Work log - 8 November 2026
 
 Implemented targeted teacher-pilot fixes using existing screens, parsers, services and Supabase data access. Roster imports no longer delete students; profile and assignment replacement use one transaction. Approved teacher scope permits the requested Semester 3 without changing the global batch clock, and normal stale-assignment protection remains. Quiz registration no longer invents membership from its target; it preserves student IDs, binding and server grading. Teacher-wide registration reset no longer deletes cross-teacher attempts. Existing admin, multi-batch, theory/lab, shared-class reads, history and timetable implementations remain.
