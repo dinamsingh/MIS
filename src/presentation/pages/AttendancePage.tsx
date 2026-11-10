@@ -47,11 +47,12 @@ async function loadRoster(sectionId: string): Promise<RosterStudent[]> {
     }
   }
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('students')
     .select('id, name, enrollment_number')
     .eq('section_id', sectionId)
     .order('name');
+  if (error) throw new Error(error.message);
   if (!data) return [];
   return data.map((row: { id: string; name: string; enrollment_number?: string | null }) => ({
     id: row.id,

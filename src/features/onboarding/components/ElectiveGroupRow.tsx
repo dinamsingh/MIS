@@ -15,6 +15,7 @@ interface ElectiveGroupRowProps {
   /** subjectId → selected sections for this batch. */
   readonly selection: Record<string, SubjectSelection>;
   readonly onChangeSubject: (subjectId: string, sections: Section[]) => void;
+  readonly allowedSections?: readonly Section[];
 }
 
 export default function ElectiveGroupRow({
@@ -22,6 +23,7 @@ export default function ElectiveGroupRow({
   variants,
   selection,
   onChangeSubject,
+  allowedSections,
 }: ElectiveGroupRowProps) {
   // The active variant is whichever one currently has sections selected.
   const activeFromState = variants.find((v) => (selection[v.id]?.sections.length ?? 0) > 0)?.id ?? '';
@@ -87,6 +89,7 @@ export default function ElectiveGroupRow({
           <span className="text-xs font-medium text-soft">Sections</span>
           <SectionChips
             selected={chosenSections}
+            allowedSections={allowedSections}
             onChange={(next) => onChangeSubject(chosenId, next)}
             idPrefix={`sec-${chosenId}`}
           />

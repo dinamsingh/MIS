@@ -11,12 +11,46 @@
 
 ## 0. Quick Status (READ THIS FIRST)
 
-- **Last updated:** 2026-07-24
-- **Active branch:** `main` (pushed). Also `fix/batch-promotion-and-quiz-security` (merged into main).
-- **Latest commit (pushed):** `5eee9e9` — sem7 subject codes fix + syllabus seed.
-- **Build/tests (as of last full run):** ✅ green — `npx vite build` succeeds (6s), `npx vitest run` 306 tests pass (33 files). `npx tsc -b tsconfig.app.json --noEmit` has 2 pre-existing minor errors in unrelated test files (not blocking).
+- **Last updated:** 2026-11-09.
+- **Active review branch:** `fix/teacher-pilot-2025-29`, isolated checkout at `C:/MIS-teacher-pilot-2025-29`. Base verified from GitHub: `92266342d87404ea96db7b78fc58e35070f16097` (`origin/main`). Original uncommitted UI work in `C:/MIS 1` was preserved separately and is not part of this pilot branch.
+- **Pilot status:** reviewed migrations 0058-0060 and the verified pilot teacher scope are applied live. NOT ready for real teaching: actual subjects, original CSVs and real-account workflows remain untested. No student import, main merge or manual production frontend deployment was performed.
+- **Current runbook:** [Teacher pilot 2025-29](docs/TEACHER_PILOT_2025_29.md), including owner preflight/setup/validation/rollback SQL and the real-account checklist.
+- **Live verified state:** 2025-29 is globally Semester 5, with existing empty Semester 3 CSE A/B/C UUIDs. Semester 3 has no teacher assignments yet. Intent of the prior promotion cannot be inferred safely, so no global demotion is proposed.
+- **Security drift:** live migration `20261108133654` hardens teacher identity and ten RPC grants; live also has promotion/history changes beyond Git. Migration 0058 reconciles the verified security changes without replacing promotion or history functions.
+- **Migrations applied live on 2026-11-09:** 0058 verified identity/grants; 0059 owner-approved academic scope plus atomic onboarding/additive roster RPCs and scoped writes; 0060 verified quiz membership/exact section targeting and creation authorization.
+- **Validation:** Production build passed; npm run lint passed (0 errors, 58 existing-code warnings); npm test passed (438 tests). Isolated PostgreSQL tests passed 74 checks on both the complete source migration chain and a schema-only copy of the live database, including owner setup/rollback and repeated migration application. Real accounts and original rosters remain untested.
 
-### 🔴 CURRENT RESUME POINT
+### Work log - 9 November 2026: restore teacher self-selection (0061 pending)
+
+The owner clarified the original workflow: an approved teacher selects their own additional batch/subject/section, with occupied claims rejected by the existing cross-teacher unique constraint. The 0059 per-batch approval gate restricted that workflow unnecessarily. Follow-up migration 0061 restores selection of configured current-semester CSE classes for verified, allowlisted teachers without per-batch scope creation. Student data access still requires a saved exact-class subject assignment; atomic onboarding/imports, duplicate protection, historical records, promotion/stale checks, exceptional pilot semesters and disabled scopes remain protected. Occupied claims report the existing teacher's display name. Unapproved teachers remain unapproved.
+
+0061 and its targeted rollback script are prepared on the feature branch, **not applied to live**. Live remains at 0058-0060 with the previously configured pilot scope. The guide distinguishes this pending correction from the completed live rollout. Build/lint pass (58 existing warnings), 440 Vitest tests pass; the isolated full-chain database suite passed 98 checks covering the restored workflow, forced assignment-insertion rollback and correction rollback/reapplication. No main merge, manual production frontend deployment or additional live data changes were performed for this correction.
+
+### Work log - 9 November 2026: live pilot database rollout
+
+The owner explicitly kept the existing unapproved teacher unapproved and waived backup. Applied reviewed migrations 0058, 0059 and 0060 through Supabase, recorded as versions `20261109162726`, `20261109162732` and `20261109162739`. Configured only the verified, allowlisted, non-admin pilot teacher for 2025-29 / Semester 3 / CSE / A-B-C. Their Semester 5 assignments remain intact; the unapproved teacher received no scope rows and was not allowlisted. No individual contact details are added to this public handoff.
+
+Verified unchanged content fingerprints/counts: students 185, student_roster 196, attendance 1000, quiz_attempts 2, teacher_assignments 34, teachers 5, sections 24. Historic roster section mapping remains null; the three pilot sections remain empty. Global batch semester remains 5. New scope RLS, required signed-in RPC grants, revoked direct assignment writes and zero anonymous grants on the 18 checked sensitive RPCs were verified. No production Auth session was fabricated to perform these checks.
+
+Matching local pilot build: port 5175 with VITE_DEMO_MODE=false, connected to live Supabase. Port 5173 remains the separate original UI workspace. Actual login, subject selection, original CSV import, attendance and quizzes still require the real teacher/student checklist. No main merge or manual production frontend deployment was performed. See the pilot guide for remaining advisor/first-claim registration limitations.
+
+### Work log - 9 November 2026: backup waiver and renewed preflight
+
+The owner explicitly instructed us to proceed without a backup. The external-backup prerequisite in the pilot runbook is waived for this rollout; no backup/export is being created. Existing-teacher approval decisions, controlled migration application, verified pilot scope, and real-account/original-roster validation still apply. Main merge/deployment are not authorized by this waiver.
+
+Live read-only preflight confirms the pilot account is a confirmed, allowlisted, non-admin teacher. Its current Semester 5 theory/lab assignments must be preserved as history when Semester 3 scope is configured. One other currently assigned teacher is not allowlisted and requires an explicit owner approval/status decision before 0059. Personal teacher identifiers and the supplied pilot email are not recorded in this public handoff. No live migration has been applied at this checkpoint.
+
+### Work log - 8 November 2026
+
+Implemented targeted teacher-pilot fixes using existing screens, parsers, services and Supabase data access. Roster imports no longer delete students; profile and assignment replacement use one transaction. Approved teacher scope permits the requested Semester 3 without changing the global batch clock, and normal stale-assignment protection remains. Quiz registration no longer invents membership from its target; it preserves student IDs, binding and server grading. Teacher-wide registration reset no longer deletes cross-teacher attempts. Existing admin, multi-batch, theory/lab, shared-class reads, history and timetable implementations remain.
+
+The project owner must review/run `docs/sql/teacher_pilot_preflight.sql`, apply only migrations 0058-0060, approve the actual verified teacher using `teacher_pilot_owner_setup.sql`, and release the matching app code through the normal process. The real teacher must then upload original A/B/C CSVs and complete the checklist. No seeded or historic students were used as pilot data. Scope approval needs owner SQL access, not a new or operated admin UI. See the runbook for first-claim registration and remaining lint/type debt limitations.
+
+### Historical July 2026 context (superseded)
+
+The entries below are retained as dated history. Their deploy, pending-migration and database-workaround instructions are not current operational guidance; use the runbook above and re-check live schema before any action.
+
+### July 2026 resume point
 **Sem 7 syllabus fully seeded + subject codes fixed.** Quiz access bug (wrong-section) identified and manually fixed for one student. Broader fix needed for all students with NULL section_id.
 
 **What was done this session (2026-07-24):**
@@ -26,24 +60,9 @@
 4. **Quiz wrong-section bug diagnosed** — root cause: `request_quiz_access` upserts students WITHOUT section_id. Students created via quiz enrollment path get NULL section_id → fail the section gate. Manual fix applied for one student (`0131CS241058` → CSE-7A).
 5. **onboarding_seed.sql updated** — sem 7 now has correct RGPV codes for fresh installs.
 
-### ⚠️ KNOWN BUG: Quiz wrong-section for new students
-**Root cause:** In `request_quiz_access` (migration 0040), the student upsert does NOT set `section_id`:
-```sql
-insert into public.students (name, email, enrollment_number)
-on conflict (enrollment_number) do update set email, name
--- section_id is NEVER set here!
-```
-If a student was seeded via admin roster import (which sets section_id), they're fine. But if a student only exists because they self-registered via quiz enrollment, their section_id stays NULL → every section-restricted quiz denies them.
+### Historical quiz registration issue
 
-**Proper fix needed:** The upsert in `request_quiz_access` should derive section_id from the student_roster/students row that matches the enrollment, or from the quiz's target section. This requires a new migration to update the `request_quiz_access` function.
-
-**Workaround (manual):** For any student getting "wrong section" error:
-```sql
--- Find their current state:
-select enrollment_number, section_id from students where email = 'their@email.com';
--- Fix by assigning correct section:
-update students set section_id = '<correct-section-uuid>' where enrollment_number = '<enrollment>';
-```
+The July wrong-section diagnosis was verified against the live function on 8 November. Migration 0060 now prepares a fix using authoritative roster membership or the existing verified student section. It never assigns membership from a quiz target. This source migration still requires owner review/application; do not use the former ad-hoc section-update workaround without a separate identity/history review.
 
 **What was built this session (2026-07-21):**
 - Phase 1: Admin Role Foundation (complete since prior session)

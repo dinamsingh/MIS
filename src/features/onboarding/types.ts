@@ -23,6 +23,8 @@ export interface Batch {
   readonly startYear: number;
   /** The semester (1..8) the batch is currently studying. */
   readonly currentSem: number;
+  /** Owner-approved sections for this teaching semester (live mode). */
+  readonly allowedSections?: readonly Section[];
   readonly status: BatchStatus;
 }
 

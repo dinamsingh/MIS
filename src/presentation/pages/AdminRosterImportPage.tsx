@@ -160,7 +160,7 @@ export default function AdminRosterImportPage() {
     setCsvText(event.target.value);
   }, []);
 
-  const canImport = sectionId !== '' && valid.length > 0 && !importing;
+  const canImport = sectionId !== '' && valid.length > 0 && rejected.length === 0 && missingEmail.length === 0 && !importing;
 
   const handleImport = useCallback(async () => {
     if (!canImport) return;
@@ -174,8 +174,8 @@ export default function AdminRosterImportPage() {
       setFileName(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       void loadStudents(sectionId);
-    } catch {
-      setImportError(messages.rosterImport.importFailed);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : messages.rosterImport.importFailed);
     } finally {
       setImporting(false);
     }

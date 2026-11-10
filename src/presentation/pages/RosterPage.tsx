@@ -39,12 +39,13 @@ async function loadRoster(sectionId: string): Promise<RosterStudent[]> {
     }
   }
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('students')
     .select('id, name, enrollment_number')
     .eq('section_id', sectionId)
     .order('name');
 
+  if (error) throw new Error(error.message);
   if (!data) return [];
 
   return data.map((row: { id: string; name: string; enrollment_number?: string | null }) => ({
@@ -58,5 +59,5 @@ export default function RosterPage() {
   const { selectedSection } = useSelectedSection();
   const sections = selectedSection ? [selectedSection] : [];
 
-  return <RosterView persistence={persistence} sections={sections as RosterSectionOption[]} loadRoster={loadRoster} />;
+  return <RosterView key={selectedSection?.id ?? 'none'} persistence={persistence} sections={sections as RosterSectionOption[]} loadRoster={loadRoster} />;
 }

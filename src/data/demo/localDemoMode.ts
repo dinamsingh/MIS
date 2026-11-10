@@ -1769,23 +1769,26 @@ export function recordDemoRosterImport(sectionId: string, imported: number): voi
 export function replaceDemoRoster(
   sectionId: string,
   rows: readonly ParsedRosterRow[],
-): { deleted: number; imported: number } {
+): { deleted: number; imported: number; inserted: number; updated: number; unchanged: number } {
   const rosters = readDemoValue<Record<string, DemoStudent[]>>(STORAGE.rosters, {});
   const existing = rosters[sectionId] ?? [];
-  const next = rows.map((row) => ({
-    id: `demo-student-${sectionId}-${row.enrollmentNumber}`,
-    name: row.name,
-    enrollmentNumber: row.enrollmentNumber,
-    sectionId,
-  }));
-
-  writeDemoValue(STORAGE.rosters, {
-    ...rosters,
-    [sectionId]: next,
-  });
+  const byEnrollment = new Map(existing.map(student => [student.enrollmentNumber, student]));
+  let inserted = 0;
+  let updated = 0;
+  let unchanged = 0;
+  for (const row of rows) {
+    const previous = byEnrollment.get(row.enrollmentNumber);
+    if (!previous) inserted++;
+    else if (previous.name !== row.name) updated++;
+    else unchanged++;
+    byEnrollment.set(row.enrollmentNumber, {
+      id: previous?.id ?? `demo-student-${sectionId}-${row.enrollmentNumber}`,
+      name: row.name, enrollmentNumber: row.enrollmentNumber, sectionId,
+    });
+  }
+  writeDemoValue(STORAGE.rosters, { ...rosters, [sectionId]: [...byEnrollment.values()] });
   recordDemoRosterImport(sectionId, rows.length);
-
-  return { deleted: existing.length, imported: rows.length };
+  return { deleted: 0, imported: rows.length, inserted, updated, unchanged };
 }
 
 export function listDemoRoster(sectionId: string): DemoStudent[] {

@@ -59,8 +59,8 @@ export const messages = {
     noValidRows: 'No valid rows were found to import. Review the rejected rows and try again.',
     sectionRequired: 'Select a section before importing.',
     importSucceeded: (count: number) =>
-      `Imported ${count} student${count === 1 ? '' : 's'} successfully. The section roster has been replaced.`,
-    importFailed: 'Could not import the roster. No changes were made. Please try again.',
+      `Imported ${count} student${count === 1 ? '' : 's'} successfully. Existing students and history have been retained.`,
+    importFailed: 'Could not confirm the roster import. Refresh to verify the result; retrying the same CSV is safe.',
     /**
      * Admin-only bulk import (admin-console-and-scheduling-upgrade,
      * Requirement 6.1/6.2): shown for a row that parsed successfully but is

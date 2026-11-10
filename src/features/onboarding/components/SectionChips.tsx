@@ -10,9 +10,10 @@ interface SectionChipsProps {
   readonly onChange: (next: Section[]) => void;
   /** Optional id prefix for accessible labelling. */
   readonly idPrefix?: string;
+  readonly allowedSections?: readonly Section[];
 }
 
-export default function SectionChips({ selected, onChange, idPrefix }: SectionChipsProps) {
+export default function SectionChips({ selected, onChange, idPrefix, allowedSections = SECTIONS }: SectionChipsProps) {
   const toggle = (section: Section) => {
     const isOn = selected.includes(section);
     const next = isOn ? selected.filter((s) => s !== section) : [...selected, section];
@@ -30,9 +31,11 @@ export default function SectionChips({ selected, onChange, idPrefix }: SectionCh
             type="button"
             id={idPrefix ? `${idPrefix}-${section}` : undefined}
             aria-pressed={active}
+            disabled={!allowedSections.includes(section)}
+            title={!allowedSections.includes(section) ? 'This section is not available for this batch and semester.' : undefined}
             onClick={() => toggle(section)}
             className={[
-              'h-8 w-8 rounded-full text-sm font-semibold transition-[border-color,background-color,color,box-shadow] duration-fast',
+              'h-8 w-8 rounded-full text-sm font-semibold transition-[border-color,background-color,color,box-shadow] duration-fast disabled:opacity-40 disabled:cursor-not-allowed',
               'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
               active
                 ? 'bg-accent text-surface shadow-soft'
